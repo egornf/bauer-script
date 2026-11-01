@@ -99,19 +99,19 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.equal(statusBefore.data.canSetup, true);
     assert.equal(statusBefore.data.unlocked, false);
 
-    // Setup primary OWNER account
+    // Setup primary OWNER account with Cyrillic format МелентьевЕА and 4-char password
     const setupRes = await ownerClient.request('/api/admin/setup', {
       method: 'POST',
       body: {
-        login: 'bauer_owner',
-        displayName: 'Главный Владелец BAUER',
-        password: 'OwnerStrongPassword!2026'
+        login: 'МелентьевЕА',
+        displayName: 'Мелентьев Е.А.',
+        password: '1234'
       }
     });
     assert.equal(setupRes.status, 200);
     assert.equal(setupRes.data.ok, true);
     assert.equal(setupRes.data.user.role, 'OWNER');
-    assert.equal(setupRes.data.user.login, 'bauer_owner');
+    assert.equal(setupRes.data.user.login, 'МелентьевЕА');
     assert.equal(Array.isArray(setupRes.data.recoveryCodes), true);
     assert.equal(setupRes.data.recoveryCodes.length, 6);
 
@@ -168,13 +168,13 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     });
     assert.equal(secondOwnerAttempt.status, 403);
 
-    // Create ADMIN
+    // Create ADMIN with format ИвановАА and 4-char password
     const createAdmin = await ownerClient.request('/api/users', {
       method: 'POST',
       body: {
-        login: 'admin_ivan',
-        displayName: 'Иван Администратор',
-        password: 'AdminPassword123!',
+        login: 'ИвановАА',
+        displayName: 'Иванов А.А.',
+        password: '4321',
         role: 'ADMIN',
         permissions: ['content.edit', 'layouts.manage', 'gifts.manage', 'addresses.manage', 'settings.manage', 'users.view']
       }
@@ -182,6 +182,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.equal(createAdmin.status, 201);
     adminUser = createAdmin.data.user;
     assert.equal(adminUser.role, 'ADMIN');
+    assert.equal(adminUser.login, 'ИвановАА');
 
     // Create EDITOR (no settings.manage, no addresses.manage)
     const createEditor = await ownerClient.request('/api/users', {
@@ -218,14 +219,14 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     // Invalid password fails with 401
     const badLogin = await adminClient.request('/api/admin/login', {
       method: 'POST',
-      body: { login: 'admin_ivan', password: 'WrongPassword!' }
+      body: { login: 'ИвановАА', password: 'WrongPassword!' }
     });
     assert.equal(badLogin.status, 401);
 
     // Valid ADMIN login
     const goodAdminLogin = await adminClient.request('/api/admin/login', {
       method: 'POST',
-      body: { login: 'admin_ivan', password: 'AdminPassword123!' }
+      body: { login: 'ИвановАА', password: '4321' }
     });
     assert.equal(goodAdminLogin.status, 200);
     assert.equal(goodAdminLogin.data.user.role, 'ADMIN');
@@ -371,7 +372,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     // Blocked ADMIN cannot log in
     const blockedLogin = await adminClient.request('/api/admin/login', {
       method: 'POST',
-      body: { login: 'admin_ivan', password: 'AdminPassword123!' }
+      body: { login: 'ИвановАА', password: '4321' }
     });
     assert.equal(blockedLogin.status, 403);
 
@@ -390,9 +391,9 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     const recoverRes = await recoveryClient.request('/api/owner/recover', {
       method: 'POST',
       body: {
-        login: 'bauer_owner',
+        login: 'МелентьевЕА',
         recoveryCode: codeToUse,
-        newPassword: 'RecoveredOwnerPassword!999'
+        newPassword: '9999'
       }
     });
     assert.equal(recoverRes.status, 200);
@@ -403,9 +404,9 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     const reuseRes = await recoveryClient.request('/api/owner/recover', {
       method: 'POST',
       body: {
-        login: 'bauer_owner',
+        login: 'МелентьевЕА',
         recoveryCode: codeToUse,
-        newPassword: 'AnotherPassword!999'
+        newPassword: '8888'
       }
     });
     assert.equal(reuseRes.status, 401);
@@ -417,7 +418,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     // Regenerate recovery codes with new password
     const regenRes = await recoveryClient.request('/api/owner/recovery-codes', {
       method: 'POST',
-      body: { password: 'RecoveredOwnerPassword!999' }
+      body: { password: '9999' }
     });
     assert.equal(regenRes.status, 200);
     assert.equal(regenRes.data.recoveryCodes.length, 6);
@@ -426,7 +427,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
   await t.test('9. Audit log records logins, user modifications, session revocations, and recovery events', async () => {
     const reloginOwner = await ownerClient.request('/api/admin/login', {
       method: 'POST',
-      body: { login: 'bauer_owner', password: 'RecoveredOwnerPassword!999' }
+      body: { login: 'МелентьевЕА', password: '9999' }
     });
     assert.equal(reloginOwner.status, 200);
 

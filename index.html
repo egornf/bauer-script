@@ -1093,9 +1093,9 @@ async function api_local_vault(rawPath,options={}){
   const pathname=uObj.pathname;
   const method=(options.method||'GET').toUpperCase();
   const body=options.body?JSON.parse(options.body):{};
-  const normLogin=s=>String(s||'').trim().toLowerCase();
-  const validLogin=s=>{const n=normLogin(s);return /^[a-z0-9_.-]{3,64}$/i.test(n)?n:null;};
-  const validPass=p=>typeof p==='string'&&p.length>=8&&p.length<=128;
+  const normLogin=s=>String(s||'').trim().toLocaleLowerCase('ru');
+  const validLogin=s=>{const t=String(s||'').trim();return /^[a-zA-Zа-яА-ЯёЁ0-9_.\-\s]{2,64}$/u.test(t)?t:null;};
+  const validPass=p=>typeof p==='string'&&p.length>=4&&p.length<=128;
 
   let users=await VaultDB.get('users',[]);
   let sessions=await VaultDB.get('sessions',[]);
@@ -1224,8 +1224,8 @@ async function api_local_vault(rawPath,options={}){
       throw fail('Главная учётная запись OWNER уже создана. В системе может быть только один OWNER.',403);
     }
     const login=validLogin(body.login);
-    if(!login)throw fail('Логин должен содержать от 3 до 64 символов (латиница, цифры, . _ -).',400);
-    if(!validPass(body.password))throw fail('Пароль должен содержать от 8 до 128 символов.',400);
+    if(!login)throw fail('Логин должен содержать от 2 до 64 символов (например: МелентьевЕА, ИвановАА).',400);
+    if(!validPass(body.password))throw fail('Пароль должен содержать от 4 до 128 символов.',400);
     const rawCodes=VaultCrypto.generateRecoveryCodes(6);
     const recoverySalt=VaultCrypto.randomHex(16);
     const recoveryCodes=[];
@@ -1291,10 +1291,10 @@ async function api_local_vault(rawPath,options={}){
       await logEvent({action:'owner.recovery.failed',actor:login||'anonymous',target:owner.login,status:'failed'});
       throw fail('Неверный логин OWNER или код восстановления.',401);
     }
-    if(!validPass(body.newPassword))throw fail('Новый пароль должен содержать от 8 до 128 символов.',400);
+    if(!validPass(body.newPassword))throw fail('Новый пароль должен содержать от 4 до 128 символов.',400);
     const newLogin=body.newLogin?validLogin(body.newLogin):owner.login;
     if(!newLogin)throw fail('Некорректный формат нового логина.',400);
-    if(newLogin!==owner.login&&users.some(x=>normLogin(x.login)===newLogin))throw fail('Этот логин уже занят.',400);
+    if(normLogin(newLogin)!==normLogin(owner.login)&&users.some(x=>normLogin(x.login)===normLogin(newLogin)))throw fail('Этот логин уже занят.',400);
 
     let matched=null;
     for(const c of (owner.recoveryCodes||[])){
@@ -1318,7 +1318,7 @@ async function api_local_vault(rawPath,options={}){
   if(pathname==='/api/me/password'&&method==='POST'){
     if(!authUser)throw fail('Требуется авторизация.',401);
     if(!(await VaultCrypto.verifyPassword(String(body.currentPassword||''),authUser.passwordHash)))throw fail('Текущий пароль введён неверно.',401);
-    if(!validPass(body.newPassword))throw fail('Новый пароль должен содержать от 8 до 128 символов.',400);
+    if(!validPass(body.newPassword))throw fail('Новый пароль должен содержать от 4 до 128 символов.',400);
     authUser.passwordHash=await VaultCrypto.hashPassword(body.newPassword);
     authUser.updatedAt=Date.now();
     await saveUsers();
@@ -1350,7 +1350,7 @@ async function api_local_vault(rawPath,options={}){
     if(body.login!==undefined){
       const nl=validLogin(body.login);
       if(!nl)throw fail('Некорректный логин.',400);
-      const ex=users.find(u=>normLogin(u.login)===nl&&u.id!==authUser.id);
+      const ex=users.find(u=>normLogin(u.login)===normLogin(nl)&&u.id!==authUser.id);
       if(ex)throw fail('Этот логин уже занят.',400);
       authUser.login=nl;
     }
@@ -1380,9 +1380,9 @@ async function api_local_vault(rawPath,options={}){
     if(method==='POST'&&!tid){
       if(body.role==='OWNER')throw fail('В системе может быть только один OWNER.',403);
       const login=validLogin(body.login);
-      if(!login)throw fail('Логин должен содержать от 3 до 64 символов.',400);
-      if(users.some(u=>normLogin(u.login)===login))throw fail('Пользователь с таким логином уже существует.',400);
-      if(!validPass(body.password))throw fail('Пароль должен содержать от 8 до 128 символов.',400);
+      if(!login)throw fail('Логин должен содержать от 2 до 64 символов (например: МелентьевЕА, ИвановАА).',400);
+      if(users.some(u=>normLogin(u.login)===normLogin(login)))throw fail('Пользователь с таким логином уже существует.',400);
+      if(!validPass(body.password))throw fail('Пароль должен содержать от 4 до 128 символов.',400);
       const role=['ADMIN','EDITOR','OPERATOR'].includes(body.role)?body.role:'OPERATOR';
       const perms=Array.isArray(body.permissions)?body.permissions.filter(p=>VAULT_PERMISSIONS.includes(p)):[...(VAULT_ROLE_DEFAULTS[role]||[])];
       const nu={
@@ -1416,7 +1416,7 @@ async function api_local_vault(rawPath,options={}){
       if(body.login!==undefined&&body.login!==tu.login){
         const nl=validLogin(body.login);
         if(!nl)throw fail('Некорректный формат логина.',400);
-        if(users.some(u=>normLogin(u.login)===nl&&u.id!==tu.id))throw fail('Этот логин уже занят.',400);
+        if(users.some(u=>normLogin(u.login)===normLogin(nl)&&u.id!==tu.id))throw fail('Этот логин уже занят.',400);
         changes.login={from:tu.login,to:nl};tu.login=nl;
       }
       if(body.displayName!==undefined){tu.displayName=String(body.displayName||'').trim().slice(0,100)||tu.login;changes.displayName=tu.displayName;}
@@ -1433,7 +1433,7 @@ async function api_local_vault(rawPath,options={}){
         if(tu.blocked!==nb){tu.blocked=nb;changes.blocked=nb;if(nb)sessions=sessions.filter(s=>s.userId!==tu.id);}
       }
       if(body.password){
-        if(!validPass(body.password))throw fail('Пароль должен содержать от 8 до 128 символов.',400);
+        if(!validPass(body.password))throw fail('Пароль должен содержать от 4 до 128 символов.',400);
         tu.passwordHash=await VaultCrypto.hashPassword(body.password);
         changes.passwordReset=true;
         if(tu.id!==authUser.id)sessions=sessions.filter(s=>s.userId!==tu.id);
@@ -1621,7 +1621,7 @@ async function ensureAdmin(action){
     $('#confirm-wrap').hidden=!authSetup;$('#password-confirm').required=authSetup;
     $('#admin-password').autocomplete=authSetup?'new-password':'current-password';
     $('#auth-title').textContent=authSetup?'Создание главной записи OWNER':'Вход в систему BAUER';
-    $('#auth-description').textContent=authSetup?'В системе может быть только один OWNER (Владелец) с полным доступом. Задайте логин и пароль от 8 символов.':'Введите логин и пароль своей учётной записи (OWNER, Администратор или Редактор).';
+    $('#auth-description').textContent=authSetup?'В системе может быть только один OWNER (Владелец) с полным доступом. Задайте логин и пароль от 4 символов.':'Введите логин и пароль своей учётной записи (OWNER, Администратор или Редактор).';
     $('#auth-submit').textContent=authSetup?'Создать OWNER и войти':'Войти';
     const recBtn=document.getElementById('open-owner-recovery');
     if(recBtn)recBtn.hidden=authSetup;
@@ -2680,7 +2680,7 @@ function renderSecuritySection(){
         <label for="self-cur-pw" style="display:block;margin:10px 0 5px;font-size:12px;font-weight:700">Текущий пароль</label>
         <input id="self-cur-pw" type="password" required maxlength="128" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
         <label for="self-new-pw" style="display:block;margin:10px 0 5px;font-size:12px;font-weight:700">Новый пароль (не менее 8 символов)</label>
-        <input id="self-new-pw" type="password" required minlength="8" maxlength="128" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+        <input id="self-new-pw" type="password" required minlength="4" maxlength="128" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
         <button type="submit" class="primary" style="margin-top:14px">Обновить пароль</button>
       </form>
     </div>
@@ -2750,7 +2750,7 @@ function openUserModal(editUser=null){
       <label for="um-name">Имя / должность</label>
       <input id="um-name" name="displayName" maxlength="100" value="${isEdit?E(editUser.displayName||''):''}" placeholder="Например: Старший администратор Анна">
       <label for="um-password">${isEdit?'Новый пароль (оставьте пустым, чтобы не менять)':'Пароль (не менее 8 символов)'}</label>
-      <input id="um-password" name="password" type="password" ${isEdit?'':'required'} minlength="8" maxlength="128" autocomplete="new-password">
+      <input id="um-password" name="password" type="password" ${isEdit?'':'required'} minlength="4" maxlength="128" autocomplete="new-password">
       <label for="um-role">Роль в системе (OWNER может быть только один)</label>
       <select id="um-role" name="role">
         <option value="ADMIN" ${role==='ADMIN'?'selected':''}>Администратор (управление контентом, макетами, настройками)</option>
@@ -2814,8 +2814,8 @@ document.getElementById('open-owner-recovery')?.addEventListener('click',()=>{
       <input id="rec-login" name="login" required maxlength="64" autocomplete="username">
       <label for="rec-code">Одноразовый резервный код (XXXX-XXXX-XXXX)</label>
       <input id="rec-code" name="recoveryCode" required maxlength="32" placeholder="XXXX-XXXX-XXXX" autocomplete="off" style="font-family:ui-monospace,monospace;letter-spacing:.08em">
-      <label for="rec-new-pw">Новый пароль OWNER (от 8 символов)</label>
-      <input id="rec-new-pw" name="newPassword" type="password" required minlength="8" maxlength="128" autocomplete="new-password">
+      <label for="rec-new-pw">Новый пароль OWNER (от 4 символов)</label>
+      <input id="rec-new-pw" name="newPassword" type="password" required minlength="4" maxlength="128" autocomplete="new-password">
       <p id="rec-error" class="form-error" role="alert"></p>
       <button type="submit" class="primary" style="width:100%;min-height:44px;margin-top:8px">Восстановить доступ OWNER и войти</button>
     </form>`;

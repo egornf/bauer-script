@@ -32,16 +32,16 @@ const DEFAULT_ROLE_PERMISSIONS = {
 };
 
 function normalizeLogin(login) {
-  return String(login || '').trim().toLowerCase();
+  return String(login || '').trim().toLocaleLowerCase('ru');
 }
 
 function validateLogin(login) {
-  const norm = normalizeLogin(login);
-  return /^[a-z0-9_.-]{3,64}$/i.test(norm) ? norm : null;
+  const trimmed = String(login || '').trim();
+  return /^[a-zA-Zа-яА-ЯёЁ0-9_.\-\s]{2,64}$/u.test(trimmed) ? trimmed : null;
 }
 
 function validatePassword(password) {
-  return typeof password === 'string' && password.length >= 8 && password.length <= 128;
+  return typeof password === 'string' && password.length >= 4 && password.length <= 128;
 }
 
 function hashPassword(password) {
@@ -542,10 +542,10 @@ function createAppServer(options = {}) {
         const body = await readBody(req);
         const login = validateLogin(body.login);
         if (!login) {
-          return sendJson(res, 400, { error: 'Логин должен содержать от 3 до 64 символов (латиница, цифры, точка, дефис, подчёркивание).' });
+          return sendJson(res, 400, { error: 'Логин должен содержать от 2 до 64 символов (русские/латинские буквы, цифры, пробел, . _ -).' });
         }
         if (!validatePassword(body.password)) {
-          return sendJson(res, 400, { error: 'Пароль должен содержать от 8 до 128 символов.' });
+          return sendJson(res, 400, { error: 'Пароль должен содержать от 4 до 128 символов.' });
         }
         const rawCodes = generateRecoveryCodes(6);
         const recoverySalt = crypto.randomBytes(16).toString('hex');
@@ -748,12 +748,12 @@ function createAppServer(options = {}) {
         }
 
         if (!validatePassword(newPassword)) {
-          return sendJson(res, 400, { error: 'Новый пароль должен содержать от 8 до 128 символов.' });
+          return sendJson(res, 400, { error: 'Новый пароль должен содержать от 4 до 128 символов.' });
         }
         if (!newLogin) {
           return sendJson(res, 400, { error: 'Некорректный формат нового логина.' });
         }
-        if (newLogin !== owner.login && store.findUserByLogin(newLogin)) {
+        if (normalizeLogin(newLogin) !== normalizeLogin(owner.login) && store.findUserByLogin(newLogin)) {
           return sendJson(res, 400, { error: 'Этот логин уже занят другим пользователем.' });
         }
 
@@ -1011,7 +1011,7 @@ function createAppServer(options = {}) {
           return sendJson(res, 401, { error: 'Текущий пароль введён неверно.' });
         }
         if (!validatePassword(body.newPassword)) {
-          return sendJson(res, 400, { error: 'Новый пароль должен содержать от 8 до 128 символов.' });
+          return sendJson(res, 400, { error: 'Новый пароль должен содержать от 4 до 128 символов.' });
         }
         auth.user.passwordHash = hashPassword(body.newPassword);
         auth.user.updatedAt = Date.now();
@@ -1070,7 +1070,7 @@ function createAppServer(options = {}) {
         if (body.login !== undefined) {
           const newLogin = validateLogin(body.login);
           if (!newLogin) {
-            return sendJson(res, 400, { error: 'Логин должен содержать от 3 до 64 символов (латиница, цифры, . _ -).' });
+            return sendJson(res, 400, { error: 'Логин должен содержать от 2 до 64 символов (русские/латинские буквы, цифры, пробел, . _ -).' });
           }
           const existing = store.findUserByLogin(newLogin);
           if (existing && existing.id !== auth.user.id) {
@@ -1143,13 +1143,13 @@ function createAppServer(options = {}) {
           }
           const login = validateLogin(body.login);
           if (!login) {
-            return sendJson(res, 400, { error: 'Логин должен содержать от 3 до 64 символов (латиница, цифры, . _ -).' });
+            return sendJson(res, 400, { error: 'Логин должен содержать от 2 до 64 символов (русские/латинские буквы, цифры, пробел, . _ -).' });
           }
           if (store.findUserByLogin(login)) {
             return sendJson(res, 400, { error: 'Пользователь с таким логином уже существует.' });
           }
           if (!validatePassword(body.password)) {
-            return sendJson(res, 400, { error: 'Пароль должен содержать от 8 до 128 символов.' });
+            return sendJson(res, 400, { error: 'Пароль должен содержать от 4 до 128 символов.' });
           }
           const role = ['ADMIN', 'EDITOR', 'OPERATOR'].includes(body.role) ? body.role : 'OPERATOR';
           const permissions = Array.isArray(body.permissions)
@@ -1220,7 +1220,7 @@ function createAppServer(options = {}) {
           if (body.login !== undefined && body.login !== targetUser.login) {
             const newLogin = validateLogin(body.login);
             if (!newLogin) {
-              return sendJson(res, 400, { error: 'Некорректный формат логина (3–64 символа: латиница, цифры, . _ -).' });
+              return sendJson(res, 400, { error: 'Некорректный формат логина (2–64 символа: русские/латинские буквы, цифры, пробел, . _ -).' });
             }
             const existing = store.findUserByLogin(newLogin);
             if (existing && existing.id !== targetUser.id) {
@@ -1266,7 +1266,7 @@ function createAppServer(options = {}) {
 
           if (body.password !== undefined && body.password !== '') {
             if (!validatePassword(body.password)) {
-              return sendJson(res, 400, { error: 'Пароль должен содержать от 8 до 128 символов.' });
+              return sendJson(res, 400, { error: 'Пароль должен содержать от 4 до 128 символов.' });
             }
             targetUser.passwordHash = hashPassword(body.password);
             changes.passwordReset = true;
