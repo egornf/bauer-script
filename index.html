@@ -4175,19 +4175,31 @@ body.auth-locked #auth-close{display:none!important}
 
       // 3. SHARE WITH SPECIFIC USER IN DEPARTMENT
       if (act === 'share-user') {
-        openShareDialog(targetTheme, false);
+        // Guarantee background image is attached if theme or active design has one
+        const themeToSend = {
+          ...targetTheme,
+          bgImage: targetTheme.bgImage || (targetTheme.id === currentTheme.id ? (currentTheme.bgImage || '') : (targetTheme.bgImage || '')),
+          bgLum: targetTheme.bgLum !== undefined ? targetTheme.bgLum : (targetTheme.id === currentTheme.id ? currentTheme.bgLum : undefined)
+        };
+        openShareDialog(themeToSend);
         return;
       }
 
       // 4. SHARE WITH ALL IN DEPARTMENT
       if (act === 'share-all') {
-        if (window.confirm('Поделиться темой «' + targetTheme.name + '» со ВСЕМИ коллегами в вашем отделе?')) {
+        const themeToSend = {
+          ...targetTheme,
+          bgImage: targetTheme.bgImage || (targetTheme.id === currentTheme.id ? (currentTheme.bgImage || '') : (targetTheme.bgImage || '')),
+          bgLum: targetTheme.bgLum !== undefined ? targetTheme.bgLum : (targetTheme.id === currentTheme.id ? currentTheme.bgLum : undefined)
+        };
+        const bgNote = themeToSend.bgImage ? ' (включая картинку фона)' : '';
+        if (window.confirm('Поделиться темой «' + targetTheme.name + '»' + bgNote + ' со ВСЕМИ коллегами в вашем отделе?')) {
           try {
             await api('/api/themes/shared', {
               method: 'POST',
-              body: JSON.stringify({ theme: targetTheme, shareAll: true })
+              body: JSON.stringify({ theme: themeToSend, shareAll: true })
             });
-            if (typeof toast === 'function') toast('✓ Тема отправлена всем в отделе!');
+            if (typeof toast === 'function') toast('✓ Тема отправлена всем в отделе' + (themeToSend.bgImage ? ' вместе с фоном' : '') + '!');
             fetchSharedThemes();
           } catch (err) {
             if (typeof toast === 'function') toast('Ошибка отправки: ' + err.message);
@@ -4226,15 +4238,25 @@ body.auth-locked #auth-close{display:none!important}
       return;
     }
 
-    // Preset card click (apply)
+    // Preset card click (apply theme)
     const presetCard = e.target.closest('[data-apply-preset]');
     if (presetCard && !e.target.closest('.tcd-dots-btn') && !e.target.closest('.tcd-menu-dropdown')) {
       const p = allThemes().find(x => x.id === presetCard.dataset.applyPreset);
       if (p) {
-        const base = { cardColor: '', cardTransparency: 60, bgLum: undefined };
-        applyTheme(p.custom ? { ...base, ...p, id: p.id } : { ...base, ...p, id: p.id, bgImage: currentTheme.bgImage, bgLum: currentTheme.bgLum }, true);
+        const base = { cardColor: '', cardTransparency: 60 };
+        // If theme has bgImage (shared from colleague, saved custom, or preset), apply it directly!
+        const nextBgImage = (typeof p.bgImage === 'string') ? p.bgImage : '';
+        const nextBgLum = p.bgLum;
+        applyTheme({
+          ...base,
+          ...p,
+          id: p.id,
+          bgImage: nextBgImage,
+          bgLum: nextBgLum
+        }, true);
         if (window.__rerenderDesign) window.__rerenderDesign();
-        if (typeof toast === 'function') toast('Применена тема «' + p.name + '»');
+        const hasBgNote = nextBgImage ? ' (с фоновой картинкой)' : '';
+        if (typeof toast === 'function') toast('Применена тема «' + p.name + '»' + hasBgNote);
       }
       return;
     }
@@ -4334,7 +4356,7 @@ body.auth-locked #auth-close{display:none!important}
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const maxDim = 1920;
+          const maxDim = 1600;
           let w = img.width, h = img.height;
           if (w > maxDim || h > maxDim) {
             if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
@@ -4354,7 +4376,7 @@ body.auth-locked #auth-close{display:none!important}
             }
           } catch (err) {}
           const avgLum = samples ? (totalLum / samples) : 0.25;
-          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          const compressed = canvas.toDataURL('image/jpeg', 0.78);
 
           applyTheme({ bgImage: compressed, bgLum: avgLum, id: 'custom' }, true);
           if (window.__rerenderDesign) window.__rerenderDesign();
@@ -4386,7 +4408,10 @@ body.auth-locked #auth-close{display:none!important}
           <div style="width:40px;height:40px;border-radius:10px;background:var(--teal-soft,#edf5f1);color:var(--teal,#176f69);display:grid;place-items:center;font-size:20px">🎨</div>
           <div>
             <div style="color:var(--teal,#176f69);font-size:10px;font-weight:800;letter-spacing:1.5px">ПОДЕЛИТЬСЯ ТЕМОЙ</div>
-            <h3 style="font-size:18px;margin:2px 0 0;letter-spacing:-.3px">${escapeFn(theme.name)}</h3>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <h3 style="font-size:18px;margin:2px 0 0;letter-spacing:-.3px">${escapeFn(theme.name)}</h3>
+              ${theme.bgImage ? '<span style="font-size:10px;font-weight:750;background:var(--teal-soft,#edf5f1);color:var(--teal,#176f69);border:1px solid rgba(0,133,120,0.25);padding:2px 8px;border-radius:999px">🖼️ С картинкой фона</span>' : ''}
+            </div>
           </div>
         </div>
         <button type="button" class="dialog-x" id="share-dlg-close" aria-label="Закрыть" style="font-size:20px;padding:4px 8px;border:0;background:transparent;cursor:pointer;color:var(--muted)">✕</button>

@@ -246,10 +246,12 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
   let appData = readJson(files.appData, null);
   let sharedThemes = readJson(files.sharedThemes, []);
   function saveSharedThemes() {
+    dirtySharedThemes = true;
     writeJsonAtomic(files.sharedThemes, sharedThemes);
   }
   let dirtyAuth = false;
   let dirtyAppData = false;
+  let dirtySharedThemes = false;
   let blobAppDataLoaded = false;
 
   if (!appData) {
@@ -366,6 +368,14 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       console.warn('Blob auth sync warning:', err.message);
     }
 
+    try {
+        const thRes = await vercelBlob.get('bauer-state/shared-themes.json', { access: 'private', useCache: false });
+        if (thRes && thRes.statusCode === 200 && thRes.stream) {
+          const remoteThemes = await new Response(thRes.stream).json();
+          if (Array.isArray(remoteThemes)) sharedThemes = remoteThemes;
+        }
+      } catch (err) {}
+
     if (needAppData && !blobAppDataLoaded) {
       try {
         const appRes = await vercelBlob.get('bauer-state/app-data.json', {
@@ -405,6 +415,19 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
         });
       } catch (err) {
         console.error('Blob auth write error:', err.message);
+      }
+    }
+    if (dirtySharedThemes) {
+      dirtySharedThemes = false;
+      try {
+        await vercelBlob.put('bauer-state/shared-themes.json', JSON.stringify(sharedThemes), {
+          access: 'private',
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          contentType: 'application/json'
+        });
+      } catch (err) {
+        console.error('Blob sharedThemes write error:', err.message);
       }
     }
     if (dirtyAppData) {
