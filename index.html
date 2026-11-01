@@ -801,7 +801,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 
 </head>
 <body>
-<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet theme-toggle" id="theme-toggle" aria-label="Включить тёмную тему" title="Переключить тему" aria-pressed="false">☾ <span>Тёмная</span></button><button class="quiet theme-customizer-btn" id="theme-customizer-btn" title="Настроить свой дизайн: готовые темы, фон, шапка, леопард, неон, прозрачность блоков" aria-label="Настроить дизайн">🎨 <span>Дизайн</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
+<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet theme-toggle" id="theme-toggle" aria-label="Включить тёмную тему" title="Переключить тему" aria-pressed="false">☾ <span>Тёмная</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
 <nav class="app-switcher" aria-label="Разделы сайта"><div class="switcher-tabs"><button id="script-tab" class="section-tab active" aria-pressed="true">Скрипт</button><button id="gifts-tab" class="section-tab" aria-pressed="false" hidden="">Подарки</button><button id="sms-tab" class="section-tab" aria-pressed="false">Помощник СМС</button><button id="objections-tab" class="section-tab" aria-pressed="false">Возражения</button><button id="layouts-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M6 9V6a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg>Макеты</button><button id="addresses-tab" class="section-tab" aria-pressed="false">Адреса</button></div><span class="switcher-hint">Рабочее пространство оператора</span></nav>
 <main class="workspace">
   <div class="intro">
@@ -3063,6 +3063,408 @@ body.auth-locked #auth-close{display:none!important}
 .v4-operator-banner{padding:12px 16px;border-radius:12px;background:var(--amber-soft);border:1px solid var(--amber-line);color:var(--ink);font-size:13px;margin-bottom:14px}
 @media(max-width:900px){.user-row,.session-row{grid-template-columns:1fr}.user-actions{justify-content:flex-start}.perm-grid,.recovery-grid{grid-template-columns:1fr}}
 }</style>
+<script id="theme-customizer-module">
+(()=>{
+function getThemeStorageKey(){
+  const login = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : (sessionStorage.getItem('bauer_last_login') || 'guest');
+  return 'bauer-user-theme:' + encodeURIComponent(login);
+}
+
+const PRESETS = [
+  {
+    id: 'classic',
+    name: '🌟 Классика BAUER',
+    desc: 'Фирменный строгий стиль компании BAUER',
+    headerBg: '#102f44',
+    headerPattern: 'none',
+    bodyBg: '',
+    bodyPattern: 'none',
+    cardStyle: 'default',
+    accent: '#008578',
+    theme: 'light'
+  },
+  {
+    id: 'leopard',
+    name: '🐆 Дикий Леопард',
+    desc: 'Премиальный леопардовый принт с янтарным золотом',
+    headerBg: '#2a1a08',
+    headerPattern: 'leopard',
+    bodyBg: 'linear-gradient(135deg, #f7efe4 0%, #ecd7bd 100%)',
+    bodyPattern: 'leopard',
+    cardStyle: 'glass',
+    accent: '#d48806',
+    theme: 'light'
+  },
+  {
+    id: 'cyberpunk',
+    name: '⚡ Неон Киберпанк',
+    desc: 'Неоновые светящиеся контуры блоков и кибер-сетка',
+    headerBg: '#0e0224',
+    headerPattern: 'cyber',
+    bodyBg: 'radial-gradient(ellipse at top, #1a0836 0%, #060112 100%)',
+    bodyPattern: 'cyber',
+    cardStyle: 'neon',
+    accent: '#00f5d4',
+    theme: 'dark'
+  },
+  {
+    id: 'glass',
+    name: '💎 Ледяной Глассморфизм',
+    desc: 'Полупрозрачные матовые блоки с мягким размытием',
+    headerBg: 'rgba(16, 47, 68, 0.9)',
+    headerPattern: 'none',
+    bodyBg: 'linear-gradient(135deg, #d8ece8 0%, #cde1ec 50%, #e5dcf4 100%)',
+    bodyPattern: 'none',
+    cardStyle: 'glass',
+    accent: '#0077b6',
+    theme: 'light'
+  },
+  {
+    id: 'stars',
+    name: '🌌 Космос и Звёзды',
+    desc: 'Глубокий ночной космос, мерцающие звёзды и лазурь',
+    headerBg: '#070b18',
+    headerPattern: 'stars',
+    bodyBg: 'radial-gradient(ellipse at bottom, #0f1c3f 0%, #03050c 100%)',
+    bodyPattern: 'stars',
+    cardStyle: 'glass',
+    accent: '#38bdf8',
+    theme: 'dark'
+  },
+  {
+    id: 'stealth',
+    name: '🖤 Чёрный Оникс',
+    desc: 'Глубокий матовый минимализм с текстурой карбона',
+    headerBg: '#090a0b',
+    headerPattern: 'carbon',
+    bodyBg: '#111315',
+    bodyPattern: 'carbon',
+    cardStyle: 'default',
+    accent: '#e63946',
+    theme: 'dark'
+  },
+  {
+    id: 'mint',
+    name: '🍃 Мятный Шалфей',
+    desc: 'Нежная светлая палитра для комфортного чтения',
+    headerBg: '#1b3b36',
+    headerPattern: 'none',
+    bodyBg: 'linear-gradient(135deg, #eaf4f1 0%, #d8eae4 100%)',
+    bodyPattern: 'none',
+    cardStyle: 'glass',
+    accent: '#059669',
+    theme: 'light'
+  }
+];
+
+function loadSavedTheme(){
+  try {
+    const key = getThemeStorageKey();
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+    const legacy = localStorage.getItem('bauer-user-theme');
+    return legacy ? JSON.parse(legacy) : { ...PRESETS[0] };
+  } catch {
+    return { ...PRESETS[0] };
+  }
+}
+
+let currentTheme = loadSavedTheme();
+let activeDesignTab = 'presets';
+
+function applyTheme(cfg, save = true){
+  currentTheme = { ...currentTheme, ...cfg };
+  const root = document.documentElement;
+
+  if (currentTheme.theme && (currentTheme.theme === 'light' || currentTheme.theme === 'dark')) {
+    root.dataset.theme = currentTheme.theme;
+    try { localStorage.setItem('bauer-color-theme', currentTheme.theme); } catch {}
+  }
+  if (typeof updateThemeButton === 'function') updateThemeButton();
+
+  root.dataset.cardStyle = currentTheme.cardStyle || 'default';
+  root.dataset.headerPattern = currentTheme.headerPattern || 'none';
+  root.dataset.bodyPattern = currentTheme.bodyPattern || 'none';
+
+  if (currentTheme.headerBg) root.style.setProperty('--custom-header-bg', currentTheme.headerBg);
+  else root.style.removeProperty('--custom-header-bg');
+
+  if (currentTheme.bodyBg) root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
+  else root.style.removeProperty('--custom-body-bg');
+
+  if (currentTheme.accent) root.style.setProperty('--custom-accent', currentTheme.accent);
+  else root.style.removeProperty('--custom-accent');
+
+  if (currentTheme.bgImage) {
+    root.style.setProperty('--custom-bg-image', 'url("' + currentTheme.bgImage + '")');
+  } else {
+    root.style.removeProperty('--custom-bg-image');
+  }
+
+  if (save) {
+    try {
+      localStorage.setItem(getThemeStorageKey(), JSON.stringify(currentTheme));
+    } catch {}
+  }
+}
+
+// Initial application
+applyTheme(currentTheme, false);
+
+function refreshUserTheme(){
+  currentTheme = loadSavedTheme();
+  applyTheme(currentTheme, false);
+}
+window.refreshUserTheme = refreshUserTheme;
+
+// Refresh theme when user auth changes
+window.addEventListener('bauer:auth-changed', refreshUserTheme);
+
+function renderDesignSection(){
+  const headerColors = ['#102f44', '#0d3832', '#0d0221', '#2a1a08', '#070b18', '#090a0b', '#1b3b36', '#3b1248', '#881337'];
+  const accents = ['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'];
+  const curLogin = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : 'сотрудник';
+  const escapeFn = (typeof escapeHTML === 'function') ? escapeHTML : (s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
+
+  return `<div class="owner-card" style="margin-bottom:24px">
+    <div class="owner-card-head" style="align-items:flex-start">
+      <div>
+        <div class="kicker" style="color:var(--amber,#f5b544);font-weight:800;font-size:11px;letter-spacing:.08em;margin-bottom:4px">ПЕРСОНАЛИЗАЦИЯ РАБОЧЕГО МЕСТА</div>
+        <h2 style="margin:0 0 6px;font-size:24px;font-weight:800;letter-spacing:-.02em">🎨 Персональный дизайн интерфейса</h2>
+        <p style="margin:0;font-size:13px;line-height:1.6;color:var(--muted)">
+          Настройки дизайна сохраняются <b>только для вас (@${escapeFn(curLogin)})</b> в вашем браузере. Они не влияют на других сотрудников, рабочий текст или логику скрипта.
+        </p>
+      </div>
+    </div>
+
+    <div class="theme-nav-tabs" style="margin:16px 0 20px">
+      <button type="button" class="${activeDesignTab==='presets'?'active':''}" data-tcd-tab="presets">🌟 Готовые темы</button>
+      <button type="button" class="${activeDesignTab==='header'?'active':''}" data-tcd-tab="header">🎨 Шапка и узоры</button>
+      <button type="button" class="${activeDesignTab==='background'?'active':''}" data-tcd-tab="background">🖼️ Фон страницы</button>
+      <button type="button" class="${activeDesignTab==='blocks'?'active':''}" data-tcd-tab="blocks">🪟 Блоки и карточки</button>
+    </div>
+
+    <div class="tcd-body">
+      ${activeDesignTab === 'presets' ? `
+        <div class="preset-grid">
+          ${PRESETS.map(p => `
+            <div class="preset-card ${currentTheme.id===p.id?'active':''}" data-apply-preset="${p.id}">
+              <div class="preset-swatch" style="background:${p.bodyBg||(p.theme==='dark'?'#0a181a':'#eef2f0')};border:1.5px solid ${p.accent}">
+                <div class="preset-swatch-header" style="background:${p.headerBg}"></div>
+              </div>
+              <div>
+                <strong>${p.name}</strong>
+                <p>${p.desc}</p>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${activeDesignTab === 'header' ? `
+        <div class="tcd-section">
+          <div class="tcd-row">
+            <span class="tcd-label">Цвет фона шапки</span>
+            <div class="tcd-color-row">
+              ${headerColors.map(c => `
+                <button type="button" class="tcd-color-swatch ${(currentTheme.headerBg||'#102f44')===c?'selected':''}" style="background:${c}" data-tcd-prop="headerBg" data-val="${c}" title="${c}"></button>
+              `).join('')}
+              <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
+                <span>Свой цвет:</span>
+                <input type="color" class="tcd-header-picker" id="tcd-header-picker" value="${currentTheme.headerBg||'#102f44'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
+              </label>
+            </div>
+          </div>
+
+          <div class="tcd-row">
+            <span class="tcd-label">Узор на шапке</span>
+            <div class="tcd-options-grid">
+              <button type="button" class="tcd-option-btn ${(!currentTheme.headerPattern||currentTheme.headerPattern==='none')?'selected':''}" data-tcd-prop="headerPattern" data-val="none">Без узора</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='leopard'?'selected':''}" data-tcd-prop="headerPattern" data-val="leopard">🐆 Леопард</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='cyber'?'selected':''}" data-tcd-prop="headerPattern" data-val="cyber">⚡ Неон Сетка</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stars'?'selected':''}" data-tcd-prop="headerPattern" data-val="stars">✨ Звёзды</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='carbon'?'selected':''}" data-tcd-prop="headerPattern" data-val="carbon">🏎️ Карбон</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stripes'?'selected':''}" data-tcd-prop="headerPattern" data-val="stripes">Линии</button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${activeDesignTab === 'background' ? `
+        <div class="tcd-section">
+          <div class="tcd-row">
+            <span class="tcd-label">Узор страницы</span>
+            <div class="tcd-options-grid">
+              <button type="button" class="tcd-option-btn ${(!currentTheme.bodyPattern||currentTheme.bodyPattern==='none')?'selected':''}" data-tcd-prop="bodyPattern" data-val="none">Без узора</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='leopard'?'selected':''}" data-tcd-prop="bodyPattern" data-val="leopard">🐆 Леопард</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='cyber'?'selected':''}" data-tcd-prop="bodyPattern" data-val="cyber">⚡ Неон Сетка</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='stars'?'selected':''}" data-tcd-prop="bodyPattern" data-val="stars">✨ Звёзды</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='carbon'?'selected':''}" data-tcd-prop="bodyPattern" data-val="carbon">🏎️ Карбон</button>
+            </div>
+          </div>
+
+          <div class="tcd-row">
+            <span class="tcd-label">Своё фоновое изображение</span>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input type="file" id="tcd-bg-file" class="tcd-bg-file" accept="image/jpeg,image/png,image/webp" hidden>
+              <button type="button" class="primary tcd-bg-upload-btn" id="tcd-bg-upload-btn">📁 Загрузить фоновую картинку</button>
+              ${currentTheme.bgImage ? `<button type="button" class="danger-text tcd-bg-remove-btn" id="tcd-bg-remove-btn">✕ Убрать картинку</button>` : ''}
+              <small style="color:var(--muted)">Изображение масштабируется на весь экран и фиксируется при прокрутке (до 5 МБ).</small>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${activeDesignTab === 'blocks' ? `
+        <div class="tcd-section">
+          <div class="tcd-row">
+            <span class="tcd-label">Стиль карточек и панелей скрипта</span>
+            <div class="tcd-options-grid">
+              <button type="button" class="tcd-option-btn ${(!currentTheme.cardStyle||currentTheme.cardStyle==='default')?'selected':''}" data-tcd-prop="cardStyle" data-val="default">Классический (Сплошной)</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='glass'?'selected':''}" data-tcd-prop="cardStyle" data-val="glass">💎 Полупрозрачный Glass</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='frosted'?'selected':''}" data-tcd-prop="cardStyle" data-val="frosted">🧊 Глубокое стекло Frosted</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='neon'?'selected':''}" data-tcd-prop="cardStyle" data-val="neon">⚡ Неоновое свечение</button>
+            </div>
+          </div>
+
+          <div class="tcd-row">
+            <span class="tcd-label">Акцентный цвет кнопок и подсветки</span>
+            <div class="tcd-color-row">
+              ${accents.map(c => `
+                <button type="button" class="tcd-color-swatch ${(currentTheme.accent||'#008578')===c?'selected':''}" style="background:${c}" data-tcd-prop="accent" data-val="${c}" title="${c}"></button>
+              `).join('')}
+              <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
+                <span>Свой цвет:</span>
+                <input type="color" class="tcd-accent-picker" id="tcd-accent-picker" value="${currentTheme.accent||'#008578'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
+              </label>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+
+    <div class="tcd-foot" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <button type="button" class="tcd-reset-btn" id="tcd-reset-btn" style="color:var(--muted)">Сбросить всё к стандарту</button>
+      <div style="display:flex;gap:10px">
+        <button type="button" class="primary tcd-save-btn" id="tcd-save-btn">✓ Сохранить оформление</button>
+      </div>
+    </div>
+  </div>`;
+}
+window.renderDesignSection = renderDesignSection;
+
+// Global robust event handlers for ALL design controls (both in Profile tab and Dialog)
+document.addEventListener('click', (e) => {
+  // Tab switch
+  const tabBtn = e.target.closest('[data-tcd-tab]');
+  if (tabBtn) {
+    activeDesignTab = tabBtn.dataset.tcdTab;
+    if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
+      renderOwnerView();
+    }
+    return;
+  }
+
+  // Preset click
+  const presetCard = e.target.closest('[data-apply-preset]');
+  if (presetCard) {
+    const p = PRESETS.find(x => x.id === presetCard.dataset.applyPreset);
+    if (p) {
+      applyTheme({ ...p, id: p.id, bgImage: currentTheme.bgImage });
+      if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
+        renderOwnerView();
+      }
+      if (typeof toast === 'function') toast('Применена тема «' + p.name + '»');
+    }
+    return;
+  }
+
+  // Property swatch or button click
+  const propBtn = e.target.closest('[data-tcd-prop]');
+  if (propBtn) {
+    const prop = propBtn.dataset.tcdProp;
+    const val = propBtn.dataset.val;
+    applyTheme({ [prop]: val, id: 'custom' });
+    if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
+      renderOwnerView();
+    }
+    return;
+  }
+
+  // Upload button click
+  const uploadBtn = e.target.closest('#tcd-bg-upload-btn, .tcd-bg-upload-btn');
+  if (uploadBtn) {
+    const fileInp = document.querySelector('.tcd-bg-file') || document.getElementById('tcd-bg-file');
+    fileInp?.click();
+    return;
+  }
+
+  // Remove bg image
+  const removeBgBtn = e.target.closest('#tcd-bg-remove-btn, .tcd-bg-remove-btn');
+  if (removeBgBtn) {
+    applyTheme({ bgImage: '', id: 'custom' });
+    if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
+      renderOwnerView();
+    }
+    if (typeof toast === 'function') toast('Фоновое изображение удалено');
+    return;
+  }
+
+  // Reset to default
+  const resetBtn = e.target.closest('#tcd-reset-btn, .tcd-reset-btn');
+  if (resetBtn) {
+    applyTheme({ ...PRESETS[0], bgImage: '' });
+    if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
+      renderOwnerView();
+    }
+    if (typeof toast === 'function') toast('Оформление сброшено к классическому стандарту');
+    return;
+  }
+
+  // Save button
+  const saveBtn = e.target.closest('#tcd-save-btn, .tcd-save-btn');
+  if (saveBtn) {
+    applyTheme(currentTheme, true);
+    if (typeof toast === 'function') toast('✓ Персональный дизайн сохранён!');
+    return;
+  }
+});
+
+// Color picker inputs
+document.addEventListener('input', (e) => {
+  if (e.target.matches('#tcd-header-picker, .tcd-header-picker')) {
+    applyTheme({ headerBg: e.target.value, id: 'custom' });
+  } else if (e.target.matches('#tcd-accent-picker, .tcd-accent-picker')) {
+    applyTheme({ accent: e.target.value, id: 'custom' });
+  }
+});
+
+// File input handler
+document.addEventListener('change', (e) => {
+  if (e.target.matches('#tcd-bg-file, .tcd-bg-file')) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      if (typeof toast === 'function') toast('Размер фонового файла не должен превышать 5 МБ');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      applyTheme({ bgImage: dataUrl, id: 'custom' });
+      if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
+        renderOwnerView();
+      }
+      if (typeof toast === 'function') toast('Фоновое изображение успешно установлено!');
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+window.applyTheme = applyTheme;
+window.PRESETS = PRESETS;
+})();
+</script>
 <script id="owner-module">
 (()=>{
 const E=escapeHTML;
@@ -3586,6 +3988,11 @@ function renderSecuritySection(){
   </div>`;
 }
 
+
+function renderDesignSection(){
+  return (typeof window.renderDesignSection === 'function') ? window.renderDesignSection() : '';
+}
+
 function renderOwnerView(){
   const ov=document.getElementById('owner-view');
   if(!ov||!currentUser)return;
@@ -3595,9 +4002,9 @@ function renderOwnerView(){
   const canViewUsers=isOwner||isHead||perms.includes('users.view')||perms.includes('users.manage');
   const canViewSessions=isOwner||isHead||perms.includes('sessions.manage');
   const canViewAudit=isOwner||isHead||perms.includes('audit.view');
-  if(ownerTab==='users'&&!canViewUsers)ownerTab='security';
-  if(ownerTab==='sessions'&&!canViewSessions)ownerTab='security';
-  if(ownerTab==='audit'&&!canViewAudit)ownerTab='security';
+  if(ownerTab==='users'&&!canViewUsers)ownerTab='design';
+  if(ownerTab==='sessions'&&!canViewSessions)ownerTab='design';
+  if(ownerTab==='audit'&&!canViewAudit)ownerTab='design';
 
   const canDeptScripts=isOwner||isHead||currentUser.role==='ADMIN';
   const navItems=[];
@@ -3605,7 +4012,8 @@ function renderOwnerView(){
   if(canDeptScripts)navItems.push(['dept-scripts',`📋 Скрипты отдела ${deptScriptsIds.length?'('+deptScriptsIds.length+')':''}`]);
   if(canViewSessions)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
   if(canViewAudit)navItems.push(['audit',`📋 Журнал действий`]);
-  navItems.push(['security',`🔐 Безопасность и профиль`]);
+  navItems.push(['design',`🎨 Персональный дизайн`]);
+  navItems.push(['security',`🔐 ${isOwner?'Безопасность и пароль':'Мой профиль и пароль'}`]);
 
   ov.innerHTML=`<header class="owner-header">
     <div>
@@ -3622,7 +4030,7 @@ function renderOwnerView(){
   <nav class="owner-nav" role="tablist">
     ${navItems.map(([id,lbl])=>`<button type="button" role="tab" class="${ownerTab===id?'on':''}" data-owner-tab="${id}">${lbl}</button>`).join('')}
   </nav>
-  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():renderSecuritySection()}`;
+  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():ownerTab==='design'?renderDesignSection():renderSecuritySection()}`;
 }
 
 
@@ -4299,367 +4707,4 @@ document.addEventListener('submit',async e=>{
 });
 })();
 </script>
-
-
-<script id="theme-customizer-module">
-(()=>{
-const THEME_STORAGE_KEY = 'bauer-user-theme';
-
-const PRESETS = [
-  {
-    id: 'classic',
-    name: '🌟 Классика BAUER',
-    desc: 'Фирменный строгий стиль компании BAUER',
-    headerBg: '#102f44',
-    headerPattern: 'none',
-    bodyBg: '',
-    bodyPattern: 'none',
-    cardStyle: 'default',
-    accent: '#008578',
-    theme: 'light'
-  },
-  {
-    id: 'leopard',
-    name: '🐆 Дикий Леопард',
-    desc: 'Премиальный леопардовый принт с янтарным золотом',
-    headerBg: '#2a1a08',
-    headerPattern: 'leopard',
-    bodyBg: 'linear-gradient(135deg, #f7efe4 0%, #ecd7bd 100%)',
-    bodyPattern: 'leopard',
-    cardStyle: 'glass',
-    accent: '#d48806',
-    theme: 'light'
-  },
-  {
-    id: 'cyberpunk',
-    name: '⚡ Неон Киберпанк',
-    desc: 'Неоновые светящиеся контуры блоков и кибер-сетка',
-    headerBg: '#0e0224',
-    headerPattern: 'cyber',
-    bodyBg: 'radial-gradient(ellipse at top, #1a0836 0%, #060112 100%)',
-    bodyPattern: 'cyber',
-    cardStyle: 'neon',
-    accent: '#00f5d4',
-    theme: 'dark'
-  },
-  {
-    id: 'glass',
-    name: '💎 Ледяной Глассморфизм',
-    desc: 'Полупрозрачные матовые блоки с мягким размытием',
-    headerBg: 'rgba(16, 47, 68, 0.9)',
-    headerPattern: 'none',
-    bodyBg: 'linear-gradient(135deg, #d8ece8 0%, #cde1ec 50%, #e5dcf4 100%)',
-    bodyPattern: 'none',
-    cardStyle: 'glass',
-    accent: '#0077b6',
-    theme: 'light'
-  },
-  {
-    id: 'stars',
-    name: '🌌 Космос и Звёзды',
-    desc: 'Глубокий ночной космос, мерцающие звёзды и лазурь',
-    headerBg: '#070b18',
-    headerPattern: 'stars',
-    bodyBg: 'radial-gradient(ellipse at bottom, #0f1c3f 0%, #03050c 100%)',
-    bodyPattern: 'stars',
-    cardStyle: 'glass',
-    accent: '#38bdf8',
-    theme: 'dark'
-  },
-  {
-    id: 'stealth',
-    name: '🖤 Чёрный Оникс',
-    desc: 'Глубокий матовый минимализм с текстурой карбона',
-    headerBg: '#090a0b',
-    headerPattern: 'carbon',
-    bodyBg: '#111315',
-    bodyPattern: 'carbon',
-    cardStyle: 'default',
-    accent: '#e63946',
-    theme: 'dark'
-  },
-  {
-    id: 'mint',
-    name: '🍃 Мятный Шалфей',
-    desc: 'Нежная светлая палитра для комфортного чтения',
-    headerBg: '#1b3b36',
-    headerPattern: 'none',
-    bodyBg: 'linear-gradient(135deg, #eaf4f1 0%, #d8eae4 100%)',
-    bodyPattern: 'none',
-    cardStyle: 'glass',
-    accent: '#059669',
-    theme: 'light'
-  }
-];
-
-function loadSavedTheme(){
-  try {
-    const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { ...PRESETS[0] };
-  } catch {
-    return { ...PRESETS[0] };
-  }
-}
-
-let currentTheme = loadSavedTheme();
-let activeTab = 'presets';
-
-function applyTheme(cfg, save = true){
-  currentTheme = { ...currentTheme, ...cfg };
-  const root = document.documentElement;
-
-  if (currentTheme.theme && (currentTheme.theme === 'light' || currentTheme.theme === 'dark')) {
-    root.dataset.theme = currentTheme.theme;
-    try { localStorage.setItem('bauer-color-theme', currentTheme.theme); } catch {}
-  }
-  if (typeof updateThemeButton === 'function') updateThemeButton();
-
-  root.dataset.cardStyle = currentTheme.cardStyle || 'default';
-  root.dataset.headerPattern = currentTheme.headerPattern || 'none';
-  root.dataset.bodyPattern = currentTheme.bodyPattern || 'none';
-
-  if (currentTheme.headerBg) root.style.setProperty('--custom-header-bg', currentTheme.headerBg);
-  else root.style.removeProperty('--custom-header-bg');
-
-  if (currentTheme.bodyBg) root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
-  else root.style.removeProperty('--custom-body-bg');
-
-  if (currentTheme.accent) root.style.setProperty('--custom-accent', currentTheme.accent);
-  else root.style.removeProperty('--custom-accent');
-
-  if (currentTheme.bgImage) {
-    root.style.setProperty('--custom-bg-image', 'url("' + currentTheme.bgImage + '")');
-  } else {
-    root.style.removeProperty('--custom-bg-image');
-  }
-
-  if (save) {
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(currentTheme));
-    } catch {}
-  }
-}
-
-// Initial application
-applyTheme(currentTheme, false);
-
-function openThemeCustomizer(){
-  const dlg = document.getElementById('theme-customizer-modal');
-  if (!dlg) return;
-  renderCustomizerDialog();
-  if (!dlg.open) dlg.showModal();
-}
-
-function renderCustomizerDialog(){
-  const dlg = document.getElementById('theme-customizer-modal');
-  if (!dlg) return;
-
-  const headerColors = ['#102f44', '#0d3832', '#0d0221', '#2a1a08', '#070b18', '#090a0b', '#1b3b36', '#3b1248', '#881337'];
-  const accents = ['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'];
-
-  dlg.innerHTML = `
-    <button type="button" class="dialog-x" data-close-modal="theme-customizer-modal" aria-label="Закрыть">✕</button>
-    <div class="kicker">ПЕРСОНАЛИЗАЦИЯ РАБОЧЕГО МЕСТА</div>
-    <h2 id="tcd-title" style="margin:6px 0 4px;font-size:24px;font-weight:800;letter-spacing:-.02em">Дизайн и оформление системы</h2>
-    <p style="margin:0 0 16px;font-size:13px;color:var(--muted)">Настройте оформление под себя: готовые темы, узоры шапки (леопард, неон, звёзды), свой фон и полупрозрачность блоков скрипта.</p>
-
-    <div class="theme-nav-tabs">
-      <button type="button" class="${activeTab==='presets'?'active':''}" data-tcd-tab="presets">🌟 Готовые темы</button>
-      <button type="button" class="${activeTab==='header'?'active':''}" data-tcd-tab="header">🎨 Шапка и узоры</button>
-      <button type="button" class="${activeTab==='background'?'active':''}" data-tcd-tab="background">🖼️ Фон страницы</button>
-      <button type="button" class="${activeTab==='blocks'?'active':''}" data-tcd-tab="blocks">🪟 Стиль блоков скрипта</button>
-    </div>
-
-    <div class="tcd-body">
-      ${activeTab === 'presets' ? `
-        <div class="preset-grid">
-          ${PRESETS.map(p => `
-            <div class="preset-card ${currentTheme.id===p.id?'active':''}" data-apply-preset="${p.id}">
-              <div class="preset-swatch" style="background:${p.bodyBg||(p.theme==='dark'?'#0a181a':'#eef2f0')};border:1.5px solid ${p.accent}">
-                <div class="preset-swatch-header" style="background:${p.headerBg}"></div>
-              </div>
-              <div>
-                <strong>${p.name}</strong>
-                <p>${p.desc}</p>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      ` : ''}
-
-      ${activeTab === 'header' ? `
-        <div class="tcd-section">
-          <div class="tcd-row">
-            <span class="tcd-label">Цвет фона шапки</span>
-            <div class="tcd-color-row">
-              ${headerColors.map(c => `
-                <button type="button" class="tcd-color-swatch ${(currentTheme.headerBg||'#102f44')===c?'selected':''}" style="background:${c}" data-tcd-prop="headerBg" data-val="${c}" title="${c}"></button>
-              `).join('')}
-              <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
-                <span>Свой цвет:</span>
-                <input type="color" id="tcd-header-picker" value="${currentTheme.headerBg||'#102f44'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
-              </label>
-            </div>
-          </div>
-
-          <div class="tcd-row">
-            <span class="tcd-label">Узор на шапке</span>
-            <div class="tcd-options-grid">
-              <button type="button" class="tcd-option-btn ${(!currentTheme.headerPattern||currentTheme.headerPattern==='none')?'selected':''}" data-tcd-prop="headerPattern" data-val="none">Без узора</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='leopard'?'selected':''}" data-tcd-prop="headerPattern" data-val="leopard">🐆 Леопард</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='cyber'?'selected':''}" data-tcd-prop="headerPattern" data-val="cyber">⚡ Неон Сетка</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stars'?'selected':''}" data-tcd-prop="headerPattern" data-val="stars">✨ Звёзды</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='carbon'?'selected':''}" data-tcd-prop="headerPattern" data-val="carbon">🏎️ Карбон</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stripes'?'selected':''}" data-tcd-prop="headerPattern" data-val="stripes">Линии</button>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
-      ${activeTab === 'background' ? `
-        <div class="tcd-section">
-          <div class="tcd-row">
-            <span class="tcd-label">Узор страницы</span>
-            <div class="tcd-options-grid">
-              <button type="button" class="tcd-option-btn ${(!currentTheme.bodyPattern||currentTheme.bodyPattern==='none')?'selected':''}" data-tcd-prop="bodyPattern" data-val="none">Без узора</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='leopard'?'selected':''}" data-tcd-prop="bodyPattern" data-val="leopard">🐆 Леопард</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='cyber'?'selected':''}" data-tcd-prop="bodyPattern" data-val="cyber">⚡ Неон Сетка</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='stars'?'selected':''}" data-tcd-prop="bodyPattern" data-val="stars">✨ Звёзды</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='carbon'?'selected':''}" data-tcd-prop="bodyPattern" data-val="carbon">🏎️ Карбон</button>
-            </div>
-          </div>
-
-          <div class="tcd-row">
-            <span class="tcd-label">Своё фоновое изображение</span>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <input type="file" id="tcd-bg-file" accept="image/jpeg,image/png,image/webp" hidden>
-              <button type="button" class="primary" id="tcd-bg-upload-btn">📁 Загрузить фоновую картинку</button>
-              ${currentTheme.bgImage ? `<button type="button" class="danger-text" id="tcd-bg-remove-btn">✕ Убрать картинку</button>` : ''}
-              <small style="color:var(--muted)">Изображение масштабируется на весь экран и фиксируется при прокрутке.</small>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
-      ${activeTab === 'blocks' ? `
-        <div class="tcd-section">
-          <div class="tcd-row">
-            <span class="tcd-label">Стиль карточек и панелей скрипта</span>
-            <div class="tcd-options-grid">
-              <button type="button" class="tcd-option-btn ${(!currentTheme.cardStyle||currentTheme.cardStyle==='default')?'selected':''}" data-tcd-prop="cardStyle" data-val="default">Классический (Сплошной)</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='glass'?'selected':''}" data-tcd-prop="cardStyle" data-val="glass">💎 Полупрозрачный Glass</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='frosted'?'selected':''}" data-tcd-prop="cardStyle" data-val="frosted">🧊 Глубокое стекло Frosted</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='neon'?'selected':''}" data-tcd-prop="cardStyle" data-val="neon">⚡ Неоновое свечение</button>
-            </div>
-          </div>
-
-          <div class="tcd-row">
-            <span class="tcd-label">Акцентный цвет кнопок и подсветки</span>
-            <div class="tcd-color-row">
-              ${accents.map(c => `
-                <button type="button" class="tcd-color-swatch ${(currentTheme.accent||'#008578')===c?'selected':''}" style="background:${c}" data-tcd-prop="accent" data-val="${c}" title="${c}"></button>
-              `).join('')}
-              <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
-                <span>Свой цвет:</span>
-                <input type="color" id="tcd-accent-picker" value="${currentTheme.accent||'#008578'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
-              </label>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-    </div>
-
-    <div class="tcd-foot">
-      <button type="button" id="tcd-reset-btn" style="color:var(--muted)">Сбросить всё к стандарту</button>
-      <div style="display:flex;gap:10px">
-        <button type="button" class="primary" id="tcd-save-btn">✓ Сохранить и применить</button>
-        <button type="button" data-close-modal="theme-customizer-modal">Закрыть</button>
-      </div>
-    </div>
-  `;
-
-  // Attach event handlers inside modal
-  dlg.querySelectorAll('[data-tcd-tab]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      activeTab = btn.dataset.tcdTab;
-      renderCustomizerDialog();
-    });
-  });
-
-  dlg.querySelectorAll('[data-apply-preset]').forEach(card => {
-    card.addEventListener('click', () => {
-      const p = PRESETS.find(x => x.id === card.dataset.applyPreset);
-      if (p) {
-        applyTheme({ ...p, id: p.id, bgImage: currentTheme.bgImage });
-        renderCustomizerDialog();
-        toast('Применена тема «' + p.name + '»');
-      }
-    });
-  });
-
-  dlg.querySelectorAll('[data-tcd-prop]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const prop = btn.dataset.tcdProp;
-      const val = btn.dataset.val;
-      applyTheme({ [prop]: val, id: 'custom' });
-      renderCustomizerDialog();
-    });
-  });
-
-  const headerPicker = dlg.querySelector('#tcd-header-picker');
-  headerPicker?.addEventListener('input', e => {
-    applyTheme({ headerBg: e.target.value, id: 'custom' });
-  });
-
-  const accentPicker = dlg.querySelector('#tcd-accent-picker');
-  accentPicker?.addEventListener('input', e => {
-    applyTheme({ accent: e.target.value, id: 'custom' });
-  });
-
-  const uploadBtn = dlg.querySelector('#tcd-bg-upload-btn');
-  const fileInput = dlg.querySelector('#tcd-bg-file');
-  uploadBtn?.addEventListener('click', () => fileInput?.click());
-
-  fileInput?.addEventListener('change', e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      toast('Размер фонового файла не должен превышать 5 МБ');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result;
-      applyTheme({ bgImage: dataUrl, id: 'custom' });
-      renderCustomizerDialog();
-      toast('Фоновое изображение успешно установлено!');
-    };
-    reader.readAsDataURL(file);
-  });
-
-  const removeBgBtn = dlg.querySelector('#tcd-bg-remove-btn');
-  removeBgBtn?.addEventListener('click', () => {
-    applyTheme({ bgImage: '', id: 'custom' });
-    renderCustomizerDialog();
-    toast('Фоновое изображение удалено');
-  });
-
-  dlg.querySelector('#tcd-reset-btn')?.addEventListener('click', () => {
-    applyTheme({ ...PRESETS[0], bgImage: '' });
-    renderCustomizerDialog();
-    toast('Оформление сброшено к классическому стандарту');
-  });
-
-  dlg.querySelector('#tcd-save-btn')?.addEventListener('click', () => {
-    dlg.close();
-    toast('✓ Персональный дизайн сохранён!');
-  });
-}
-
-document.getElementById('theme-customizer-btn')?.addEventListener('click', openThemeCustomizer);
-window.openThemeCustomizer = openThemeCustomizer;
-
-})();
-</script>
-
 </body></html>
