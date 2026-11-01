@@ -887,7 +887,7 @@ async function download(){
   const doc=document.documentElement.cloneNode(true);
   doc.querySelectorAll('.venue-picker').forEach(x=>x.remove());
   const lvEl=doc.querySelector('#layouts-view');if(lvEl){lvEl.innerHTML='';lvEl.hidden=true;lvEl.classList.remove('v4-giftmode');}
-  for(const id of ['addresses-view','address-dialog','whole-view','owner-view']){const els=[...doc.querySelectorAll('#'+id)];els.slice(1).forEach(el=>el.remove());if(els[0]){els[0].hidden=true;els[0].innerHTML='';}}for(const sel of ['#user-modal','#recovery-modal','#owner-recover-dialog','#header-user-btn','#owner-tab','#open-owner-recovery']){doc.querySelectorAll(sel).forEach(el=>el.remove());}
+  for(const id of ['addresses-view','address-dialog','whole-view','owner-view']){const els=[...doc.querySelectorAll('#'+id)];els.slice(1).forEach(el=>el.remove());if(els[0]){els[0].hidden=true;els[0].innerHTML='';}}for(const sel of ['#user-modal','#recovery-modal','#owner-recover-dialog','#header-user-btn','#header-logout-btn','#owner-tab','#open-owner-recovery']){doc.querySelectorAll(sel).forEach(el=>el.remove());}
   doc.querySelector('#sms-data').textContent=JSON.stringify(smsSource).replace(/</g,'\\u003c');
   doc.querySelector('#script-data').textContent=JSON.stringify(snapshot).replace(/</g,'\\u003c');
   let ldEl=doc.querySelector('#layouts-data');
@@ -2377,6 +2377,10 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .header-user-badge:hover{background:#ffffff24}
 .header-user-badge .dot-owner{width:8px;height:8px;border-radius:50%;background:var(--amber)}
 .auth-recover-link{display:block;width:100%;margin-top:12px;padding:8px;border:0;background:transparent;color:var(--accent-ink);font-size:12px;font-weight:600;text-align:center;text-decoration:underline;cursor:pointer}
+body.auth-locked .app-header,body.auth-locked .app-switcher,body.auth-locked main,body.auth-locked .drawer,body.auth-locked .shade{visibility:hidden!important;pointer-events:none!important;user-select:none!important}
+body.auth-locked #auth-close{display:none!important}
+.header-logout-btn{min-height:32px;padding:0 10px;border-radius:8px;background:#ffffff14;border:1px solid #ffffff24;color:#fff;font-size:12px;font-weight:600;cursor:pointer}
+.header-logout-btn:hover{background:#ffffff28}
 @media(max-width:900px){.user-row,.session-row{grid-template-columns:1fr}.user-actions{justify-content:flex-start}.perm-grid,.recovery-grid{grid-template-columns:1fr}}
 }</style>
 <script id="owner-module">
@@ -2441,9 +2445,10 @@ if(authFoot&&!document.getElementById('open-owner-recovery')){
   authFoot.insertAdjacentHTML('beforebegin','<button type="button" id="open-owner-recovery" class="auth-recover-link">Забыли пароль OWNER? Восстановить по резервному коду →</button>');
 }
 
+document.body.classList.add('auth-locked');
 const toolsBar=document.querySelector('.app-header .tools');
 if(toolsBar&&!document.getElementById('header-user-btn')){
-  toolsBar.insertAdjacentHTML('afterbegin','<button type="button" id="header-user-btn" class="header-user-badge" hidden></button>');
+  toolsBar.insertAdjacentHTML('afterbegin','<button type="button" id="header-user-btn" class="header-user-badge" hidden></button><button type="button" id="header-logout-btn" class="header-logout-btn" hidden title="Выйти из учётной записи">Выйти</button>');
 }
 
 const origSetTab=setTab;
@@ -2468,27 +2473,84 @@ function fmtTime(ts){
 
 function updateHeaderBadge(){
   const btn=document.getElementById('header-user-btn');
+  const outBtn=document.getElementById('header-logout-btn');
   const tabLbl=document.getElementById('owner-tab-label');
+  if(currentUser&&adminUnlocked){
+    document.body.classList.remove('auth-locked');
+  }else{
+    document.body.classList.add('auth-locked');
+  }
   if(!btn)return;
   if(currentUser){
     btn.hidden=false;
+    if(outBtn)outBtn.hidden=false;
     const isOwner=currentUser.role==='OWNER';
     btn.innerHTML=`${isOwner?'<span class="dot-owner"></span>':''}<span>${E(currentUser.login)} · ${E(currentUser.role)}</span>`;
     if(tabLbl)tabLbl.textContent=isOwner?'OWNER · Управление':'Профиль ('+currentUser.role+')';
   }else{
     btn.hidden=true;
+    if(outBtn)outBtn.hidden=true;
     if(tabLbl)tabLbl.textContent='OWNER · Управление';
   }
 }
 
-addEventListener('auth-changed',updateHeaderBadge);
+const authDlgEl=document.getElementById('auth-dialog');
+if(authDlgEl){
+  authDlgEl.addEventListener('cancel',e=>{
+    if(!adminUnlocked||!currentUser)e.preventDefault();
+  });
+  authDlgEl.addEventListener('close',()=>{
+    setTimeout(()=>{
+      const recDlg=document.getElementById('owner-recover-dialog');
+      if((!adminUnlocked||!currentUser)&&(!recDlg||!recDlg.open)){
+        ensureAdmin(()=>{updateHeaderBadge();});
+      }
+    },50);
+  });
+}
+const recDlgEl=document.getElementById('owner-recover-dialog');
+if(recDlgEl){
+  recDlgEl.addEventListener('close',()=>{
+    if(!adminUnlocked||!currentUser){
+      ensureAdmin(()=>{updateHeaderBadge();});
+    }
+  });
+}
+
+async function performLogout(){
+  try{
+    await api('/api/admin/logout',{method:'POST',body:'{}'});
+  }catch{}
+  adminUnlocked=false;currentUser=null;
+  updateHeaderBadge();
+  showScript();
+  toast('Вы вышли из учётной записи');
+  ensureAdmin(()=>{updateHeaderBadge();});
+}
+document.getElementById('header-logout-btn')?.addEventListener('click',performLogout);
+
+addEventListener('auth-changed',()=>{
+  updateHeaderBadge();
+  if(!adminUnlocked||!currentUser){
+    const recDlg=document.getElementById('owner-recover-dialog');
+    if((!authDlgEl||!authDlgEl.open)&&(!recDlg||!recDlg.open)){
+      ensureAdmin(()=>{updateHeaderBadge();});
+    }
+  }
+});
+
 api('/api/admin/status').then(st=>{
   adminUnlocked=Boolean(st.unlocked);
   currentUser=st.user||null;
   if(st.csrfToken)csrfToken=st.csrfToken;
   if(st.roleDefaults)roleDefaults=st.roleDefaults;
   updateHeaderBadge();
-}).catch(()=>{});
+  if(!adminUnlocked||!currentUser){
+    ensureAdmin(()=>{updateHeaderBadge();});
+  }
+}).catch(()=>{
+  ensureAdmin(()=>{updateHeaderBadge();});
+});
 
 async function openOwnerPanel(){
   await ensureAdmin(async()=>{
@@ -2840,11 +2902,7 @@ document.addEventListener('click',async e=>{
   if(act==='back'){showScript();return;}
   if(act==='refresh'){await loadOwnerData();renderOwnerView();toast('Данные обновлены');return;}
   if(act==='logout'){
-    try{
-      await api('/api/admin/logout',{method:'POST',body:'{}'});
-      adminUnlocked=false;currentUser=null;updateHeaderBadge();
-      showScript();toast('Вы вышли из учётной записи');
-    }catch(err){toast(err.message);}
+    await performLogout();
     return;
   }
   if(act==='create-user'){openUserModal(null);return;}
