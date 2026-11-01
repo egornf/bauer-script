@@ -16,7 +16,6 @@ try{
     if(ut.headerBg)document.documentElement.style.setProperty('--custom-header-bg',ut.headerBg);
     if(ut.accent)document.documentElement.style.setProperty('--custom-accent',ut.accent);
     if(ut.bodyBg)document.documentElement.style.setProperty('--custom-body-bg',ut.bodyBg);
-    if(ut.bgImage)document.documentElement.style.setProperty('--custom-bg-image','url("'+ut.bgImage+'")');
   }
 }catch(e){document.documentElement.dataset.theme="light";}
 </script>
@@ -528,12 +527,11 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[style*="--custom-body-bg"] body {
   background: var(--custom-body-bg) !important;
 }
-:root[style*="--custom-bg-image"] body {
+:root[data-has-bg="1"] body {
   background-image: var(--custom-bg-image) !important;
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
-  background-attachment: fixed !important;
 }
 :root[data-body-pattern="leopard"] body {
   background-image: var(--pat-leopard) !important;
@@ -566,8 +564,8 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[data-card-style="glass"] .script-pane,
 :root[data-card-style="glass"] .objections-pane {
   background: rgba(255, 255, 255, 0.76) !important;
-  backdrop-filter: blur(14px) !important;
-  -webkit-backdrop-filter: blur(14px) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
   border-color: rgba(255, 255, 255, 0.45) !important;
 }
 :root[data-card-style="glass"] .deck-viewport {
@@ -578,8 +576,8 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[data-theme="dark"][data-card-style="glass"] .script-pane,
 :root[data-theme="dark"][data-card-style="glass"] .objections-pane {
   background: rgba(14, 28, 32, 0.74) !important;
-  backdrop-filter: blur(14px) !important;
-  -webkit-backdrop-filter: blur(14px) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
   border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
@@ -589,8 +587,8 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[data-card-style="frosted"] .script-pane,
 :root[data-card-style="frosted"] .objections-pane {
   background: rgba(255, 255, 255, 0.48) !important;
-  backdrop-filter: blur(22px) !important;
-  -webkit-backdrop-filter: blur(22px) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
   border-color: rgba(255, 255, 255, 0.5) !important;
 }
 :root[data-theme="dark"][data-card-style="frosted"] .deck-viewport,
@@ -598,8 +596,8 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[data-theme="dark"][data-card-style="frosted"] .script-pane,
 :root[data-theme="dark"][data-card-style="frosted"] .objections-pane {
   background: rgba(10, 22, 26, 0.52) !important;
-  backdrop-filter: blur(22px) !important;
-  -webkit-backdrop-filter: blur(22px) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
   border-color: rgba(255, 255, 255, 0.14) !important;
 }
 
@@ -3195,16 +3193,20 @@ function applyTheme(cfg, save = true){
   if (currentTheme.accent) root.style.setProperty('--custom-accent', currentTheme.accent);
   else root.style.removeProperty('--custom-accent');
 
-  if (currentTheme.bgImage) {
-    root.style.setProperty('--custom-bg-image', 'url("' + currentTheme.bgImage + '")');
-  } else {
-    root.style.removeProperty('--custom-bg-image');
+  let bgStyle = document.getElementById('custom-bg-style');
+  if (!bgStyle) { bgStyle = document.createElement('style'); bgStyle.id = 'custom-bg-style'; document.head.appendChild(bgStyle); }
+  const bgSig = currentTheme.bgImage || '';
+  if (bgStyle.dataset.sig !== bgSig) {
+    bgStyle.dataset.sig = bgSig;
+    bgStyle.textContent = bgSig ? ':root{--custom-bg-image:url("' + bgSig + '")}' : '';
   }
+  if (bgSig) root.dataset.hasBg = '1'; else delete root.dataset.hasBg;
 
   if (save) {
-    try {
-      localStorage.setItem(getThemeStorageKey(), JSON.stringify(currentTheme));
-    } catch {}
+    clearTimeout(applyTheme._t);
+    applyTheme._t = setTimeout(() => {
+      try { localStorage.setItem(getThemeStorageKey(), JSON.stringify(currentTheme)); } catch {}
+    }, 250);
   }
 }
 
@@ -3450,6 +3452,20 @@ document.addEventListener('change', (e) => {
     }
     const reader = new FileReader();
     reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        const dataUrl = cv.toDataURL('image/jpeg', 0.82);
+        applyTheme({ bgImage: dataUrl, id: 'custom' });
+        if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') renderOwnerView();
+        if (typeof toast === 'function') toast('Фоновое изображение успешно установлено!');
+      };
+      img.onerror = () => { if (typeof toast === 'function') toast('Не удалось прочитать изображение'); };
+      img.src = reader.result;
+      return;
       const dataUrl = reader.result;
       applyTheme({ bgImage: dataUrl, id: 'custom' });
       if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
@@ -3667,31 +3683,25 @@ async function loadOwnerData(){
     const canUsers=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('users.view')||perms.includes('users.manage');
     const canSessions=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('sessions.manage');
     const canAudit=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('audit.view');
-    if(canUsers){
-      const uRes=await api('/api/users');
+    const canDeptScripts=currentUser.role==='OWNER'||currentUser.role==='HEAD'||currentUser.role==='ADMIN';
+    const tasks=[];
+    if(canUsers)tasks.push(api('/api/users').then(uRes=>{
       usersList=uRes.users||[];
       headsList=uRes.heads||usersList.filter(u=>u.role==='HEAD'||u.role==='OWNER').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,isOwner:u.role==='OWNER'}));
       roleDefaults=uRes.roleDefaults||roleDefaults;
-    }
-    const canDeptScripts=currentUser.role==='OWNER'||currentUser.role==='HEAD'||currentUser.role==='ADMIN';
-    if(canDeptScripts){
-      try{
-        const dsRes=await api('/api/department/scripts');
-        deptScriptsIds=dsRes.scriptIds||[];
-        allLayoutsList=(dsRes.layouts||[]).filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
-      }catch{}
-    }
-    if(canSessions){
-      const sRes=await api('/api/sessions');
-      sessionsList=sRes.sessions||[];
-    }
+    }));
+    if(canDeptScripts)tasks.push(api('/api/department/scripts').then(dsRes=>{
+      deptScriptsIds=dsRes.scriptIds||[];
+      allLayoutsList=(dsRes.layouts||[]).filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
+    }).catch(()=>{}));
+    if(canSessions)tasks.push(api('/api/sessions').then(sRes=>{sessionsList=sRes.sessions||[];}));
     if(canAudit){
       const params=new URLSearchParams({limit:'200'});
       if(auditFilterUser)params.set('user',auditFilterUser);
       if(auditFilterAction)params.set('action',auditFilterAction);
-      const aRes=await api('/api/audit?'+params.toString());
-      auditList=aRes.events||[];
+      tasks.push(api('/api/audit?'+params.toString()).then(aRes=>{auditList=aRes.events||[];}));
     }
+    await Promise.all(tasks);
   }catch(e){
     toast(e.message);
   }
@@ -4310,8 +4320,8 @@ document.addEventListener('click',async e=>{
   const tabBtn=e.target.closest('[data-owner-tab]');
   if(tabBtn){
     ownerTab=tabBtn.dataset.ownerTab;
-    await loadOwnerData();
     renderOwnerView();
+    if(ownerTab!=='design'&&ownerTab!=='security'){await loadOwnerData();renderOwnerView();}
     return;
   }
 
