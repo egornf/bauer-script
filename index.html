@@ -2478,6 +2478,12 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .owner-dialog h2{margin:6px 0 10px;font-size:24px;font-weight:800}
 .owner-dialog label{display:block;font-size:12px;font-weight:700;margin:14px 0 6px;color:var(--ink)}
 .owner-dialog input:not([type=checkbox]),.owner-dialog select{width:100%;height:42px;padding:0 13px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);font:inherit;font-size:14px}
+.um-pw-row{display:flex;gap:8px;align-items:stretch}
+.um-pw-wrap{position:relative;flex:1;min-width:0}
+.um-pw-wrap input{padding-right:86px!important}
+.um-pw-toggle{position:absolute;right:5px;top:5px;bottom:5px;min-height:0!important;padding:0 10px!important;border:0!important;border-radius:7px!important;background:transparent!important;color:var(--accent-ink)!important;font-size:12px!important;font-weight:700!important}
+.um-pw-toggle:hover{background:var(--ui-soft)!important}
+.um-pw-gen{min-height:42px;padding:0 14px;border-radius:10px;font-size:13px;font-weight:700;white-space:nowrap;background:var(--ui-soft);border:1px solid var(--ui-border);color:var(--accent-ink)}
 .perm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-alt)}
 .perm-grid label{display:flex;align-items:center;gap:8px;margin:0;font-size:12px;font-weight:600;cursor:pointer}
 .perm-grid input{width:16px;height:16px;accent-color:var(--ui)}
@@ -2923,7 +2929,13 @@ function openUserModal(editUser=null){
       <label for="um-name">Имя / должность</label>
       <input id="um-name" name="displayName" maxlength="100" value="${isEdit?E(editUser.displayName||''):''}" placeholder="Например: Старший администратор Анна">
       <label for="um-password">${isEdit?'Новый пароль (оставьте пустым, чтобы не менять)':'Пароль (от 4 символов)'}</label>
-      <input id="um-password" name="password" type="password" ${isEdit?'':'required'} minlength="4" maxlength="128" autocomplete="new-password">
+      <div class="um-pw-row">
+        <div class="um-pw-wrap">
+          <input id="um-password" name="password" type="password" ${isEdit?'':'required'} minlength="4" maxlength="128" autocomplete="new-password">
+          <button type="button" class="um-pw-toggle" id="um-pw-toggle" aria-label="Показать пароль">Показать</button>
+        </div>
+        <button type="button" class="um-pw-gen" id="um-pw-gen" title="Сгенерировать надёжный пароль и скопировать">🎲 Сгенерировать</button>
+      </div>
       <label for="um-role">Роль в системе (Владелец может быть только один)</label>
       <select id="um-role" name="role">
         <option value="ADMIN" ${role==='ADMIN'?'selected':''}>Администратор (управление контентом, макетами, настройками)</option>
@@ -2948,6 +2960,29 @@ function openUserModal(editUser=null){
   roleSelect.addEventListener('change',()=>{
     const defs=roleDefaults[roleSelect.value]||[];
     dlg.querySelectorAll('input[name="perm"]').forEach(cb=>{cb.checked=defs.includes(cb.value);});
+  });
+  const pwInput=dlg.querySelector('#um-password');
+  const pwToggle=dlg.querySelector('#um-pw-toggle');
+  const pwGen=dlg.querySelector('#um-pw-gen');
+  pwToggle?.addEventListener('click',()=>{
+    const show=pwInput.type==='password';
+    pwInput.type=show?'text':'password';
+    pwToggle.textContent=show?'Скрыть':'Показать';
+  });
+  pwGen?.addEventListener('click',async()=>{
+    const upper='ABCDEFGHJKLMNPQRSTUVWXYZ',lower='abcdefghijkmnopqrstuvwxyz',digits='23456789';
+    const all=upper+lower+digits;
+    const rnd=new Uint32Array(10);
+    crypto.getRandomValues(rnd);
+    const chars=[upper[rnd[0]%upper.length],lower[rnd[1]%lower.length],digits[rnd[2]%digits.length]];
+    for(let i=3;i<10;i++)chars.push(all[rnd[i]%all.length]);
+    for(let i=chars.length-1;i>0;i--){const j=rnd[i]%(i+1);[chars[i],chars[j]]=[chars[j],chars[i]];}
+    const generated=chars.join('');
+    pwInput.value=generated;
+    pwInput.type='text';
+    if(pwToggle)pwToggle.textContent='Скрыть';
+    try{await navigator.clipboard.writeText(generated);toast('Пароль сгенерирован и скопирован в буфер обмена');}
+    catch{toast('Пароль сгенерирован');}
   });
   dlg.showModal();
 }
