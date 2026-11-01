@@ -4,6 +4,12 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+let vercelBlob = null;
+try {
+  vercelBlob = require('@vercel/blob');
+} catch {
+  vercelBlob = null;
+}
 
 const ROOT_DIR = __dirname;
 const INDEX_PATH = path.join(ROOT_DIR, 'index.html');
@@ -231,6 +237,9 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
   let sessions = readJson(files.sessions, []);
   let audit = readJson(files.audit, []);
   let appData = readJson(files.appData, null);
+  let dirtyAuth = false;
+  let dirtyAppData = false;
+  let blobAppDataLoaded = false;
 
   if (!appData) {
     const seed = extractSeedFromIndexHtml(htmlPath);
@@ -243,26 +252,28 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     writeJsonAtomic(files.appData, appData);
   }
 
-  if (seedDefaultOwner && !users.some(u => u.role === 'OWNER')) {
-    users.unshift(structuredClone(DEFAULT_OWNER_USER));
-    writeJsonAtomic(files.users, users);
+  function enforceOwnerInvariants() {
+    if (seedDefaultOwner && !users.some(u => u.role === 'OWNER')) {
+      users.unshift(structuredClone(DEFAULT_OWNER_USER));
+      writeJsonAtomic(files.users, users);
+    }
+    const owners = users.filter(u => u.role === 'OWNER');
+    if (owners.length > 1) {
+      const primaryOwner = owners.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))[0];
+      users.forEach(u => {
+        if (u.role === 'OWNER' && u.id !== primaryOwner.id) {
+          u.role = 'ADMIN';
+        }
+      });
+      writeJsonAtomic(files.users, users);
+    }
+    if (owners.length >= 1) {
+      const owner = owners[0];
+      owner.blocked = false;
+      owner.permissions = [...DEFAULT_ROLE_PERMISSIONS.OWNER];
+    }
   }
-  // Enforce single OWNER invariant on load
-  const owners = users.filter(u => u.role === 'OWNER');
-  if (owners.length > 1) {
-    const primaryOwner = owners.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))[0];
-    users.forEach(u => {
-      if (u.role === 'OWNER' && u.id !== primaryOwner.id) {
-        u.role = 'ADMIN';
-      }
-    });
-    writeJsonAtomic(files.users, users);
-  }
-  if (owners.length >= 1) {
-    const owner = owners[0];
-    owner.blocked = false;
-    owner.permissions = [...DEFAULT_ROLE_PERMISSIONS.OWNER];
-  }
+  enforceOwnerInvariants();
 
   function saveUsers() {
     const ownerCount = users.filter(u => u.role === 'OWNER').length;
@@ -270,10 +281,12 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       throw new Error('Нарушение инварианта: в системе может быть только один OWNER.');
     }
     writeJsonAtomic(files.users, users);
+    dirtyAuth = true;
   }
 
   function saveSessions() {
     writeJsonAtomic(files.sessions, sessions);
+    dirtyAuth = true;
   }
 
   function saveAudit() {
@@ -281,10 +294,83 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       audit = audit.slice(-2500);
     }
     writeJsonAtomic(files.audit, audit);
+    dirtyAuth = true;
   }
 
   function saveAppData() {
     writeJsonAtomic(files.appData, appData);
+    dirtyAppData = true;
+  }
+
+  async function syncFromBlob({ needAppData = false } = {}) {
+    if (!process.env.BLOB_READ_WRITE_TOKEN || !vercelBlob) return;
+    try {
+      const authRes = await vercelBlob.get('bauer-state/auth.json', {
+        access: 'private',
+        useCache: false
+      });
+      if (authRes && authRes.statusCode === 200 && authRes.stream) {
+        const remoteAuth = await new Response(authRes.stream).json();
+        if (remoteAuth && typeof remoteAuth === 'object') {
+          if (Array.isArray(remoteAuth.users)) users = remoteAuth.users;
+          if (Array.isArray(remoteAuth.sessions)) sessions = remoteAuth.sessions;
+          if (Array.isArray(remoteAuth.audit)) audit = remoteAuth.audit;
+          enforceOwnerInvariants();
+        }
+      } else if (!authRes) {
+        dirtyAuth = true;
+      }
+    } catch (err) {
+      console.warn('Blob auth sync warning:', err.message);
+    }
+
+    if (needAppData && !blobAppDataLoaded) {
+      try {
+        const appRes = await vercelBlob.get('bauer-state/app-data.json', {
+          access: 'private',
+          useCache: false
+        });
+        if (appRes && appRes.statusCode === 200 && appRes.stream) {
+          const remoteApp = await new Response(appRes.stream).json();
+          if (remoteApp && typeof remoteApp === 'object') {
+            appData = remoteApp;
+          }
+        }
+        blobAppDataLoaded = true;
+      } catch (err) {
+        console.warn('Blob appData sync warning:', err.message);
+      }
+    }
+  }
+
+  async function flushToBlob() {
+    if (!process.env.BLOB_READ_WRITE_TOKEN || !vercelBlob) return;
+    if (dirtyAuth) {
+      dirtyAuth = false;
+      try {
+        await vercelBlob.put('bauer-state/auth.json', JSON.stringify({ users, sessions, audit }), {
+          access: 'private',
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          contentType: 'application/json'
+        });
+      } catch (err) {
+        console.error('Blob auth write error:', err.message);
+      }
+    }
+    if (dirtyAppData) {
+      dirtyAppData = false;
+      try {
+        await vercelBlob.put('bauer-state/app-data.json', JSON.stringify(appData), {
+          access: 'private',
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          contentType: 'application/json'
+        });
+      } catch (err) {
+        console.error('Blob appData write error:', err.message);
+      }
+    }
   }
 
   function logEvent({ action, actor, target = null, ip = '', userAgent = '', details = {}, status = 'success' }) {
@@ -385,7 +471,8 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     },
     touchSession: (session) => {
       const now = Date.now();
-      if (now - session.lastActiveAt > 30000) {
+      const interval = process.env.BLOB_READ_WRITE_TOKEN ? 10 * 60 * 1000 : 30000;
+      if (now - session.lastActiveAt > interval) {
         session.lastActiveAt = now;
         saveSessions();
       }
@@ -407,7 +494,9 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     getAudit: () => audit,
     logEvent,
     getAppData: () => appData,
-    saveAppData
+    saveAppData,
+    syncFromBlob,
+    flushToBlob
   };
 }
 
@@ -514,6 +603,19 @@ function createAppServer(options = {}) {
   const htmlPath = options.htmlPath || INDEX_PATH;
   const store = createStore(dataDir, htmlPath, options.seedDefaultOwner !== false);
 
+  async function sendJson(res, status, payload, extraHeaders = {}) {
+    await store.flushToBlob();
+    const body = JSON.stringify(payload);
+    res.writeHead(status, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
+      ...extraHeaders
+    });
+    res.end(body);
+  }
+
   // Brute-force rate limiter in memory
   const loginAttempts = new Map(); // key -> { count, resetAt }
 
@@ -563,6 +665,11 @@ function createAppServer(options = {}) {
         res.end('Не найдено');
         return;
       }
+
+      const needAppData = ['/api/content', '/api/scripts', '/api/giftbase', '/api/addresses', '/api/layouts', '/api/layouts-order'].some(
+        p => pathname === p || pathname.startsWith(p + '/')
+      );
+      await store.syncFromBlob({ needAppData });
 
       const cookies = parseCookies(req);
       const auth = store.findSessionByToken(cookies[SESSION_COOKIE]);
