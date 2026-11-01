@@ -498,8 +498,31 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 }
 
 /* Custom Header Background & Pattern */
-:root[style*="--custom-header-bg"] .app-header {
-  background: var(--custom-header-bg) !important;
+:root[style*="--custom-header-bg"] .app-header,
+:root[style*="--custom-header-bg"] .app-switcher {
+  background-color: var(--custom-header-bg) !important;
+}
+:root[style*="--custom-header-fg"] .app-header,
+:root[style*="--custom-header-fg"] .app-switcher {
+  color: var(--custom-header-fg) !important;
+}
+:root[style*="--custom-header-fg"] .app-switcher {
+  border-bottom-color: var(--custom-header-line) !important;
+}
+:root[style*="--custom-header-fg"] .app-header .brand,
+:root[style*="--custom-header-fg"] .app-header .status,
+:root[style*="--custom-header-fg"] .app-switcher .switcher-hint,
+:root[style*="--custom-header-fg"] .app-switcher .section-tab:not(.active) {
+  color: var(--custom-header-fg) !important;
+}
+:root[style*="--custom-header-fg"] .app-header .brand small { color: var(--custom-header-fg) !important; opacity: .7; }
+:root[style*="--custom-header-fg"] .app-header .tools button {
+  color: var(--custom-header-fg) !important;
+  background: var(--custom-header-soft) !important;
+  border-color: var(--custom-header-line) !important;
+}
+:root[style*="--custom-header-fg"] .app-switcher .section-tab:not(.active):hover {
+  background: var(--custom-header-soft) !important;
 }
 :root[data-header-pattern="leopard"] .app-header {
   background-image: var(--pat-leopard) !important;
@@ -553,7 +576,13 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 /* Custom Accent */
 :root[style*="--custom-accent"] {
   --teal: var(--custom-accent) !important;
-  --orange: var(--custom-accent) !important;
+  --ui: var(--custom-accent) !important;
+  --ui-hover: color-mix(in srgb, var(--custom-accent) 80%, #000) !important;
+  --ui-soft: color-mix(in srgb, var(--custom-accent) 14%, var(--surface)) !important;
+  --ui-border: color-mix(in srgb, var(--custom-accent) 40%, var(--line)) !important;
+  --accent-ink: var(--custom-accent) !important;
+  --accent-soft: color-mix(in srgb, var(--custom-accent) 14%, var(--surface)) !important;
+  --accent-border: color-mix(in srgb, var(--custom-accent) 40%, var(--line)) !important;
 }
 
 /* --- Block / Card Styles --- */
@@ -621,6 +650,48 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[data-card-style="neon"] .objections-pane {
   background: rgba(12, 20, 32, 0.92) !important;
   border-left: 1.5px solid rgba(0, 245, 212, 0.35) !important;
+}
+
+/* --- Whole-block transparency (replies stay highlighted) --- */
+:root[data-card-style="glass"] .stage-body,
+:root[data-card-style="glass"] .script-pane,
+:root[data-card-style="glass"] .objections-pane,
+:root[data-card-style="glass"] .stage-heading,
+:root[data-card-style="glass"] .stage-card,
+:root[data-card-style="frosted"] .stage-body,
+:root[data-card-style="frosted"] .script-pane,
+:root[data-card-style="frosted"] .objections-pane,
+:root[data-card-style="frosted"] .stage-heading,
+:root[data-card-style="frosted"] .stage-card,
+:root[data-card-style="neon"] .stage-body,
+:root[data-card-style="neon"] .script-pane,
+:root[data-card-style="neon"] .stage-heading,
+:root[data-card-style="neon"] .stage-card {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+:root[data-card-style="glass"] .objections-pane,
+:root[data-card-style="frosted"] .objections-pane { background: transparent !important; }
+:root[data-card-style="glass"] .deck-viewport { background: rgba(255,255,255,.28) !important; }
+:root[data-card-style="frosted"] .deck-viewport { background: rgba(255,255,255,.12) !important; }
+:root[data-theme="dark"][data-card-style="glass"] .deck-viewport { background: rgba(14,28,32,.30) !important; }
+:root[data-theme="dark"][data-card-style="frosted"] .deck-viewport { background: rgba(10,22,26,.14) !important; }
+:root[data-card-style="glass"] .stage-heading,
+:root[data-card-style="frosted"] .stage-heading { border-bottom-color: rgba(255,255,255,.35) !important; }
+:root[data-card-style="glass"] .script-pane .line,
+:root[data-card-style="frosted"] .script-pane .line {
+  background: color-mix(in srgb, var(--surface-alt) 90%, transparent) !important;
+}
+:root[data-card-style="glass"] .objections-pane .objection-button,
+:root[data-card-style="frosted"] .objections-pane .objection-button {
+  background: color-mix(in srgb, var(--surface) 85%, transparent) !important;
+}
+:root[data-card-style="glass"] .script-gift,
+:root[data-card-style="frosted"] .script-gift,
+:root[data-card-style="glass"] .script-gift-photo,
+:root[data-card-style="frosted"] .script-gift-photo {
+  background: color-mix(in srgb, var(--surface) 80%, transparent) !important;
 }
 
 /* Theme Customizer Dialog Styling */
@@ -3170,6 +3241,17 @@ function loadSavedTheme(){
 let currentTheme = loadSavedTheme();
 let activeDesignTab = 'presets';
 
+function headerIsDark(col){
+  let r = 16, g = 47, b = 68, a = 1, m;
+  col = String(col || '').trim();
+  if ((m = col.match(/^#([0-9a-f]{3})$/i))) { r = parseInt(m[1][0]+m[1][0],16); g = parseInt(m[1][1]+m[1][1],16); b = parseInt(m[1][2]+m[1][2],16); }
+  else if ((m = col.match(/^#([0-9a-f]{6})$/i))) { r = parseInt(m[1].slice(0,2),16); g = parseInt(m[1].slice(2,4),16); b = parseInt(m[1].slice(4,6),16); }
+  else if ((m = col.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/i))) { r = +m[1]; g = +m[2]; b = +m[3]; if (m[4] !== undefined) a = +m[4]; }
+  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L < 0.42;
+}
+
 function applyTheme(cfg, save = true){
   currentTheme = { ...currentTheme, ...cfg };
   const root = document.documentElement;
@@ -3184,8 +3266,15 @@ function applyTheme(cfg, save = true){
   root.dataset.headerPattern = currentTheme.headerPattern || 'none';
   root.dataset.bodyPattern = currentTheme.bodyPattern || 'none';
 
-  if (currentTheme.headerBg) root.style.setProperty('--custom-header-bg', currentTheme.headerBg);
-  else root.style.removeProperty('--custom-header-bg');
+  if (currentTheme.headerBg) {
+    root.style.setProperty('--custom-header-bg', currentTheme.headerBg);
+    const dark = headerIsDark(currentTheme.headerBg);
+    root.style.setProperty('--custom-header-fg', dark ? '#ffffff' : '#12262e');
+    root.style.setProperty('--custom-header-soft', dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.07)');
+    root.style.setProperty('--custom-header-line', dark ? 'rgba(255,255,255,.28)' : 'rgba(0,0,0,.2)');
+  } else {
+    ['--custom-header-bg','--custom-header-fg','--custom-header-soft','--custom-header-line'].forEach(k => root.style.removeProperty(k));
+  }
 
   if (currentTheme.bodyBg) root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
   else root.style.removeProperty('--custom-body-bg');
