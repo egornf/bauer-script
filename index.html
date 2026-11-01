@@ -939,14 +939,111 @@ function giftMarkup(gifts=data.gifts,readonly=false,settings=data.settings){
 }
 function smsMarkup(){return `<section class="sms-helper"><div class="kicker">ПРИГЛАШЕНИЕ ПОСЛЕ ЗВОНКА</div><h3>Конструктор SMS-приглашений BAUER</h3><p>Выберите город, зал и программу — подготовим персональное сообщение клиенту.</p><button type="button" class="primary" data-open-sms>Составить SMS →</button></section>`;}
 
-/* Server-backed API for BAUER: all authentication, roles, and permissions are verified by the local backend server */
-let localMode=false,currentUser=null,csrfToken=null;
+/* Dual-mode API for BAUER:
+   1) When served by Node.js server.js, uses /api/* HTTP backend.
+   2) When hosted on GitHub Pages (*.github.io) or opened as static HTML without server.js,
+      automatically runs the full local server engine in IndexedDB + WebCrypto (PBKDF2-SHA256). */
+let localMode=location.protocol==='file:'||/\.github\.io$/i.test(location.hostname),currentUser=null,csrfToken=null;
+const fail=(m,st=400)=>{const e=new Error(m);e.status=st;return e};
+const seedLayouts=(()=>{try{return JSON.parse(document.getElementById('layouts-data')?.textContent||'[]');}catch{return [];}})();
+
+const VAULT_PERMISSIONS=['content.edit','layouts.manage','gifts.manage','addresses.manage','settings.manage','users.view','audit.view'];
+const VAULT_ROLE_DEFAULTS={
+  OWNER:[...VAULT_PERMISSIONS,'users.manage','admins.manage','sessions.manage','owner.full'],
+  ADMIN:['content.edit','layouts.manage','gifts.manage','addresses.manage','settings.manage'],
+  EDITOR:['content.edit','layouts.manage','gifts.manage','addresses.manage'],
+  OPERATOR:[]
+};
+
+const VaultDB=(()=>{
+  let dbP=null;
+  const open=()=>{
+    if(dbP)return dbP;
+    dbP=new Promise((res,rej)=>{
+      const r=indexedDB.open('bauer-vault-v1',1);
+      r.onupgradeneeded=()=>{
+        const d=r.result;
+        if(!d.objectStoreNames.contains('kv'))d.createObjectStore('kv');
+      };
+      r.onsuccess=()=>res(r.result);
+      r.onerror=()=>rej(r.error);
+    });
+    return dbP;
+  };
+  return {
+    async get(k,fallback=null){
+      try{
+        const d=await open();
+        return await new Promise((res,rej)=>{
+          const q=d.transaction('kv','readonly').objectStore('kv').get(k);
+          q.onsuccess=()=>res(q.result!==undefined?q.result:fallback);
+          q.onerror=()=>rej(q.error);
+        });
+      }catch{
+        try{const raw=localStorage.getItem('bauer_vault_'+k);return raw?JSON.parse(raw):fallback;}catch{return fallback;}
+      }
+    },
+    async set(k,v){
+      try{
+        const d=await open();
+        await new Promise((res,rej)=>{
+          const tx=d.transaction('kv','readwrite');
+          tx.objectStore('kv').put(v,k);
+          tx.oncomplete=()=>res();
+          tx.onerror=()=>rej(tx.error);
+        });
+      }catch{
+        try{localStorage.setItem('bauer_vault_'+k,JSON.stringify(v));}catch{}
+      }
+    }
+  };
+})();
+
+const VaultCrypto={
+  toHex(buf){return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');},
+  fromHex(hex){const a=new Uint8Array((hex.length/2)|0);for(let i=0;i<a.length;i++)a[i]=parseInt(hex.slice(i*2,i*2+2),16);return a;},
+  randomHex(bytes=16){const b=new Uint8Array(bytes);crypto.getRandomValues(b);return this.toHex(b);},
+  async sha256(str){
+    const data=new TextEncoder().encode(String(str));
+    const buf=await crypto.subtle.digest('SHA-256',data);
+    return this.toHex(buf);
+  },
+  async hashPassword(password,saltHex=null,iterations=100000){
+    const salt=saltHex?this.fromHex(saltHex):crypto.getRandomValues(new Uint8Array(16));
+    const sHex=this.toHex(salt);
+    const keyMat=await crypto.subtle.importKey('raw',new TextEncoder().encode(String(password)),'PBKDF2',false,['deriveBits']);
+    const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations,hash:'SHA-256'},keyMat,256);
+    return `pbkdf2$${iterations}$${sHex}$${this.toHex(bits)}`;
+  },
+  async verifyPassword(password,stored){
+    if(typeof password!=='string'||typeof stored!=='string')return false;
+    const parts=stored.split('$');
+    if(parts.length!==4||parts[0]!=='pbkdf2')return false;
+    const iterations=Number(parts[1])||100000;
+    const saltHex=parts[2],expectedHex=parts[3];
+    const candidate=await this.hashPassword(password,saltHex,iterations);
+    const candHex=candidate.split('$')[3]||'';
+    if(candHex.length!==expectedHex.length)return false;
+    let diff=0;
+    for(let i=0;i<expectedHex.length;i++)diff|=candHex.charCodeAt(i)^expectedHex.charCodeAt(i);
+    return diff===0;
+  },
+  generateRecoveryCodes(count=6){
+    const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',codes=[];
+    for(let i=0;i<count;i++){
+      const bytes=new Uint8Array(12);crypto.getRandomValues(bytes);
+      let s='';for(let j=0;j<12;j++)s+=alphabet[bytes[j]%alphabet.length];
+      codes.push(`${s.slice(0,4)}-${s.slice(4,8)}-${s.slice(8,12)}`);
+    }
+    return codes;
+  },
+  normRecovery(code){return String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+};
+
 const LDB={
   async get(k){if(k==='giftbase'){try{return await api('/api/giftbase');}catch{return null;}}return null;},
   async set(k,v){if(k==='giftbase'){if(!adminUnlocked)return;try{await api('/api/giftbase',{method:'PUT',body:JSON.stringify(v)});}catch(e){toast(e.message);}}}
 };
-const fail=(m,st)=>{const e=new Error(m);e.status=st;return e};
-const seedLayouts=(()=>{try{return JSON.parse(document.getElementById('layouts-data')?.textContent||'[]');}catch{return [];}})();
 async function getLocalLayouts(){
   try{return ((await api('/api/scripts')).layouts)||[];}catch{return [];}
 }
@@ -954,9 +1051,20 @@ function getCsrfCookie(){
   const m=document.cookie.match(/(?:^|;\s*)bauer_csrf=([^;]+)/);
   return m?decodeURIComponent(m[1]):'';
 }
+
 async function api(path,options={}){
-  return api_remote(path,options);
+  if(localMode)return api_local_vault(path,options);
+  try{
+    return await api_remote(path,options);
+  }catch(err){
+    if(err&&err.fallbackToLocal){
+      localMode=true;
+      return api_local_vault(path,options);
+    }
+    throw err;
+  }
 }
+
 async function api_remote(path,options={}){
   const token=csrfToken||getCsrfCookie();
   const headers={...(options.body?{'Content-Type':'application/json'}:{}),...(token?{'X-CSRF-Token':token}:{}),...(options.headers||{})};
@@ -964,14 +1072,537 @@ async function api_remote(path,options={}){
   try{
     response=await fetch(path,{...options,credentials:'same-origin',headers});
   }catch{
-    throw new Error('Локальный сервер BAUER недоступен. Запустите сервер командой: npm start (node server.js)');
+    const e=new Error('Локальный сервер недоступен');e.fallbackToLocal=true;throw e;
+  }
+  const ct=response.headers.get('content-type')||'';
+  if(response.status===404&&!ct.includes('application/json')){
+    const e=new Error('Статический хостинг');e.fallbackToLocal=true;throw e;
   }
   let result;
-  try{result=await response.json();}catch{throw new Error('Сервис временно недоступен. Попробуйте ещё раз.');}
+  try{result=await response.json();}catch{
+    const e=new Error('Сервис временно недоступен');e.fallbackToLocal=true;throw e;
+  }
   if(result&&result.csrfToken)csrfToken=result.csrfToken;
   if(result&&result.user!==undefined)currentUser=result.user;
   if(!response.ok){if(response.status===401){adminUnlocked=false;currentUser=null;dispatchEvent(new Event('auth-changed'));}const error=new Error(result.error||'Не удалось выполнить действие.');error.status=response.status;throw error;}
   return result;
+}
+
+async function api_local_vault(rawPath,options={}){
+  const uObj=new URL(rawPath,location.origin||'http://localhost');
+  const pathname=uObj.pathname;
+  const method=(options.method||'GET').toUpperCase();
+  const body=options.body?JSON.parse(options.body):{};
+  const normLogin=s=>String(s||'').trim().toLowerCase();
+  const validLogin=s=>{const n=normLogin(s);return /^[a-z0-9_.-]{3,64}$/i.test(n)?n:null;};
+  const validPass=p=>typeof p==='string'&&p.length>=8&&p.length<=128;
+
+  let users=await VaultDB.get('users',[]);
+  let sessions=await VaultDB.get('sessions',[]);
+  let audit=await VaultDB.get('audit',[]);
+
+  // Enforce single OWNER invariant
+  const owners=users.filter(u=>u.role==='OWNER');
+  if(owners.length>1){
+    const primary=owners.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))[0];
+    users.forEach(u=>{if(u.role==='OWNER'&&u.id!==primary.id)u.role='ADMIN';});
+    await VaultDB.set('users',users);
+  }
+  if(owners.length>=1){
+    owners[0].blocked=false;
+    owners[0].permissions=[...VAULT_ROLE_DEFAULTS.OWNER];
+  }
+
+  const saveUsers=async()=>{
+    if(users.filter(u=>u.role==='OWNER').length>1)throw fail('Нарушение инварианта: в системе может быть только один OWNER.',403);
+    await VaultDB.set('users',users);
+  };
+  const saveSessions=async()=>{await VaultDB.set('sessions',sessions);};
+  const logEvent=async({action,actor,target=null,details={},status='success'})=>{
+    const ev={
+      id:'ev_'+VaultCrypto.randomHex(8),
+      timestamp:Date.now(),
+      action,
+      status,
+      actorId:actor?.id||null,
+      actorLogin:actor?.login||(typeof actor==='string'?actor:'anonymous'),
+      actorRole:actor?.role||null,
+      target,
+      ip:'GitHub Pages / Local Browser',
+      userAgent:navigator.userAgent.slice(0,250),
+      details
+    };
+    audit.push(ev);
+    if(audit.length>2000)audit=audit.slice(-2000);
+    await VaultDB.set('audit',audit);
+  };
+
+  const now=Date.now();
+  sessions=sessions.filter(s=>s.expiresAt>now&&!s.revoked);
+
+  const rawSid=localStorage.getItem('bauer_vault_sid')||'';
+  const sidHash=rawSid?await VaultCrypto.sha256(rawSid):'';
+  let curSession=sidHash?sessions.find(s=>s.tokenHash===sidHash&&!s.revoked):null;
+  let authUser=curSession?users.find(u=>u.id===curSession.userId):null;
+  if(curSession&&(!authUser||(authUser.blocked&&authUser.role!=='OWNER'))){
+    curSession.revoked=true;await saveSessions();curSession=null;authUser=null;
+    localStorage.removeItem('bauer_vault_sid');
+  }
+  if(curSession){
+    curSession.lastActiveAt=now;
+  }
+
+  const hasPerm=(u,p)=>{
+    if(!u)return false;
+    if(u.role==='OWNER')return true;
+    if(u.blocked)return false;
+    const list=Array.isArray(u.permissions)?u.permissions:(VAULT_ROLE_DEFAULTS[u.role]||[]);
+    return list.includes(p);
+  };
+  const sanitize=u=>{
+    if(!u)return null;
+    const isO=u.role==='OWNER';
+    return {
+      id:u.id,
+      login:u.login,
+      displayName:u.displayName||u.login,
+      role:u.role,
+      blocked:isO?false:Boolean(u.blocked),
+      permissions:isO?[...VAULT_ROLE_DEFAULTS.OWNER]:(Array.isArray(u.permissions)?u.permissions:[]),
+      createdAt:u.createdAt||0,
+      updatedAt:u.updatedAt||0,
+      lastLoginAt:u.lastLoginAt||null,
+      recoveryCodesRemaining:isO&&Array.isArray(u.recoveryCodes)?u.recoveryCodes.filter(c=>!c.used).length:undefined
+    };
+  };
+  const startSession=async(u)=>{
+    const raw=VaultCrypto.randomHex(32);
+    const th=await VaultCrypto.sha256(raw);
+    const s={
+      id:'ses_'+VaultCrypto.randomHex(8),
+      tokenHash:th,
+      csrfToken:VaultCrypto.randomHex(16),
+      userId:u.id,
+      userLogin:u.login,
+      userRole:u.role,
+      ip:'GitHub Pages / Local Browser',
+      userAgent:navigator.userAgent.slice(0,250),
+      createdAt:Date.now(),
+      lastActiveAt:Date.now(),
+      expiresAt:Date.now()+7*86400000,
+      revoked:false
+    };
+    sessions.push(s);
+    await saveSessions();
+    localStorage.setItem('bauer_vault_sid',raw);
+    csrfToken=s.csrfToken;
+    currentUser=sanitize(u);
+    return s;
+  };
+
+  const owner=users.find(u=>u.role==='OWNER')||null;
+
+  if(pathname==='/api/admin/status'&&method==='GET'){
+    currentUser=sanitize(authUser);
+    if(curSession)csrfToken=curSession.csrfToken;
+    return {
+      unlocked:Boolean(authUser),
+      configured:Boolean(owner),
+      signedIn:true,
+      canSetup:!owner,
+      user:currentUser,
+      sessionId:curSession?.id||null,
+      csrfToken:curSession?.csrfToken||null,
+      availablePermissions:VAULT_PERMISSIONS,
+      roleDefaults:VAULT_ROLE_DEFAULTS
+    };
+  }
+
+  if(pathname==='/api/admin/setup'&&method==='POST'){
+    if(owner){
+      await logEvent({action:'owner.setup.denied',actor:authUser||'anonymous',status:'denied',details:{reason:'OWNER already exists'}});
+      throw fail('Главная учётная запись OWNER уже создана. В системе может быть только один OWNER.',403);
+    }
+    const login=validLogin(body.login);
+    if(!login)throw fail('Логин должен содержать от 3 до 64 символов (латиница, цифры, . _ -).',400);
+    if(!validPass(body.password))throw fail('Пароль должен содержать от 8 до 128 символов.',400);
+    const rawCodes=VaultCrypto.generateRecoveryCodes(6);
+    const recoverySalt=VaultCrypto.randomHex(16);
+    const recoveryCodes=[];
+    for(let i=0;i<rawCodes.length;i++){
+      recoveryCodes.push({id:i+1,hash:await VaultCrypto.hashPassword(VaultCrypto.normRecovery(rawCodes[i]),recoverySalt,50000),used:false,usedAt:null});
+    }
+    const newOwner={
+      id:'usr_owner_'+VaultCrypto.randomHex(8),
+      login,
+      displayName:String(body.displayName||login).trim().slice(0,100)||login,
+      role:'OWNER',
+      passwordHash:await VaultCrypto.hashPassword(body.password),
+      blocked:false,
+      permissions:[...VAULT_ROLE_DEFAULTS.OWNER],
+      recoverySalt,
+      recoveryCodes,
+      createdAt:now,
+      updatedAt:now,
+      lastLoginAt:now
+    };
+    users.push(newOwner);
+    await saveUsers();
+    const s=await startSession(newOwner);
+    await logEvent({action:'owner.setup',actor:newOwner,target:newOwner.login,details:{role:'OWNER'}});
+    return {ok:true,user:sanitize(newOwner),sessionId:s.id,csrfToken:s.csrfToken,recoveryCodes:rawCodes};
+  }
+
+  if(pathname==='/api/admin/login'&&method==='POST'){
+    if(!owner)throw fail('Система ещё не инициализирована. Создайте учётную запись OWNER.',400);
+    const login=normLogin(body.login);
+    const u=users.find(x=>normLogin(x.login)===login);
+    if(!u||!(await VaultCrypto.verifyPassword(String(body.password||''),u.passwordHash))){
+      await logEvent({action:'auth.login.failed',actor:login||'anonymous',target:login,status:'failed'});
+      throw fail('Неверный логин или пароль.',401);
+    }
+    if(u.blocked&&u.role!=='OWNER'){
+      await logEvent({action:'auth.login.blocked',actor:u,target:u.login,status:'denied'});
+      throw fail('Учётная запись заблокирована владельцем системы (OWNER).',403);
+    }
+    u.lastLoginAt=Date.now();
+    await saveUsers();
+    const s=await startSession(u);
+    await logEvent({action:'auth.login.success',actor:u,target:u.login,details:{sessionId:s.id,role:u.role}});
+    return {ok:true,user:sanitize(u),sessionId:s.id,csrfToken:s.csrfToken};
+  }
+
+  if(pathname==='/api/admin/logout'&&method==='POST'){
+    if(curSession){
+      sessions=sessions.filter(s=>s.id!==curSession.id);
+      await saveSessions();
+      await logEvent({action:'auth.logout',actor:authUser,target:authUser?.login});
+    }
+    localStorage.removeItem('bauer_vault_sid');
+    currentUser=null;adminUnlocked=false;
+    return {ok:true};
+  }
+
+  if(pathname==='/api/owner/recover'&&method==='POST'){
+    if(!owner)throw fail('Учётная запись OWNER ещё не создана.',400);
+    const login=normLogin(body.login);
+    const code=VaultCrypto.normRecovery(body.recoveryCode);
+    if(login!==normLogin(owner.login)||!code||code.length<8){
+      await logEvent({action:'owner.recovery.failed',actor:login||'anonymous',target:owner.login,status:'failed'});
+      throw fail('Неверный логин OWNER или код восстановления.',401);
+    }
+    if(!validPass(body.newPassword))throw fail('Новый пароль должен содержать от 8 до 128 символов.',400);
+    const newLogin=body.newLogin?validLogin(body.newLogin):owner.login;
+    if(!newLogin)throw fail('Некорректный формат нового логина.',400);
+    if(newLogin!==owner.login&&users.some(x=>normLogin(x.login)===newLogin))throw fail('Этот логин уже занят.',400);
+
+    let matched=null;
+    for(const c of (owner.recoveryCodes||[])){
+      if(!c.used&&await VaultCrypto.verifyPassword(code,c.hash)){matched=c;break;}
+    }
+    if(!matched){
+      await logEvent({action:'owner.recovery.failed',actor:owner,target:owner.login,status:'failed',details:{reason:'invalid_or_used_code'}});
+      throw fail('Неверный или уже использованный резервный код восстановления.',401);
+    }
+    matched.used=true;matched.usedAt=Date.now();
+    owner.passwordHash=await VaultCrypto.hashPassword(body.newPassword);
+    owner.login=newLogin;owner.blocked=false;owner.updatedAt=Date.now();owner.lastLoginAt=Date.now();
+    await saveUsers();
+    sessions=sessions.filter(s=>s.userId!==owner.id);
+    const s=await startSession(owner);
+    const rem=owner.recoveryCodes.filter(c=>!c.used).length;
+    await logEvent({action:'owner.recovery.success',actor:owner,target:owner.login,details:{codeId:matched.id,remainingCodes:rem}});
+    return {ok:true,user:sanitize(owner),sessionId:s.id,csrfToken:s.csrfToken,remainingRecoveryCodes:rem};
+  }
+
+  if(pathname==='/api/me/password'&&method==='POST'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    if(!(await VaultCrypto.verifyPassword(String(body.currentPassword||''),authUser.passwordHash)))throw fail('Текущий пароль введён неверно.',401);
+    if(!validPass(body.newPassword))throw fail('Новый пароль должен содержать от 8 до 128 символов.',400);
+    authUser.passwordHash=await VaultCrypto.hashPassword(body.newPassword);
+    authUser.updatedAt=Date.now();
+    await saveUsers();
+    sessions=sessions.filter(s=>s.userId!==authUser.id||s.id===curSession.id);
+    await saveSessions();
+    await logEvent({action:'user.password.changed',actor:authUser,target:authUser.login});
+    return {ok:true};
+  }
+
+  if(pathname==='/api/owner/recovery-codes'&&method==='POST'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    if(authUser.role!=='OWNER')throw fail('Доступно только владельцу системы (OWNER).',403);
+    if(!(await VaultCrypto.verifyPassword(String(body.password||''),authUser.passwordHash)))throw fail('Неверный пароль OWNER.',401);
+    const rawCodes=VaultCrypto.generateRecoveryCodes(6);
+    const salt=VaultCrypto.randomHex(16);
+    const list=[];
+    for(let i=0;i<rawCodes.length;i++){
+      list.push({id:i+1,hash:await VaultCrypto.hashPassword(VaultCrypto.normRecovery(rawCodes[i]),salt,50000),used:false,usedAt:null});
+    }
+    authUser.recoverySalt=salt;authUser.recoveryCodes=list;authUser.updatedAt=Date.now();
+    await saveUsers();
+    await logEvent({action:'owner.recovery_codes.regenerated',actor:authUser,target:authUser.login});
+    return {ok:true,recoveryCodes:rawCodes};
+  }
+
+  if(pathname==='/api/owner/profile'&&method==='PATCH'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    if(authUser.role!=='OWNER')throw fail('Доступно только владельцу системы (OWNER).',403);
+    if(body.login!==undefined){
+      const nl=validLogin(body.login);
+      if(!nl)throw fail('Некорректный логин.',400);
+      const ex=users.find(u=>normLogin(u.login)===nl&&u.id!==authUser.id);
+      if(ex)throw fail('Этот логин уже занят.',400);
+      authUser.login=nl;
+    }
+    if(body.displayName!==undefined)authUser.displayName=String(body.displayName||'').trim().slice(0,100)||authUser.login;
+    authUser.updatedAt=Date.now();
+    await saveUsers();
+    currentUser=sanitize(authUser);
+    await logEvent({action:'owner.profile.updated',actor:authUser,target:authUser.login});
+    return {ok:true,user:currentUser};
+  }
+
+  if(pathname==='/api/users'||pathname.startsWith('/api/users/')){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    const tid=pathname.split('/')[3]||null;
+    if(method==='GET'&&!tid){
+      if(authUser.role!=='OWNER'&&!hasPerm(authUser,'users.view'))throw fail('Доступ к списку пользователей разрешён только OWNER.',403);
+      return {
+        users:users.map(u=>({...sanitize(u),activeSessionsCount:sessions.filter(s=>s.userId===u.id).length})),
+        availablePermissions:VAULT_PERMISSIONS,
+        roleDefaults:VAULT_ROLE_DEFAULTS
+      };
+    }
+    if(authUser.role!=='OWNER'){
+      await logEvent({action:'users.manage.denied',actor:authUser,target:tid,status:'denied'});
+      throw fail('Управление пользователями, ролями и администраторами доступно только главной учётной записи OWNER.',403);
+    }
+    if(method==='POST'&&!tid){
+      if(body.role==='OWNER')throw fail('В системе может быть только один OWNER.',403);
+      const login=validLogin(body.login);
+      if(!login)throw fail('Логин должен содержать от 3 до 64 символов.',400);
+      if(users.some(u=>normLogin(u.login)===login))throw fail('Пользователь с таким логином уже существует.',400);
+      if(!validPass(body.password))throw fail('Пароль должен содержать от 8 до 128 символов.',400);
+      const role=['ADMIN','EDITOR','OPERATOR'].includes(body.role)?body.role:'OPERATOR';
+      const perms=Array.isArray(body.permissions)?body.permissions.filter(p=>VAULT_PERMISSIONS.includes(p)):[...(VAULT_ROLE_DEFAULTS[role]||[])];
+      const nu={
+        id:'usr_'+VaultCrypto.randomHex(8),
+        login,
+        displayName:String(body.displayName||login).trim().slice(0,100)||login,
+        role,
+        passwordHash:await VaultCrypto.hashPassword(body.password),
+        blocked:Boolean(body.blocked),
+        permissions:perms,
+        createdAt:now,
+        updatedAt:now,
+        lastLoginAt:null
+      };
+      users.push(nu);
+      await saveUsers();
+      await logEvent({action:'users.create',actor:authUser,target:nu.login,details:{role:nu.role,permissions:nu.permissions}});
+      return {user:sanitize(nu)};
+    }
+    if(method==='PATCH'&&tid){
+      const tu=users.find(u=>u.id===tid);
+      if(!tu)throw fail('Пользователь не найден.',404);
+      if(tu.role==='OWNER'){
+        if(body.blocked===true||(body.role!==undefined&&body.role!=='OWNER')||body.permissions!==undefined){
+          await logEvent({action:'owner.protection.triggered',actor:authUser,target:tu.login,status:'denied'});
+          throw fail('Невозможно заблокировать, понизить роль или ограничить права главной учётной записи OWNER.',403);
+        }
+      }
+      if(body.role==='OWNER'&&tu.role!=='OWNER')throw fail('В системе может быть только один OWNER.',403);
+      const changes={};
+      if(body.login!==undefined&&body.login!==tu.login){
+        const nl=validLogin(body.login);
+        if(!nl)throw fail('Некорректный формат логина.',400);
+        if(users.some(u=>normLogin(u.login)===nl&&u.id!==tu.id))throw fail('Этот логин уже занят.',400);
+        changes.login={from:tu.login,to:nl};tu.login=nl;
+      }
+      if(body.displayName!==undefined){tu.displayName=String(body.displayName||'').trim().slice(0,100)||tu.login;changes.displayName=tu.displayName;}
+      if(body.role!==undefined&&tu.role!=='OWNER'){
+        if(!['ADMIN','EDITOR','OPERATOR'].includes(body.role))throw fail('Недопустимая роль.',400);
+        changes.role={from:tu.role,to:body.role};tu.role=body.role;
+      }
+      if(body.permissions!==undefined&&tu.role!=='OWNER'){
+        tu.permissions=[...new Set((body.permissions||[]).filter(p=>VAULT_PERMISSIONS.includes(p)))];
+        changes.permissions=tu.permissions;
+      }
+      if(body.blocked!==undefined&&tu.role!=='OWNER'){
+        const nb=Boolean(body.blocked);
+        if(tu.blocked!==nb){tu.blocked=nb;changes.blocked=nb;if(nb)sessions=sessions.filter(s=>s.userId!==tu.id);}
+      }
+      if(body.password){
+        if(!validPass(body.password))throw fail('Пароль должен содержать от 8 до 128 символов.',400);
+        tu.passwordHash=await VaultCrypto.hashPassword(body.password);
+        changes.passwordReset=true;
+        if(tu.id!==authUser.id)sessions=sessions.filter(s=>s.userId!==tu.id);
+      }
+      tu.updatedAt=Date.now();
+      await saveUsers();await saveSessions();
+      await logEvent({action:'users.update',actor:authUser,target:tu.login,details:{changes}});
+      return {user:sanitize(tu)};
+    }
+    if(method==='DELETE'&&tid){
+      const tu=users.find(u=>u.id===tid);
+      if(!tu)throw fail('Пользователь не найден.',404);
+      if(tu.role==='OWNER'){
+        await logEvent({action:'owner.delete.denied',actor:authUser,target:tu.login,status:'denied'});
+        throw fail('Невозможно удалить главную учётную запись OWNER.',403);
+      }
+      users=users.filter(u=>u.id!==tid);
+      sessions=sessions.filter(s=>s.userId!==tid);
+      await saveUsers();await saveSessions();
+      await logEvent({action:'users.delete',actor:authUser,target:tu.login,details:{deletedRole:tu.role}});
+      return {ok:true};
+    }
+  }
+
+  if(pathname==='/api/sessions'||pathname.startsWith('/api/sessions/')){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    if(authUser.role!=='OWNER')throw fail('Управление сессиями доступно только главной учётной записи OWNER.',403);
+    const sub=pathname.split('/')[3]||null;
+    if(method==='GET'&&!sub){
+      return {
+        sessions:sessions.map(s=>{
+          const u=users.find(x=>x.id===s.userId);
+          return {
+            id:s.id,userId:s.userId,userLogin:u?.login||s.userLogin,displayName:u?.displayName||s.userLogin,
+            userRole:u?.role||s.userRole,ip:s.ip,userAgent:s.userAgent,createdAt:s.createdAt,
+            lastActiveAt:s.lastActiveAt,expiresAt:s.expiresAt,current:s.id===curSession?.id
+          };
+        }).sort((a,b)=>b.lastActiveAt-a.lastActiveAt)
+      };
+    }
+    if(method==='POST'&&sub==='revoke-user'){
+      const uid=body.userId;
+      const tu=users.find(u=>u.id===uid);
+      if(!tu)throw fail('Пользователь не найден.',404);
+      const before=sessions.length;
+      sessions=sessions.filter(s=>s.userId!==uid||(uid===authUser.id&&s.id===curSession?.id));
+      const cnt=before-sessions.length;
+      await saveSessions();
+      await logEvent({action:'sessions.revoke_user',actor:authUser,target:tu.login,details:{revokedCount:cnt}});
+      return {ok:true,revokedCount:cnt};
+    }
+    if(method==='DELETE'&&sub){
+      const targetSes=sessions.find(s=>s.id===sub);
+      if(!targetSes)throw fail('Сессия не найдена.',404);
+      sessions=sessions.filter(s=>s.id!==sub);
+      await saveSessions();
+      await logEvent({action:'sessions.revoke',actor:authUser,target:targetSes.userLogin,details:{sessionId:sub}});
+      if(curSession&&sub===curSession.id){localStorage.removeItem('bauer_vault_sid');adminUnlocked=false;currentUser=null;}
+      return {ok:true};
+    }
+  }
+
+  if(pathname==='/api/audit'&&method==='GET'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    if(authUser.role!=='OWNER'&&!hasPerm(authUser,'audit.view'))throw fail('Журнал действий доступен только OWNER.',403);
+    const limit=Math.min(500,Math.max(10,Number(uObj.searchParams.get('limit'))||200));
+    const fu=(uObj.searchParams.get('user')||'').trim().toLowerCase();
+    const fa=(uObj.searchParams.get('action')||'').trim().toLowerCase();
+    let list=[...audit].reverse();
+    if(fu)list=list.filter(e=>(e.actorLogin||'').toLowerCase().includes(fu)||(e.target||'').toLowerCase().includes(fu));
+    if(fa)list=list.filter(e=>(e.action||'').toLowerCase().includes(fa));
+    return {events:list.slice(0,limit),total:list.length};
+  }
+
+  if(pathname==='/api/content'){
+    if(method==='GET'){
+      const c=await VaultDB.get('content',null);
+      return c||{data:seed,updatedAt:Number(seed.updatedAt)||0};
+    }
+    if(method==='PUT'){
+      if(!authUser)throw fail('Требуется авторизация.',401);
+      if(!hasPerm(authUser,'content.edit'))throw fail('Недостаточно прав для публикации изменений скрипта (content.edit).',403);
+      const updatedAt=Date.now();
+      await VaultDB.set('content',{data:{...body.data,gifts:[]},updatedAt});
+      await logEvent({action:'content.publish',actor:authUser});
+      return {updatedAt};
+    }
+  }
+
+  if(pathname==='/api/giftbase'){
+    if(method==='GET'){
+      const gb=await VaultDB.get('giftbase',null);
+      return gb||{gifts:clone(seed.gifts||[]),deleted:[],updatedAt:0};
+    }
+    if(method==='PUT'){
+      if(!authUser)throw fail('Требуется авторизация.',401);
+      if(!hasPerm(authUser,'gifts.manage'))throw fail('Недостаточно прав для изменения базы подарков (gifts.manage).',403);
+      const rec={gifts:Array.isArray(body.gifts)?body.gifts:[],deleted:Array.isArray(body.deleted)?body.deleted:[],updatedAt:Date.now()};
+      await VaultDB.set('giftbase',rec);
+      await logEvent({action:'gifts.update',actor:authUser,details:{giftsCount:rec.gifts.length}});
+      return rec;
+    }
+  }
+
+  if(pathname==='/api/addresses'){
+    if(method==='GET'){
+      const a=await VaultDB.get('addresses',null);
+      return a||{revision:0,venues:smsSource.venues};
+    }
+    if(method==='PUT'){
+      if(!authUser)throw fail('Требуется авторизация.',401);
+      if(!hasPerm(authUser,'addresses.manage'))throw fail('Недостаточно прав для изменения адресов (addresses.manage).',403);
+      const cur=await VaultDB.get('addresses',{revision:0,venues:[]});
+      const next={revision:(cur.revision||0)+1,venues:body.venues};
+      await VaultDB.set('addresses',next);
+      await logEvent({action:'addresses.update',actor:authUser,details:{venuesCount:body.venues.length}});
+      return next;
+    }
+  }
+
+  const getStoredLayouts=async()=>{
+    let list=await VaultDB.get('layouts',null);
+    if(!Array.isArray(list)||!list.length){
+      list=clone(seedLayouts);
+      await VaultDB.set('layouts',list);
+    }
+    return list;
+  };
+
+  if(pathname==='/api/scripts'&&method==='GET'){
+    return {layouts:await getStoredLayouts()};
+  }
+
+  if(pathname==='/api/layouts-order'&&method==='PUT'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    if(!hasPerm(authUser,'layouts.manage'))throw fail('Недостаточно прав для управления макетами (layouts.manage).',403);
+    const ids=Array.isArray(body.ids)?body.ids:[];
+    const all=await getStoredLayouts();
+    const byId=new Map(all.map(l=>[l.id,l]));
+    const head=ids.map(i=>byId.get(i)).filter(Boolean);
+    const rest=all.filter(l=>!ids.includes(l.id));
+    await VaultDB.set('layouts',[...head,...rest]);
+    await logEvent({action:'layouts.reorder',actor:authUser});
+    return {ok:true};
+  }
+
+  if(pathname==='/api/layouts'||pathname.startsWith('/api/layouts/')){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    const id=pathname.split('/')[3]||null;
+    if(method==='GET')return {layouts:await getStoredLayouts()};
+    if(!hasPerm(authUser,'layouts.manage'))throw fail('Недостаточно прав для сохранения или удаления макетов (layouts.manage).',403);
+    let list=await getStoredLayouts();
+    if(method==='DELETE'){
+      list=list.filter(l=>l.id!==id);
+      await VaultDB.set('layouts',list);
+      await logEvent({action:'layouts.delete',actor:authUser,target:id});
+      return {ok:true};
+    }
+    if(method==='POST'||method==='PUT'){
+      const layout={id:id||('l'+Date.now().toString(36)+VaultCrypto.randomHex(3)),name:String(body.name||'Без названия').slice(0,120),data:{...(body.data||{}),gifts:[]},savedAt:Date.now()};
+      if(list.some(l=>l.id===layout.id))list=list.map(l=>l.id===layout.id?layout:l);
+      else list=[layout,...list].slice(0,50);
+      await VaultDB.set('layouts',list);
+      await logEvent({action:method==='POST'?'layouts.create':'layouts.update',actor:authUser,target:layout.name});
+      return {layout};
+    }
+  }
+
+  throw fail('Маршрут не найден',404);
 }
 function setTab(name){document.querySelectorAll('.section-tab').forEach(button=>{const active=button.id===name+'-tab';button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});}
 function showScript(index=current,tab='script'){$('#sms-view').hidden=true;$('#objections-view').hidden=true;$('#layouts-view').hidden=true;$('.workspace').hidden=false;$('#edit').hidden=false;$('#all-objections').hidden=false;setTab(tab);go(index);}
