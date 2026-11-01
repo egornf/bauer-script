@@ -3,6 +3,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const crypto = require('node:crypto');
 let vercelBlob = null;
 try {
@@ -13,7 +14,7 @@ try {
 
 const ROOT_DIR = __dirname;
 const INDEX_PATH = path.join(ROOT_DIR, 'index.html');
-const DEFAULT_DATA_DIR = path.join(ROOT_DIR, 'data');
+const DEFAULT_DATA_DIR = process.env.BAUER_DATA_DIR || (process.env.VERCEL ? path.join(os.tmpdir(), 'bauer-data') : path.join(ROOT_DIR, 'data'));
 
 const SESSION_COOKIE = 'bauer_sid';
 const CSRF_COOKIE = 'bauer_csrf';
@@ -1607,10 +1608,19 @@ if (require.main === module) {
   });
 }
 
-module.exports = {
-  createAppServer,
-  ALL_PERMISSIONS,
-  DEFAULT_ROLE_PERMISSIONS,
-  hashPassword,
-  verifyPassword
-};
+let defaultVercelApp = null;
+function vercelHandler(req, res) {
+  if (!defaultVercelApp) {
+    defaultVercelApp = createAppServer({ dataDir: DEFAULT_DATA_DIR, htmlPath: INDEX_PATH });
+  }
+  defaultVercelApp.server.emit('request', req, res);
+}
+
+vercelHandler.createAppServer = createAppServer;
+vercelHandler.ALL_PERMISSIONS = ALL_PERMISSIONS;
+vercelHandler.DEFAULT_ROLE_PERMISSIONS = DEFAULT_ROLE_PERMISSIONS;
+vercelHandler.hashPassword = hashPassword;
+vercelHandler.verifyPassword = verifyPassword;
+vercelHandler.default = vercelHandler;
+
+module.exports = vercelHandler;
