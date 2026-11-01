@@ -3893,9 +3893,12 @@ body.auth-locked #auth-close{display:none!important}
       ['--custom-header-bg','--custom-header-fg','--custom-header-soft','--custom-header-line'].forEach(k => root.style.removeProperty(k));
     }
 
-    if (currentTheme.bodyBg) root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
+    if (currentTheme.bodyBg) {
+      root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
+    } else {
+      root.style.removeProperty('--custom-body-bg');
+    }
     root.style.setProperty('--custom-bg-dim', typeof currentTheme.bgDim === 'number' ? currentTheme.bgDim : 0);
-    else root.style.removeProperty('--custom-body-bg');
 
     const effAccent = currentTheme.accent || '#008578';
     root.style.setProperty('--custom-accent', effAccent);
