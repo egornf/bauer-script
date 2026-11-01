@@ -292,10 +292,10 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 }</style>
 
 <style id="v3-style">#gifts-tab{display:none!important}.pager{gap:12px!important}.pager button{min-height:40px!important;padding:6px 16px!important;font-size:14px!important;border-radius:11px!important}.pager-back{min-width:96px!important}.pager .primary{min-width:150px!important;gap:14px!important;box-shadow:0 3px 10px color-mix(in srgb,var(--ui) 28%,transparent)!important}.pager .primary .arrow{font-size:17px!important}.pager-middle strong{font-size:12px!important;margin-bottom:1px!important}.pager-middle span{font-size:11px!important}.workspace{padding-bottom:8px!important;gap:10px!important}@media screen{
-.script-picker{display:flex;align-items:center;gap:10px;margin:0 auto 0 28px;color:#ffd166;font-size:13px;font-weight:700;white-space:nowrap}
+.intro{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.intro-left{display:flex;flex-direction:column}.workspace-pickers-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.script-picker{display:inline-flex;align-items:center;gap:8px;margin:0;color:var(--ink);font-size:13px;font-weight:700;white-space:nowrap}
 .script-picker select{max-width:280px;height:38px;padding:0 34px 0 14px;border-radius:12px;border:2px solid #ffd166;background:var(--amber,#f5b544) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23231700' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 12px center/11px;color:#231700;font:inherit;font-weight:800;appearance:none;cursor:pointer;box-shadow:0 2px 10px #f5b54440}
 .script-picker select:hover{background-color:#ffc44d;border-color:#ffe08a;box-shadow:0 3px 14px #f5b54466}
-.script-picker select option{background:#182e36;color:#fff;font-weight:600}
+.script-picker select option{background:var(--surface,#ffffff);color:var(--ink,#182e36);font-weight:600}:root[data-theme=dark] .script-picker select option{background:#102a28;color:#e6f2f0}
 .new-layout-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 18px;padding:16px 20px;background:var(--ui-soft);border:1px solid var(--ui-border);border-radius:18px}
 .new-layout-bar strong{display:block;font-size:15px;margin-bottom:4px}
 .new-layout-bar span{font-size:12px;color:var(--muted);line-height:1.5}
@@ -420,11 +420,11 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-giftmode .v4-card{border-top:4px solid var(--amber)}
 }</style>
 <style id="venue-style">@media screen{
-.venue-picker{display:flex;align-items:center;gap:8px;margin:0 12px 0 0;color:#ffd166;font-size:13px;font-weight:700;white-space:nowrap}
+.venue-picker{display:inline-flex;align-items:center;gap:8px;margin:0;color:var(--ink);font-size:13px;font-weight:700;white-space:nowrap}
 .venue-picker label{display:flex;align-items:center;gap:6px}
 .venue-picker select{height:38px;max-width:190px;padding:0 30px 0 12px;border-radius:12px;border:2px solid #ffd166;background:var(--amber,#f5b544) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23231700' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 11px center/10px;color:#231700;font:inherit;font-weight:800;appearance:none;cursor:pointer;box-shadow:0 2px 10px #f5b54440}
 .venue-picker select:hover:not(:disabled){background-color:#ffc44d;border-color:#ffe08a;box-shadow:0 3px 14px #f5b54466}
-.venue-picker select:disabled{opacity:.78;cursor:not-allowed}.venue-picker select option{background:#182e36;color:#fff;font-weight:600}
+.venue-picker select:disabled{opacity:.78;cursor:not-allowed}.venue-picker select option{background:var(--surface,#ffffff);color:var(--ink,#182e36);font-weight:600}:root[data-theme=dark] .venue-picker select option{background:#102a28;color:#e6f2f0}
 .line-address{box-shadow:inset 4px 0 0 #2a8bb0;background:var(--surface-alt)}
 .addr-tag{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--accent-ink);margin-bottom:6px}
 .addr-fill{background:#d6eaf8;color:#0c2a28;border-radius:5px;padding:1px 5px;font-weight:700}
@@ -472,10 +472,15 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 </style>
 </head>
 <body>
-<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><label class="script-picker"><span>Выбор скрипта</span><select id="script-picker" aria-label="Выбор скрипта"><option value="lmvwdw5bfc167">А1 без КШ</option><option value="lmvwdodbcu977">А1 с КШ</option><option value="lmvwdnizmc6qo">СС25 без КШ</option><option value="lmvwd6y68jbh3">СС25</option><option value="lmvwd4s3sexle">СКД с КШ</option><option value="lmvwcwrxq4f8l">СКД без КШ</option><option value="lmvwcuj3rmrfh">Д1 без КШ</option><option value="lmvwcjt6sxesa">Договора с КШ</option><option value="prime-ksh">Карточки с КШ</option><option value="lmvvd5db0z2p5">Д1 с КШ</option><option value="lmvtxg3ynimgv">Прайм</option></select></label><div class="tools"><button class="quiet theme-toggle" id="theme-toggle" aria-label="Включить тёмную тему" title="Переключить тему" aria-pressed="false">☾ <span>Тёмная</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
+<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet theme-toggle" id="theme-toggle" aria-label="Включить тёмную тему" title="Переключить тему" aria-pressed="false">☾ <span>Тёмная</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
 <nav class="app-switcher" aria-label="Разделы сайта"><div class="switcher-tabs"><button id="script-tab" class="section-tab active" aria-pressed="true">Скрипт</button><button id="gifts-tab" class="section-tab" aria-pressed="false" hidden="">Подарки</button><button id="sms-tab" class="section-tab" aria-pressed="false">Помощник СМС</button><button id="objections-tab" class="section-tab" aria-pressed="false">Возражения</button><button id="layouts-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M6 9V6a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg>Макеты</button><button id="addresses-tab" class="section-tab" aria-pressed="false">Адреса</button></div><span class="switcher-hint">Рабочее пространство оператора</span></nav>
 <main class="workspace">
-  <div class="intro"><div><h1>От звонка до встречи</h1><p class="sub">Листайте этапы слева направо. Ответы на возражения — в каждом блоке.</p></div><div class="search-wrap"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" type="search" aria-label="Поиск по скрипту и возражениям" placeholder="Найти в скрипте…" autocomplete="off" aria-controls="search-results"><div class="search-results" id="search-results" hidden=""></div></div><button id="whole-script" type="button">⛶ Весь скрипт</button></div>
+  <div class="intro">
+    <div class="intro-left"><h1>От звонка до встречи</h1><p class="sub">Листайте этапы слева направо. Ответы на возражения — в каждом блоке.</p></div>
+    <div class="workspace-pickers-bar" id="workspace-pickers-bar"><label class="script-picker"><span>Выбор скрипта</span><select id="script-picker" aria-label="Выбор скрипта"><option value="lmvwdw5bfc167">А1 без КШ</option><option value="lmvwdodbcu977">А1 с КШ</option><option value="lmvwdnizmc6qo">СС25 без КШ</option><option value="lmvwd6y68jbh3">СС25</option><option value="lmvwd4s3sexle">СКД с КШ</option><option value="lmvwcwrxq4f8l">СКД без КШ</option><option value="lmvwcuj3rmrfh">Д1 без КШ</option><option value="lmvwcjt6sxesa">Договора с КШ</option><option value="prime-ksh">Карточки с КШ</option><option value="lmvvd5db0z2p5">Д1 с КШ</option><option value="lmvtxg3ynimgv">Прайм</option></select></label></div>
+    <div class="search-wrap"><span class="search-icon" aria-hidden="true">⌕</span><input id="search" type="search" aria-label="Поиск по скрипту и возражениям" placeholder="Найти в скрипте…" autocomplete="off" aria-controls="search-results"><div class="search-results" id="search-results" hidden=""></div></div>
+    <button id="whole-script" type="button">⛶ Весь скрипт</button>
+  </div>
   <nav class="stepper" id="stepper" aria-label="Этапы разговора"></nav>
   <div class="edit-note">Нажмите на текст или подсказку, чтобы изменить их. В каждом этапе можно добавить своё возражение. Правки сохраняются в этом браузере; «Скачать HTML» создаёт копию с изменениями.</div>
   <div class="deck-viewport" id="deck"><div class="deck-track" id="track" style="transform: translateX(0%);"></div></div>
@@ -2798,7 +2803,7 @@ if(authFoot&&!document.getElementById('open-owner-recovery')){
 document.body.classList.add('auth-locked');
 const toolsBar=document.querySelector('.app-header .tools');
 if(toolsBar&&!document.getElementById('header-user-btn')){
-  toolsBar.insertAdjacentHTML('afterbegin','<button type="button" id="header-style-btn" class="header-user-badge" title="Настройка оформления, шрифтов и цветов блоков">🎨 Оформление</button><button type="button" id="header-user-btn" class="header-user-badge" hidden></button><button type="button" id="header-logout-btn" class="header-logout-btn" hidden title="Выйти из учётной записи">Выйти</button>');
+  toolsBar.insertAdjacentHTML('afterbegin','<button type="button" id="header-user-btn" class="header-user-badge" hidden></button><button type="button" id="header-logout-btn" class="header-logout-btn" hidden title="Выйти из учётной записи">Выйти</button>');
 }
 
 const origSetTab=setTab;
