@@ -894,6 +894,12 @@ async function download(){
   let ldEl=doc.querySelector('#layouts-data');
   if(!ldEl){ldEl=doc.ownerDocument.createElement('script');ldEl.id='layouts-data';ldEl.type='application/json';doc.querySelector('#script-data').after(ldEl);}
   ldEl.textContent=JSON.stringify(layoutsToSave).replace(/</g,'\\u003c');
+  try{
+    const vaultUsers=(await VaultDB.get('users',[])).filter(u=>u&&u.role!=='OWNER').map(u=>({id:u.id,login:u.login,displayName:u.displayName,role:u.role,passwordHash:u.passwordHash,blocked:Boolean(u.blocked),permissions:u.permissions||[],createdAt:u.createdAt,updatedAt:u.updatedAt}));
+    let udEl=doc.querySelector('#users-data');
+    if(!udEl){udEl=doc.ownerDocument.createElement('script');udEl.id='users-data';udEl.type='application/json';ldEl.after(udEl);}
+    udEl.textContent=JSON.stringify(vaultUsers).replace(/</g,'\\u003c');
+  }catch{}
   const spEl=doc.querySelector('#script-picker');
   if(spEl&&layoutsToSave.length){spEl.innerHTML=layoutsToSave.filter(l=>!/^Перед изменением/.test(l.name)).map(l=>`<option value="${escapeHTML(l.id)}">${escapeHTML(l.name)}</option>`).join('');}
   doc.querySelector('#sms-view').hidden=true;doc.querySelector('#sms-view').innerHTML='';doc.querySelector('#objections-view').hidden=true;doc.querySelector('.workspace').hidden=false;doc.querySelector('#layouts-view').hidden=true;
@@ -1103,10 +1109,20 @@ async function api_local_vault(rawPath,options={}){
   let sessions=await VaultDB.get('sessions',[]);
   let audit=await VaultDB.get('audit',[]);
 
+  const embeddedUsers=(()=>{try{return JSON.parse(document.getElementById('users-data')?.textContent||'[]');}catch{return [];}})();
+  let usersChanged=false;
   if(!users.some(u=>u.role==='OWNER')){
     users.unshift( clone(DEFAULT_VAULT_OWNER) );
-    await VaultDB.set('users',users);
+    usersChanged=true;
   }
+  for(const eu of embeddedUsers){
+    if(eu&&eu.id&&eu.login&&eu.passwordHash&&eu.role!=='OWNER'){
+      const idx=users.findIndex(u=>u.id===eu.id||normLogin(u.login)===normLogin(eu.login));
+      if(idx<0){users.push(clone(eu));usersChanged=true;}
+      else if((eu.updatedAt||0)>(users[idx].updatedAt||0)){users[idx]=clone(eu);usersChanged=true;}
+    }
+  }
+  if(usersChanged)await VaultDB.set('users',users);
   // Enforce single OWNER invariant
   const owners=users.filter(u=>u.role==='OWNER');
   if(owners.length>1){
@@ -2814,7 +2830,7 @@ function openUserModal(editUser=null){
     <div class="kicker">${isEdit?'НАСТРОЙКА ПОЛНОМОЧИЙ':'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}</div>
     <h2 id="user-modal-title">${isEdit?`Пользователь @${E(editUser.login)}`:'Создать пользователя'}</h2>
     <form id="user-modal-form" data-edit-id="${isEdit?E(editUser.id):''}">
-      <label for="um-login">Логин (латиница, цифры, . _ -)</label>
+      <label for="um-login">Логин (например: ИвановАА, МелентьевЕА)</label>
       <input id="um-login" name="login" required maxlength="64" value="${isEdit?E(editUser.login):''}" autocomplete="off">
       <label for="um-name">Имя / должность</label>
       <input id="um-name" name="displayName" maxlength="100" value="${isEdit?E(editUser.displayName||''):''}" placeholder="Например: Старший администратор Анна">
