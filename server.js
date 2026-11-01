@@ -221,7 +221,8 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     users: path.join(dataDir, 'users.json'),
     sessions: path.join(dataDir, 'sessions.json'),
     audit: path.join(dataDir, 'audit.json'),
-    appData: path.join(dataDir, 'app-data.json')
+    appData: path.join(dataDir, 'app-data.json'),
+    sharedThemes: path.join(dataDir, 'shared-themes.json')
   };
 
   function readJson(filePath, fallback) {
@@ -243,6 +244,10 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
   let sessions = readJson(files.sessions, []);
   let audit = readJson(files.audit, []);
   let appData = readJson(files.appData, null);
+  let sharedThemes = readJson(files.sharedThemes, []);
+  function saveSharedThemes() {
+    writeJsonAtomic(files.sharedThemes, sharedThemes);
+  }
   let dirtyAuth = false;
   let dirtyAppData = false;
   let blobAppDataLoaded = false;
@@ -542,6 +547,19 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     logEvent,
     getAppData: () => appData,
     saveAppData,
+    getSharedThemes: () => sharedThemes,
+    addSharedTheme: (t) => { sharedThemes.push(t); saveSharedThemes(); return t; },
+    removeSharedTheme: (id) => {
+      const before = sharedThemes.length;
+      sharedThemes = sharedThemes.filter(x => x.id !== id);
+      if (sharedThemes.length !== before) saveSharedThemes();
+      return sharedThemes.length !== before;
+    },
+    updateSharedTheme: (id, patch) => {
+      const item = sharedThemes.find(x => x.id === id);
+      if (item) { Object.assign(item, patch); saveSharedThemes(); }
+      return item;
+    },
     syncFromBlob,
     flushToBlob
   };
@@ -1190,6 +1208,98 @@ function createAppServer(options = {}) {
           layouts: resultLayouts,
           allLayouts,
           departmentScripts: deptScripts
+        });
+      }
+
+
+      // Shared Themes: GET /api/themes/shared, POST /api/themes/shared, DELETE /api/themes/shared
+      if (pathname === '/api/themes/shared') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        const allUsers = store.getUsers();
+        const user = auth.user;
+        const isOwner = user.role === 'OWNER';
+        const isAdmin = user.role === 'ADMIN';
+        const isHead = user.role === 'HEAD';
+
+        if (method === 'GET') {
+          const list = store.getSharedThemes();
+          const visible = list.filter(t => {
+            if (t.senderId === user.id) return true;
+            if (t.targetUserId === user.id) return true;
+            if (t.shareAll) {
+              if (isOwner || isAdmin) return true;
+              const sender = allUsers.find(u => u.id === t.senderId);
+              if (!sender) return true;
+              if (sender.role === 'OWNER' || sender.role === 'ADMIN') return true;
+              if (sender.role === 'HEAD' && user.managerId === sender.id) return true;
+              if (user.managerId && sender.managerId === user.managerId) return true;
+              if (isHead && sender.managerId === user.id) return true;
+              return false;
+            }
+            return false;
+          });
+          return sendJson(res, 200, { sharedThemes: visible });
+        }
+
+        if (method === 'POST') {
+          const body = await readBody(req);
+          if (!body || !body.theme || !body.theme.name) {
+            return sendJson(res, 400, { error: 'Необходимо передать данные темы и название.' });
+          }
+          const item = {
+            id: 'sh_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            name: String(body.theme.name).trim().slice(0, 60),
+            desc: String(body.theme.desc || '').slice(0, 120),
+            themeData: body.theme,
+            senderId: user.id,
+            senderLogin: user.login,
+            senderName: user.displayName || user.login,
+            targetUserId: body.shareAll ? null : (body.targetUserId || null),
+            targetUserName: body.targetUserName || null,
+            shareAll: !!body.shareAll,
+            createdAt: Date.now()
+          };
+          store.addSharedTheme(item);
+          return sendJson(res, 201, { ok: true, theme: item });
+        }
+
+        if (method === 'DELETE') {
+          const id = url.searchParams.get('id');
+          if (!id) return sendJson(res, 400, { error: 'Не указан идентификатор темы.' });
+          const list = store.getSharedThemes();
+          const item = list.find(x => x.id === id);
+          if (!item) return sendJson(res, 404, { error: 'Тема не найдена.' });
+          if (item.senderId !== user.id && !isOwner && !isAdmin && item.targetUserId !== user.id) {
+            return sendJson(res, 403, { error: 'Нет прав на удаление этой темы.' });
+          }
+          store.removeSharedTheme(id);
+          return sendJson(res, 200, { ok: true, deleted: id });
+        }
+
+        return sendJson(res, 405, { error: 'Метод не поддерживается.' });
+      }
+
+      // Department colleagues for theme sharing & collaboration: GET /api/department/colleagues
+      if (pathname === '/api/department/colleagues' && method === 'GET') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        const user = auth.user;
+        const allUsers = store.getUsers();
+        let colleagues = [];
+        if (user.role === 'OWNER' || user.role === 'ADMIN') {
+          colleagues = allUsers.filter(u => u.id !== user.id && !u.blocked);
+        } else if (user.role === 'HEAD') {
+          colleagues = allUsers.filter(u => u.id !== user.id && !u.blocked && (u.managerId === user.id || u.role === 'HEAD' || u.role === 'OWNER'));
+        } else {
+          // Operator: their manager and peer operators under the same manager
+          colleagues = allUsers.filter(u => u.id !== user.id && !u.blocked && (u.id === user.managerId || (user.managerId && u.managerId === user.managerId)));
+        }
+        return sendJson(res, 200, {
+          colleagues: colleagues.map(u => ({
+            id: u.id,
+            login: u.login,
+            displayName: u.displayName || u.login,
+            role: u.role
+          }))
         });
       }
 

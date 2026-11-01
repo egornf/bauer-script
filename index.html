@@ -3,21 +3,110 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script>
-try{
-  const savedTheme=localStorage.getItem("bauer-color-theme");
-  document.documentElement.dataset.theme=savedTheme==="light"||savedTheme==="dark"?savedTheme:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
-  const utRaw=localStorage.getItem("bauer-user-theme");
-  if(utRaw){
-    const ut=JSON.parse(utRaw);
-    if(ut.preset)document.documentElement.dataset.themePreset=ut.preset;
-    if(ut.cardStyle)document.documentElement.dataset.cardStyle=ut.cardStyle;
-    if(ut.headerPattern)document.documentElement.dataset.headerPattern=ut.headerPattern;
-    if(ut.bodyPattern)document.documentElement.dataset.bodyPattern=ut.bodyPattern;
-    if(ut.headerBg)document.documentElement.style.setProperty('--custom-header-bg',ut.headerBg);
-    if(ut.accent)document.documentElement.style.setProperty('--custom-accent',ut.accent);
-    if(ut.bodyBg)document.documentElement.style.setProperty('--custom-body-bg',ut.bodyBg);
+(function(){
+  try {
+    const savedTheme = localStorage.getItem("bauer-color-theme");
+    document.documentElement.dataset.theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    
+    // Find active theme config: prioritize bauer-active-theme, then bauer-user-theme:* or bauer-user-theme
+    let raw = localStorage.getItem("bauer-active-theme");
+    if (!raw) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('bauer-user-theme:')) { raw = localStorage.getItem(k); break; }
+      }
+    }
+    if (!raw) raw = localStorage.getItem("bauer-user-theme");
+    
+    if (raw) {
+      const ut = JSON.parse(raw);
+      const root = document.documentElement;
+      if (ut.preset) root.dataset.themePreset = ut.preset;
+      const cardStyle = ut.cardStyle === 'frosted' ? 'glass' : (ut.cardStyle || 'default');
+      root.dataset.cardStyle = cardStyle;
+      if (ut.headerPattern) root.dataset.headerPattern = ut.headerPattern;
+      if (ut.bodyPattern) root.dataset.bodyPattern = ut.bodyPattern;
+
+      // Header
+      if (ut.headerBg) {
+        root.style.setProperty('--custom-header-bg', ut.headerBg);
+        const hd = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(ut.headerBg);
+        const lum = hd ? (parseInt(hd[1],16)*0.299 + parseInt(hd[2],16)*0.587 + parseInt(hd[3],16)*0.114) : 100;
+        const dark = lum < 135;
+        root.style.setProperty('--custom-header-fg', dark ? '#ffffff' : '#12262e');
+        root.style.setProperty('--custom-header-soft', dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.07)');
+        root.style.setProperty('--custom-header-line', dark ? 'rgba(255,255,255,.28)' : 'rgba(0,0,0,.2)');
+      }
+
+      // Accent
+      const effAccent = ut.accent || '#008578';
+      root.style.setProperty('--custom-accent', effAccent);
+      const ad = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(effAccent);
+      const accLum = ad ? (parseInt(ad[1],16)*0.299 + parseInt(ad[2],16)*0.587 + parseInt(ad[3],16)*0.114) : 100;
+      const accDark = accLum < 140;
+      root.style.setProperty('--custom-accent-fg', accDark ? '#ffffff' : '#142026');
+      root.style.setProperty('--custom-accent-border', accDark ? 'color-mix(in srgb, ' + effAccent + ' 80%, #ffffff)' : 'color-mix(in srgb, ' + effAccent + ' 80%, #000000)');
+
+      // Background Image & Body
+      if (ut.bodyBg) root.style.setProperty('--custom-body-bg', ut.bodyBg);
+      if (ut.bgImage) {
+        root.dataset.hasBg = '1';
+        const st = document.createElement('style');
+        st.id = 'custom-bg-style';
+        st.dataset.sig = ut.bgImage;
+        st.textContent = ':root{--custom-bg-image:url("' + ut.bgImage + '")}';
+        document.head.appendChild(st);
+      }
+
+      // Page luminance & foreground
+      const hasImage = !!ut.bgImage;
+      const pageDark = hasImage ? (typeof ut.bgLum === 'number' ? ut.bgLum < 0.42 : true) : (ut.bodyBg ? false : (ut.theme === 'dark'));
+      root.style.setProperty('--custom-page-fg', pageDark ? '#ffffff' : '#12262e');
+      root.style.setProperty('--custom-page-shadow', pageDark ? '0 1px 3px rgba(0,0,0,.75)' : 'none');
+      root.style.setProperty('--custom-page-soft', pageDark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.07)');
+      root.style.setProperty('--custom-page-line', pageDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)');
+
+      // Step buttons (Inactive) - Always contrasty & clear
+      root.style.setProperty('--custom-step-bg', 'rgba(255, 255, 255, 0.92)');
+      root.style.setProperty('--custom-step-border', pageDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.16)');
+      root.style.setProperty('--custom-step-fg', '#142026');
+      root.style.setProperty('--custom-step-num-bg', 'rgba(0, 0, 0, 0.08)');
+      root.style.setProperty('--custom-step-hover', '#ffffff');
+
+      // Card / Block styles
+      if (cardStyle === 'glass') {
+        const trans = Math.max(0, Math.min(100, typeof ut.cardTransparency === 'number' ? ut.cardTransparency : 60));
+        const a = Math.max(0, Math.min(1, (100 - trans) / 100));
+        const cardCol = ut.cardColor || '#ffffff';
+        const cd = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(cardCol);
+        const rgb = cd ? [parseInt(cd[1],16), parseInt(cd[2],16), parseInt(cd[3],16)] : [255,255,255];
+        const cardBg = a <= 0.001 ? 'transparent' : ('rgba(' + rgb.join(',') + ',' + a.toFixed(2) + ')');
+        root.style.setProperty('--custom-card-bg', cardBg);
+        root.style.setProperty('--custom-card-blur', (trans >= 98 ? 0 : Math.round(8 * (1 - trans / 100) + 1)) + 'px');
+
+        const lineTrans = Math.max(0, Math.min(100, typeof ut.lineTransparency === 'number' ? ut.lineTransparency : 40));
+        const lineA = Math.max(0, Math.min(1, (100 - lineTrans) / 100));
+        const lineBg = lineA <= 0.001 ? 'transparent' : ('rgba(255,255,255,' + lineA.toFixed(2) + ')');
+        root.style.setProperty('--custom-line-bg', lineBg);
+        root.style.setProperty('--custom-line-blur', lineTrans >= 98 ? '0px' : '4px');
+        root.style.setProperty('--custom-line-border', lineA <= 0.001 ? 'rgba(255,255,255,0.18)' : ('rgba(255,255,255,' + (0.15 + 0.25 * lineA).toFixed(2) + ')'));
+
+        const effDark = (a < 0.3) ? pageDark : false;
+        const blockFg = effDark ? '#ffffff' : '#12262e';
+        root.style.setProperty('--custom-block-fg', blockFg);
+        root.style.setProperty('--custom-line-fg', blockFg);
+        root.style.setProperty('--custom-line-shadow', effDark ? '0 1px 2px rgba(0,0,0,0.6)' : 'none');
+        root.style.setProperty('--custom-pill-bg', effDark ? 'rgba(0, 0, 0, 0.50)' : 'rgba(255, 255, 255, 0.88)');
+        root.style.setProperty('--custom-pill-fg', effDark ? '#ffffff' : '#12262e');
+        root.style.setProperty('--custom-pill-border', effDark ? 'rgba(255, 255, 255, 0.30)' : 'rgba(0, 0, 0, 0.15)');
+      } else if (ut.cardColor) {
+        root.style.setProperty('--custom-card-bg', ut.cardColor);
+      }
+    }
+  } catch(e) {
+    document.documentElement.dataset.theme = "light";
   }
-}catch(e){document.documentElement.dataset.theme="light";}
+})();
 </script>
 <meta name="description" content="Рабочий скрипт BAUER: этапы разговора слева направо и отработки возражений для каждого этапа.">
 <title>BAUER · От звонка до встречи</title>
@@ -730,7 +819,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   background: var(--custom-page-soft) !important;
   border-color: var(--custom-page-line) !important;
 }
-/* preview + split layout + delete button */
+/* preview + split layout + 3-dots menu */
 .tcd-split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; align-items: start; }
 @media (max-width: 960px) { .tcd-split { grid-template-columns: 1fr; } }
 .tcd-preview-wrap { position: sticky; top: 8px; display: flex; flex-direction: column; gap: 6px; }
@@ -745,10 +834,81 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .tcd-pv-chips span { padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
 .tcd-pv-foot { margin: 0 12px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; }
 .tcd-pv-next { color: #fff; padding: 5px 10px; border-radius: 8px; text-shadow: none; }
-.tcd-del { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(0,0,0,.45); color: #fff; cursor: pointer; font-size: 12px; line-height: 1; padding: 0; }
-.tcd-del:hover { background: #d32f2f; }
 
-/* --- Universal Accent Color for ALL Buttons (Screens 1-3) --- */
+/* 3-dots button and context dropdown on theme cards */
+.tcd-dots-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.45);
+  background: rgba(0,0,0,0.55);
+  color: #ffffff;
+  font-size: 17px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all .15s ease;
+}
+.tcd-dots-btn:hover {
+  background: rgba(0,0,0,0.85);
+  border-color: #ffffff;
+  transform: scale(1.05);
+}
+.tcd-menu-dropdown {
+  position: absolute;
+  top: 40px;
+  right: 8px;
+  min-width: 250px;
+  background: var(--surface, #ffffff);
+  color: var(--ink, #182e36);
+  border: 1px solid var(--line, #dce5e1);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.30);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  z-index: 30;
+  animation: tcdMenuIn .15s ease-out;
+}
+@keyframes tcdMenuIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tcd-menu-item {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink, #182e36);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  transition: all .12s;
+}
+.tcd-menu-item:hover {
+  background: var(--teal-soft, #edf5f1);
+  color: var(--teal, #176f69);
+}
+.tcd-menu-item.danger {
+  color: #d32f2f;
+}
+.tcd-menu-item.danger:hover {
+  background: #ffebee;
+  color: #b71c1c;
+}
+
+/* --- Universal Accent Color for ALL Action Buttons --- */
 :root[style*="--custom-accent"] .pager .primary,
 :root[style*="--custom-accent"] button.primary,
 :root[style*="--custom-accent"] #next {
@@ -762,19 +922,22 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   color: var(--custom-accent-fg, #ffffff) !important;
 }
 
-/* Dropdowns in header/intro: "Выбор скрипта", "Город", "Зал" (Скрин 3) */
-:root[style*="--custom-accent"] .script-picker select,
-:root[style*="--custom-accent"] .venue-picker select {
-  background-color: var(--custom-accent) !important;
+/* Dropdowns in header/intro: "Выбор скрипта", "Город", "Зал" strictly follow Accent Color */
+:root .script-picker select,
+:root .venue-picker select {
+  background-color: var(--custom-accent, var(--amber, #f5b544)) !important;
   color: var(--custom-accent-fg, #ffffff) !important;
-  border-color: var(--custom-accent-border, var(--custom-accent)) !important;
-  box-shadow: 0 3px 12px color-mix(in srgb, var(--custom-accent) 30%, transparent) !important;
+  border-color: var(--custom-accent-border, var(--custom-accent, #f5b544)) !important;
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--custom-accent, #f5b544) 35%, transparent) !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 11px !important;
 }
-:root[style*="--custom-accent"] .script-picker select:hover:not(:disabled),
-:root[style*="--custom-accent"] .venue-picker select:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--custom-accent) 88%, #ffffff) !important;
-  border-color: var(--custom-accent-border, #ffffff) !important;
+:root .script-picker select:hover:not(:disabled),
+:root .venue-picker select:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--custom-accent, var(--amber, #f5b544)) 88%, #ffffff) !important;
+  border-color: #ffffff !important;
 }
 :root[style*="--custom-page-fg"] .script-picker > span,
 :root[style*="--custom-page-fg"] .venue-picker label > span {
@@ -783,7 +946,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   font-weight: 700 !important;
 }
 
-/* Stepper buttons (Скрин 1) */
+/* Stepper Active Button */
 :root[style*="--custom-accent"] .step[aria-current=step],
 :root[style*="--custom-accent"] .step[aria-current=step]:hover {
   background: var(--custom-accent) !important;
@@ -797,32 +960,32 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[style*="--custom-accent"] .step[aria-current=step] .step-number {
   background: rgba(0, 0, 0, 0.22) !important;
   color: var(--custom-accent-fg, #ffffff) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
 }
 
-/* Inactive stepper buttons (Скрин 1) */
-.step:not([aria-current=step]) {
-  background: var(--custom-step-bg, rgba(255, 255, 255, 0.78)) !important;
+/* Stepper Inactive Buttons: NEVER white text on white pill! Always high contrast */
+:root .step:not([aria-current=step]) {
+  background: var(--custom-step-bg, rgba(255, 255, 255, 0.92)) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
   border: 1.5px solid var(--custom-step-border, rgba(0, 0, 0, 0.14)) !important;
-  color: var(--custom-step-fg, #16282e) !important;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
   transition: all .16s ease !important;
 }
-.step:not([aria-current=step]) .step-title {
-  color: var(--custom-step-fg, #16282e) !important;
-  font-weight: 700 !important;
+:root .step:not([aria-current=step]) .step-title {
+  color: var(--custom-step-fg, #142026) !important;
+  font-weight: 750 !important;
+  text-shadow: none !important;
 }
-.step:not([aria-current=step]) .step-number {
+:root .step:not([aria-current=step]) .step-number {
   background: var(--custom-step-num-bg, rgba(0, 0, 0, 0.08)) !important;
-  color: var(--custom-step-fg, #16282e) !important;
-  border: 1px solid var(--custom-step-border, rgba(0, 0, 0, 0.08)) !important;
+  color: var(--custom-step-fg, #142026) !important;
+  border: 1px solid var(--custom-step-border, rgba(0, 0, 0, 0.14)) !important;
   font-weight: 800 !important;
 }
-.step:not([aria-current=step]):hover {
+:root .step:not([aria-current=step]):hover {
   border-color: var(--custom-accent, var(--ui)) !important;
-  background: var(--custom-step-hover, rgba(255, 255, 255, 0.95)) !important;
+  background: var(--custom-step-hover, #ffffff) !important;
 }
 
 /* Other controls adapting cleanly */
@@ -837,7 +1000,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   color: var(--custom-accent-fg, #ffffff) !important;
 }
 :root[style*="--custom-accent"] .search-wrap input {
-  background: var(--custom-page-soft, rgba(255, 255, 255, 0.82)) !important;
+  background: var(--custom-page-soft, rgba(255, 255, 255, 0.85)) !important;
   color: var(--custom-page-fg, var(--ink)) !important;
   border: 1.5px solid color-mix(in srgb, var(--custom-accent) 45%, var(--line)) !important;
   backdrop-filter: blur(6px) !important;
@@ -846,7 +1009,17 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   color: var(--custom-accent) !important;
 }
 
-/* --- True 100% Transparency for Block --- */
+/* Bottom Pager Text High Contrast Adaptation */
+:root[style*="--custom-page-fg"] .pager-middle strong {
+  color: var(--custom-page-fg) !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 3px rgba(0,0,0,0.85)) !important;
+}
+:root[style*="--custom-page-fg"] .pager-middle span {
+  color: var(--custom-page-fg) !important;
+  opacity: 0.95 !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 3px rgba(0,0,0,0.85)) !important;
+}
+
 :root:root:root[data-card-style="glass"] .deck-viewport {
   background: var(--custom-card-bg, transparent) !important;
   backdrop-filter: blur(var(--custom-card-blur, 0px)) !important;
@@ -866,17 +1039,27 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root:root:root[data-card-style="glass"] .stage-heading {
   border-bottom: 1px solid rgba(255, 255, 255, 0.22) !important;
 }
-/* Stage count 03/07 badge (Скрин 1) */
+/* Stage count 03/07 badge */
 .stage-count {
-  background: var(--custom-pill-bg, var(--surface-alt)) !important;
-  color: var(--custom-block-fg, var(--muted)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.28) !important;
-  backdrop-filter: blur(6px) !important;
-  -webkit-backdrop-filter: blur(6px) !important;
+  background: var(--custom-pill-bg, rgba(0, 0, 0, 0.48)) !important;
+  color: var(--custom-pill-fg, var(--custom-block-fg, #ffffff)) !important;
+  border: 1px solid var(--custom-pill-border, rgba(255, 255, 255, 0.30)) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
 }
 .stage-count strong {
+  color: var(--custom-pill-fg, var(--custom-block-fg, #ffffff)) !important;
+  text-shadow: none !important;
+}
+
+:root[data-card-style="glass"] .objections-pane h3 {
   color: var(--custom-block-fg, var(--ink)) !important;
   text-shadow: var(--custom-line-shadow, none) !important;
+}
+:root[data-card-style="glass"] .objections-pane .sub,
+:root[data-card-style="glass"] .objections-pane .rail-foot {
+  color: var(--custom-block-fg, var(--muted)) !important;
+  opacity: 0.88 !important;
 }
 
 :root:root:root[data-card-style="glass"] .script-pane .line,
@@ -3332,680 +3515,946 @@ body.auth-locked #auth-close{display:none!important}
 @media(max-width:900px){.user-row,.session-row{grid-template-columns:1fr}.user-actions{justify-content:flex-start}.perm-grid,.recovery-grid{grid-template-columns:1fr}}
 }</style>
 <script id="theme-customizer-module">
-(()=>{
-function getThemeStorageKey(){
-  const login = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : (sessionStorage.getItem('bauer_last_login') || 'guest');
-  return 'bauer-user-theme:' + encodeURIComponent(login);
-}
+(() => {
+  const PRESETS = [
+    {
+      id: 'default',
+      name: 'Классическая BAUER',
+      desc: 'Фирменная тёмно-синяя шапка и чистый светлый контент',
+      headerBg: '#102f44',
+      headerPattern: 'none',
+      theme: 'light',
+      accent: '#008578',
+      cardStyle: 'default',
+      bodyPattern: 'none',
+      bodyBg: ''
+    },
+    {
+      id: 'emerald-glass',
+      name: 'Изумрудное стекло',
+      desc: 'Глубокий хвойный градиент и эффект матового стекла',
+      headerBg: '#0d3832',
+      headerPattern: 'cyber',
+      theme: 'light',
+      accent: '#00f5d4',
+      cardStyle: 'glass',
+      bodyPattern: 'none',
+      bodyBg: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)'
+    },
+    {
+      id: 'cyber-dark',
+      name: 'Киберпанк Неон',
+      desc: 'Тёмный технологичный интерфейс с неоновой подсветкой',
+      headerBg: '#070b18',
+      headerPattern: 'cyber',
+      theme: 'dark',
+      accent: '#00f5d4',
+      cardStyle: 'neon',
+      bodyPattern: 'cyber',
+      bodyBg: '#080c14'
+    },
+    {
+      id: 'warm-amber',
+      name: 'Тёплый янтарь',
+      desc: 'Уютные золотистые и древесные тона для спокойной работы',
+      headerBg: '#2a1a08',
+      headerPattern: 'stripes',
+      theme: 'light',
+      accent: '#d48806',
+      cardStyle: 'glass',
+      bodyPattern: 'none',
+      bodyBg: 'linear-gradient(135deg, #f7f3ee 0%, #ede5d8 100%)'
+    },
+    {
+      id: 'deep-space',
+      name: 'Глубокий космос',
+      desc: 'Звёздная ночь и сочные фиолетовые акценты',
+      headerBg: '#0d0221',
+      headerPattern: 'stars',
+      theme: 'dark',
+      accent: '#8b5cf6',
+      cardStyle: 'glass',
+      bodyPattern: 'stars',
+      bodyBg: 'linear-gradient(180deg, #090a0f 0%, #15102a 100%)'
+    },
+    {
+      id: 'nordic-frost',
+      name: 'Северное сияние',
+      desc: 'Свежий мятный стиль с мягкими полупрозрачными панелями',
+      headerBg: '#1b3b36',
+      headerPattern: 'none',
+      theme: 'light',
+      accent: '#059669',
+      cardStyle: 'default',
+      bodyPattern: 'none',
+      bodyBg: 'linear-gradient(135deg, #e6f4f1 0%, #cce7e1 100%)'
+    },
+    {
+      id: 'velvet-night',
+      name: 'Королевский бархат',
+      desc: 'Глубокий винный оттенок и изысканный тёмный фон',
+      headerBg: '#3b1248',
+      headerPattern: 'stripes',
+      theme: 'dark',
+      accent: '#ec4899',
+      cardStyle: 'glass',
+      bodyPattern: 'none',
+      bodyBg: '#13091c'
+    }
+  ];
 
-const PRESETS = [
-  {
-    id: 'classic',
-    name: '🌟 Классика BAUER',
-    desc: 'Фирменный строгий стиль компании BAUER',
-    headerBg: '#102f44',
-    headerPattern: 'none',
-    bodyBg: '',
-    bodyPattern: 'none',
-    cardStyle: 'default',
-    accent: '#008578',
-    theme: 'light'
-  },
-  {
-    id: 'leopard',
-    name: '🐆 Дикий Леопард',
-    desc: 'Премиальный леопардовый принт с янтарным золотом',
-    headerBg: '#2a1a08',
-    headerPattern: 'leopard',
-    bodyBg: 'linear-gradient(135deg, #f7efe4 0%, #ecd7bd 100%)',
-    bodyPattern: 'leopard',
-    cardStyle: 'glass',
-    accent: '#d48806',
-    theme: 'light'
-  },
-  {
-    id: 'cyberpunk',
-    name: '⚡ Неон Киберпанк',
-    desc: 'Неоновые светящиеся контуры блоков и кибер-сетка',
-    headerBg: '#0e0224',
-    headerPattern: 'cyber',
-    bodyBg: 'radial-gradient(ellipse at top, #1a0836 0%, #060112 100%)',
-    bodyPattern: 'cyber',
-    cardStyle: 'neon',
-    accent: '#00f5d4',
-    theme: 'dark'
-  },
-  {
-    id: 'glass',
-    name: '💎 Ледяной Глассморфизм',
-    desc: 'Полупрозрачные матовые блоки с мягким размытием',
-    headerBg: 'rgba(16, 47, 68, 0.9)',
-    headerPattern: 'none',
-    bodyBg: 'linear-gradient(135deg, #d8ece8 0%, #cde1ec 50%, #e5dcf4 100%)',
-    bodyPattern: 'none',
-    cardStyle: 'glass',
-    accent: '#0077b6',
-    theme: 'light'
-  },
-  {
-    id: 'stars',
-    name: '🌌 Космос и Звёзды',
-    desc: 'Глубокий ночной космос, мерцающие звёзды и лазурь',
-    headerBg: '#070b18',
-    headerPattern: 'stars',
-    bodyBg: 'radial-gradient(ellipse at bottom, #0f1c3f 0%, #03050c 100%)',
-    bodyPattern: 'stars',
-    cardStyle: 'glass',
-    accent: '#38bdf8',
-    theme: 'dark'
-  },
-  {
-    id: 'stealth',
-    name: '🖤 Чёрный Оникс',
-    desc: 'Глубокий матовый минимализм с текстурой карбона',
-    headerBg: '#090a0b',
-    headerPattern: 'carbon',
-    bodyBg: '#111315',
-    bodyPattern: 'carbon',
-    cardStyle: 'default',
-    accent: '#e63946',
-    theme: 'dark'
-  },
-  {
-    id: 'mint',
-    name: '🍃 Мятный Шалфей',
-    desc: 'Нежная светлая палитра для комфортного чтения',
-    headerBg: '#1b3b36',
-    headerPattern: 'none',
-    bodyBg: 'linear-gradient(135deg, #eaf4f1 0%, #d8eae4 100%)',
-    bodyPattern: 'none',
-    cardStyle: 'glass',
-    accent: '#059669',
-    theme: 'light'
+  function getUserThemeKey() {
+    const user = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : null;
+    return user ? ('bauer-user-theme:' + user) : 'bauer-user-theme';
   }
-];
 
-function loadSavedTheme(){
-  try {
-    const key = getThemeStorageKey();
-    const raw = localStorage.getItem(key);
-    if (raw) { const o = JSON.parse(raw); if (o.cardStyle === 'frosted') o.cardStyle = 'glass'; return o; }
-    const legacy = localStorage.getItem('bauer-user-theme');
-    return legacy ? JSON.parse(legacy) : { ...PRESETS[0] };
-  } catch {
+  function loadSavedTheme() {
+    try {
+      const activeRaw = localStorage.getItem('bauer-active-theme');
+      if (activeRaw) {
+        const o = JSON.parse(activeRaw);
+        if (o.cardStyle === 'frosted') o.cardStyle = 'glass';
+        return o;
+      }
+      const raw = localStorage.getItem(getUserThemeKey()) || localStorage.getItem('bauer-user-theme');
+      if (raw) {
+        const o = JSON.parse(raw);
+        if (o.cardStyle === 'frosted') o.cardStyle = 'glass';
+        return o;
+      }
+    } catch (e) {}
     return { ...PRESETS[0] };
   }
-}
 
-let currentTheme = loadSavedTheme();
-let activeDesignTab = 'presets';
-
-function headerIsDark(col){
-  let r = 16, g = 47, b = 68, a = 1, m;
-  col = String(col || '').trim();
-  if ((m = col.match(/^#([0-9a-f]{3})$/i))) { r = parseInt(m[1][0]+m[1][0],16); g = parseInt(m[1][1]+m[1][1],16); b = parseInt(m[1][2]+m[1][2],16); }
-  else if ((m = col.match(/^#([0-9a-f]{6})$/i))) { r = parseInt(m[1].slice(0,2),16); g = parseInt(m[1].slice(2,4),16); b = parseInt(m[1].slice(4,6),16); }
-  else if ((m = col.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/i))) { r = +m[1]; g = +m[2]; b = +m[3]; if (m[4] !== undefined) a = +m[4]; }
-  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L < 0.42;
-}
-
-function customThemesKey(){ return getThemeStorageKey().replace('bauer-user-theme:', 'bauer-user-themes:'); }
-function loadCustomThemes(){
-  try { const a = JSON.parse(localStorage.getItem(customThemesKey()) || '[]'); return Array.isArray(a) ? a.map(x => ({ ...x, custom: true })) : []; } catch { return []; }
-}
-function storeCustomThemes(list){
-  try { localStorage.setItem(customThemesKey(), JSON.stringify(list.map(({ custom, ...rest }) => rest))); return true; } catch { return false; }
-}
-function allThemes(){ return PRESETS.concat(loadCustomThemes()); }
-
-function hexRgb(h){
-  h = String(h || '').trim();
-  let m = h.match(/^#([0-9a-f]{3})$/i);
-  if (m) return [parseInt(m[1][0]+m[1][0],16), parseInt(m[1][1]+m[1][1],16), parseInt(m[1][2]+m[1][2],16)];
-  m = h.match(/^#([0-9a-f]{6})$/i);
-  if (m) return [parseInt(m[1].slice(0,2),16), parseInt(m[1].slice(2,4),16), parseInt(m[1].slice(4,6),16)];
-  return null;
-}
-function relLum(rgb){
-  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-  return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
-}
-function pageLum(){
-  const t = currentTheme;
-  if (t.bgImage) return typeof t.bgLum === 'number' ? t.bgLum : 0.5;
-  if (t.bodyBg) {
-    const cols = (String(t.bodyBg).match(/#[0-9a-f]{6}\b|#[0-9a-f]{3}\b/gi) || []).map(hexRgb).filter(Boolean);
-    if (cols.length) return cols.reduce((s, c) => s + relLum(c), 0) / cols.length;
-    return 0.5;
+  function getCustomThemesKey() {
+    const user = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : null;
+    return user ? ('bauer-custom-themes:' + user) : 'bauer-custom-themes';
   }
-  return t.theme === 'dark' ? 0.01 : 0.87;
-}
-function pageInfo(){
-  if (!currentTheme.bgImage && !currentTheme.bodyBg) return null;
-  const dark = pageLum() < 0.42;
-  return { fg: dark ? '#ffffff' : '#12262e', shadow: dark ? '0 1px 3px rgba(0,0,0,.55)' : 'none', soft: dark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.07)', line: dark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)' };
-}
-function cardModeOf(t){ const s = (t || currentTheme).cardStyle; return s === 'frosted' ? 'glass' : (s || 'default'); }
-function blockInfo(){
-  const t = currentTheme, mode = cardModeOf(t), dark = t.theme === 'dark';
-  const tint = t.cardColor || (dark ? '#1a1f32' : '#ffffff');
-  const rgb = hexRgb(tint) || [255,255,255];
-  const tl = relLum(rgb);
 
-  if (mode === 'glass') {
-    // 1. Block transparency (0% to 100%)
-    const trans = Math.max(0, Math.min(100, typeof t.cardTransparency === 'number' ? t.cardTransparency : 60));
-    const a = Math.max(0, Math.min(1, (100 - trans) / 100));
-    const bg = a <= 0.001 ? 'transparent' : ('rgba(' + rgb.join(',') + ',' + a.toFixed(2) + ')');
-    const blurPx = trans >= 98 ? 0 : Math.round(8 * (1 - trans / 100) + 1);
+  function loadCustomThemes() {
+    try {
+      const raw = localStorage.getItem(getCustomThemesKey()) || localStorage.getItem('bauer-custom-themes');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return [];
+  }
 
-    // 2. Line (reply cards) transparency (0% to 100%)
-    const lineTrans = Math.max(0, Math.min(100, typeof t.lineTransparency === 'number' ? t.lineTransparency : 40));
-    const lineA = Math.max(0, Math.min(1, (100 - lineTrans) / 100));
-    const lineRgb = dark ? [22, 30, 48] : [255, 255, 255];
-    const lineBg = lineA <= 0.001 ? 'transparent' : ('rgba(' + lineRgb.join(',') + ',' + lineA.toFixed(2) + ')');
-    const lineBlur = lineTrans >= 98 ? '0px' : '4px';
-    const lineBorder = lineA <= 0.001 ? 'rgba(255,255,255,0.18)' : ('rgba(255,255,255,' + (0.15 + 0.25 * lineA).toFixed(2) + ')');
+  function storeCustomThemes(list) {
+    try {
+      const s = JSON.stringify(list);
+      localStorage.setItem(getCustomThemesKey(), s);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
-    // Luminance & foreground text adaptation
-    const effLum = (a <= 0.05) ? pageLum() : (a * tl + (1 - a) * pageLum());
-    const fg = effLum < 0.42 ? '#ffffff' : '#12262e';
+  let serverSharedThemes = [];
+  async function fetchSharedThemes() {
+    try {
+      if (typeof api === 'function') {
+        const res = await api('/api/themes/shared');
+        if (res && Array.isArray(res.sharedThemes)) {
+          serverSharedThemes = res.sharedThemes.map(s => ({
+            ...s.themeData,
+            id: s.id,
+            name: s.name,
+            desc: s.desc || ('Поделился @' + (s.senderName || s.senderLogin)),
+            shared: true,
+            senderId: s.senderId,
+            senderLogin: s.senderLogin,
+            senderName: s.senderName,
+            shareAll: s.shareAll
+          }));
+          if (activeDesignTab === 'presets' && window.__rerenderDesign) {
+            window.__rerenderDesign();
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  window.fetchSharedThemes = fetchSharedThemes;
 
-    const lineEffLum = (lineA <= 0.05) ? pageLum() : (lineA * relLum(lineRgb) + (1 - lineA) * effLum);
-    const lineFg = lineEffLum < 0.42 ? '#ffffff' : '#12262e';
-    const lineShadow = lineEffLum < 0.42 ? '0 1px 2px rgba(0,0,0,0.6)' : 'none';
+  function allThemes() {
+    const customList = loadCustomThemes().map(t => ({ ...t, custom: true }));
+    return [...PRESETS, ...customList, ...serverSharedThemes];
+  }
 
-    // Stage count badge backing (Скрин 1)
-    const pillBg = effLum < 0.42 ? 'rgba(0, 0, 0, 0.44)' : 'rgba(255, 255, 255, 0.72)';
+  let currentTheme = loadSavedTheme();
+  let activeDesignTab = 'presets';
 
+  function hexRgb(hex) {
+    if (!hex || typeof hex !== 'string') return null;
+    const m = /^#?([a-fd]{2})([a-fd]{2})([a-fd]{2})$/i.exec(hex.trim());
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null;
+  }
+  function relLum(rgb) {
+    if (!rgb) return 0.5;
+    const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+  }
+  function headerIsDark(hex) {
+    const rgb = hexRgb(hex);
+    if (!rgb) return true;
+    return (rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114) < 135;
+  }
+  function pageLum() {
+    const t = currentTheme;
+    if (t.bgImage) return typeof t.bgLum === 'number' ? t.bgLum : 0.25;
+    if (t.bodyBg) {
+      const cols = (String(t.bodyBg).match(/#[0-9a-f]{6}|#[0-9a-f]{3}/gi) || []).map(hexRgb).filter(Boolean);
+      if (cols.length) return cols.reduce((s, c) => s + relLum(c), 0) / cols.length;
+      return 0.5;
+    }
+    return t.theme === 'dark' ? 0.01 : 0.87;
+  }
+  function pageInfo() {
+    if (!currentTheme.bgImage && !currentTheme.bodyBg) return null;
+    const dark = pageLum() < 0.42;
     return {
-      mode, a, trans, bg, blurPx, fg,
-      lineTrans, lineA, lineBg, lineBlur, lineBorder, lineFg, lineShadow,
-      pillBg
+      fg: dark ? '#ffffff' : '#12262e',
+      shadow: dark ? '0 1px 3px rgba(0,0,0,.75)' : 'none',
+      soft: dark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.07)',
+      line: dark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)'
     };
   }
 
-  if (mode === 'default' && t.cardColor) return { mode: 'solid', bg: t.cardColor, fg: tl < 0.42 ? '#ffffff' : '#12262e' };
-  if (mode === 'neon') return { mode, bg: 'rgba(10,16,26,.88)', fg: '#e6f2f0' };
-  return { mode: 'default', bg: tint, fg: dark ? '#edf0ff' : '#20263d' };
-}
-function previewInner(){
-  const t = currentTheme, dark = t.theme === 'dark', b = blockInfo(), pi = pageInfo();
-  const pageBg = t.bgImage ? 'url(&quot;' + t.bgImage + '&quot;) center/cover no-repeat' : (t.bodyBg || (dark ? '#101321' : '#eef2f0'));
-  const accent = t.accent || '#008578';
-  let blockStyle = 'background:' + b.bg + ';color:' + b.fg + ';';
-  if (b.mode === 'glass') blockStyle += (b.blurPx ? 'backdrop-filter:blur(6px);' : '') + 'border:1px solid rgba(255,255,255,' + (0.35 * Math.max(0.15, b.a)).toFixed(2) + ');';
-  else if (b.mode === 'neon') blockStyle += 'border:2px solid #00f5d4;box-shadow:0 0 14px rgba(0,245,212,.4);';
-  else blockStyle += 'border:1px solid rgba(0,0,0,.12);';
-
-  const lineBg = (b.mode === 'glass' && b.lineBg) ? b.lineBg : (dark ? '#20263d' : '#f5f6fc');
-  const lineFg = (b.mode === 'glass' && b.lineFg) ? b.lineFg : (dark ? '#edf0ff' : '#20263d');
-  const lineBorder = (b.mode === 'glass' && b.lineBorder) ? b.lineBorder : 'transparent';
-  const pfg = pi ? pi.fg : (dark ? '#edf0ff' : '#20263d');
-
-  return '<div class="tcd-pv-page" style="background:' + pageBg + '">' +
-    '<div class="tcd-pv-head" style="background:' + (t.headerBg || '#102f44') + ';color:' + (headerIsDark(t.headerBg || '#102f44') ? '#fff' : '#12262e') + '">BAUER</div>' +
-    '<div class="tcd-pv-block" style="' + blockStyle + '">' +
-      '<div class="tcd-pv-title" style="display:flex;justify-content:space-between;align-items:center"><span>Приветствие</span><span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:' + (b.pillBg || 'rgba(0,0,0,0.3)') + ';color:' + b.fg + ';border:1px solid rgba(255,255,255,0.25)">01 / 07</span></div>' +
-      '<div class="tcd-pv-line" style="background:' + lineBg + ';color:' + lineFg + ';border-left:3px solid ' + accent + ';border-top:1px solid ' + lineBorder + ';border-right:1px solid ' + lineBorder + ';border-bottom:1px solid ' + lineBorder + '">Здравствуйте! Это пример реплики оператора.</div>' +
-      '<div class="tcd-pv-sub">Частые возражения</div>' +
-      '<div class="tcd-pv-chips"><span style="background:' + lineBg + ';color:' + lineFg + ';border:1px solid ' + lineBorder + '">Если отмазка</span><span style="background:' + lineBg + ';color:' + lineFg + ';border:1px solid ' + lineBorder + '">Если негатив</span></div>' +
-    '</div>' +
-    '<div class="tcd-pv-foot" style="color:' + pfg + ';' + (pi ? 'text-shadow:' + pi.shadow : '') + '"><span>← Назад</span><span>Этап 1 из 7</span><span class="tcd-pv-next" style="background:' + accent + '">Далее →</span></div>' +
-  '</div>';
-}
-
-
-function applyTheme(cfg, save = true){
-  currentTheme = { ...currentTheme, ...cfg };
-  const root = document.documentElement;
-
-  if (currentTheme.theme && (currentTheme.theme === 'light' || currentTheme.theme === 'dark')) {
-    root.dataset.theme = currentTheme.theme;
-    try { localStorage.setItem('bauer-color-theme', currentTheme.theme); } catch {}
-  }
-  if (typeof updateThemeButton === 'function') updateThemeButton();
-
-  root.dataset.cardStyle = cardModeOf(currentTheme);
-  const bInfo = blockInfo();
-  if (bInfo.mode === 'glass' || bInfo.mode === 'solid') {
-    root.style.setProperty('--custom-card-bg', bInfo.bg);
-    root.style.setProperty('--custom-block-fg', bInfo.fg);
-  } else {
-    root.style.removeProperty('--custom-card-bg');
-    root.style.removeProperty('--custom-block-fg');
-  }
-  if (bInfo.mode === 'glass') {
-    root.style.setProperty('--custom-card-blur', bInfo.blurPx + 'px');
-    root.style.setProperty('--custom-line-bg', bInfo.lineBg);
-    root.style.setProperty('--custom-line-fg', bInfo.lineFg);
-    root.style.setProperty('--custom-line-shadow', bInfo.lineShadow);
-    root.style.setProperty('--custom-line-blur', bInfo.lineBlur);
-    root.style.setProperty('--custom-line-border', bInfo.lineBorder);
-    root.style.setProperty('--custom-pill-bg', bInfo.pillBg);
-  } else {
-    root.style.removeProperty('--custom-card-blur');
-    root.style.removeProperty('--custom-line-bg');
-    root.style.removeProperty('--custom-line-fg');
-    root.style.removeProperty('--custom-line-shadow');
-    root.style.removeProperty('--custom-line-blur');
-    root.style.removeProperty('--custom-line-border');
-    root.style.removeProperty('--custom-pill-bg');
-  }
-  if (currentTheme.cardColor && cardModeOf(currentTheme) === 'default') root.dataset.cardColor = '1'; else delete root.dataset.cardColor;
-  const pInfo = pageInfo();
-  if (pInfo) {
-    root.style.setProperty('--custom-page-fg', pInfo.fg);
-    root.style.setProperty('--custom-page-shadow', pInfo.shadow);
-    root.style.setProperty('--custom-page-soft', pInfo.soft);
-    root.style.setProperty('--custom-page-line', pInfo.line);
-  } else {
-    ['--custom-page-fg','--custom-page-shadow','--custom-page-soft','--custom-page-line'].forEach(k => root.style.removeProperty(k));
-  }
-  root.dataset.headerPattern = currentTheme.headerPattern || 'none';
-  root.dataset.bodyPattern = currentTheme.bodyPattern || 'none';
-
-  if (currentTheme.headerBg) {
-    root.style.setProperty('--custom-header-bg', currentTheme.headerBg);
-    const dark = headerIsDark(currentTheme.headerBg);
-    root.style.setProperty('--custom-header-fg', dark ? '#ffffff' : '#12262e');
-    root.style.setProperty('--custom-header-soft', dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.07)');
-    root.style.setProperty('--custom-header-line', dark ? 'rgba(255,255,255,.28)' : 'rgba(0,0,0,.2)');
-  } else {
-    ['--custom-header-bg','--custom-header-fg','--custom-header-soft','--custom-header-line'].forEach(k => root.style.removeProperty(k));
+  function cardModeOf(t) {
+    const s = (t || currentTheme).cardStyle;
+    return s === 'frosted' ? 'glass' : (s || 'default');
   }
 
-  if (currentTheme.bodyBg) root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
-  else root.style.removeProperty('--custom-body-bg');
+  function blockInfo() {
+    const t = currentTheme, mode = cardModeOf(t), dark = t.theme === 'dark';
+    const tint = t.cardColor || (dark ? '#1a1f32' : '#ffffff');
+    const rgb = hexRgb(tint) || [255, 255, 255];
+    const tl = relLum(rgb);
 
-  const effAccent = currentTheme.accent || '#008578';
-  root.style.setProperty('--custom-accent', effAccent);
-  const accDark = headerIsDark(effAccent);
-  root.style.setProperty('--custom-accent-fg', accDark ? '#ffffff' : '#142026');
-  root.style.setProperty('--custom-accent-border', accDark ? 'color-mix(in srgb, ' + effAccent + ' 80%, #ffffff)' : 'color-mix(in srgb, ' + effAccent + ' 80%, #000000)');
+    if (mode === 'glass') {
+      const trans = Math.max(0, Math.min(100, typeof t.cardTransparency === 'number' ? t.cardTransparency : 60));
+      const a = Math.max(0, Math.min(1, (100 - trans) / 100));
+      const bg = a <= 0.001 ? 'transparent' : ('rgba(' + rgb.join(',') + ',' + a.toFixed(2) + ')');
+      const blurPx = trans >= 98 ? 0 : Math.round(8 * (1 - trans / 100) + 1);
 
-  // Step buttons colors
-  const pDark = pageLum() < 0.42;
-  if (pDark) {
-    root.style.setProperty('--custom-step-bg', 'rgba(0, 0, 0, 0.48)');
-    root.style.setProperty('--custom-step-border', 'rgba(255, 255, 255, 0.28)');
-    root.style.setProperty('--custom-step-fg', '#ffffff');
-    root.style.setProperty('--custom-step-num-bg', 'rgba(255, 255, 255, 0.20)');
-    root.style.setProperty('--custom-step-hover', 'rgba(0, 0, 0, 0.70)');
-  } else {
-    root.style.setProperty('--custom-step-bg', 'rgba(255, 255, 255, 0.78)');
-    root.style.setProperty('--custom-step-border', 'color-mix(in srgb, ' + effAccent + ' 30%, rgba(0, 0, 0, 0.16))');
-    root.style.setProperty('--custom-step-fg', '#16282e');
-    root.style.setProperty('--custom-step-num-bg', 'color-mix(in srgb, ' + effAccent + ' 18%, rgba(0, 0, 0, 0.08))');
-    root.style.setProperty('--custom-step-hover', 'rgba(255, 255, 255, 0.96)');
+      const lineTrans = Math.max(0, Math.min(100, typeof t.lineTransparency === 'number' ? t.lineTransparency : 40));
+      const lineA = Math.max(0, Math.min(1, (100 - lineTrans) / 100));
+      const lineRgb = dark ? [22, 30, 48] : [255, 255, 255];
+      const lineBg = lineA <= 0.001 ? 'transparent' : ('rgba(' + lineRgb.join(',') + ',' + lineA.toFixed(2) + ')');
+      const lineBlur = lineTrans >= 98 ? '0px' : '4px';
+      const lineBorder = lineA <= 0.001 ? 'rgba(255,255,255,0.18)' : ('rgba(255,255,255,' + (0.15 + 0.25 * lineA).toFixed(2) + ')');
+
+      const effLum = (a <= 0.05) ? pageLum() : (a * tl + (1 - a) * pageLum());
+      const effDark = effLum < 0.42;
+      const fg = effDark ? '#ffffff' : '#12262e';
+
+      const lineEffLum = (lineA <= 0.05) ? pageLum() : (lineA * relLum(lineRgb) + (1 - lineA) * effLum);
+      const lineFg = lineEffLum < 0.42 ? '#ffffff' : '#12262e';
+      const lineShadow = lineEffLum < 0.42 ? '0 1px 2px rgba(0,0,0,0.6)' : 'none';
+
+      // Stage count badge backing (High Contrast)
+      const pillBg = effDark ? 'rgba(0, 0, 0, 0.50)' : 'rgba(255, 255, 255, 0.88)';
+      const pillFg = effDark ? '#ffffff' : '#12262e';
+      const pillBorder = effDark ? 'rgba(255, 255, 255, 0.30)' : 'rgba(0, 0, 0, 0.15)';
+
+      return {
+        mode, a, trans, bg, blurPx, fg,
+        lineTrans, lineA, lineBg, lineBlur, lineBorder, lineFg, lineShadow,
+        pillBg, pillFg, pillBorder
+      };
+    }
+
+    if (mode === 'default' && t.cardColor) {
+      const isDk = tl < 0.42;
+      return {
+        mode: 'solid', bg: t.cardColor, fg: isDk ? '#ffffff' : '#12262e',
+        pillBg: isDk ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.85)',
+        pillFg: isDk ? '#ffffff' : '#12262e',
+        pillBorder: isDk ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)'
+      };
+    }
+    if (mode === 'neon') {
+      return {
+        mode, bg: 'rgba(10,16,26,.88)', fg: '#e6f2f0',
+        pillBg: 'rgba(0, 245, 212, 0.15)', pillFg: '#00f5d4', pillBorder: 'rgba(0, 245, 212, 0.4)'
+      };
+    }
+    const defDark = dark;
+    return {
+      mode: 'default', bg: tint, fg: defDark ? '#edf0ff' : '#20263d',
+      pillBg: defDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
+      pillFg: defDark ? '#edf0ff' : '#20263d',
+      pillBorder: defDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.10)'
+    };
   }
 
-  let bgStyle = document.getElementById('custom-bg-style');
-  if (!bgStyle) { bgStyle = document.createElement('style'); bgStyle.id = 'custom-bg-style'; document.head.appendChild(bgStyle); }
-  const bgSig = currentTheme.bgImage || '';
-  if (bgStyle.dataset.sig !== bgSig) {
-    bgStyle.dataset.sig = bgSig;
-    bgStyle.textContent = bgSig ? ':root{--custom-bg-image:url("' + bgSig + '")}' : '';
+  function previewInner() {
+    const t = currentTheme, dark = t.theme === 'dark', b = blockInfo(), pi = pageInfo();
+    const pageBg = t.bgImage ? 'url(&quot;' + t.bgImage + '&quot;) center/cover no-repeat' : (t.bodyBg || (dark ? '#101321' : '#eef2f0'));
+    const accent = t.accent || '#008578';
+    let blockStyle = 'background:' + b.bg + ';color:' + b.fg + ';';
+    if (b.mode === 'glass') blockStyle += (b.blurPx ? 'backdrop-filter:blur(6px);' : '') + 'border:1px solid rgba(255,255,255,' + (0.35 * Math.max(0.15, b.a)).toFixed(2) + ');';
+    else if (b.mode === 'neon') blockStyle += 'border:2px solid #00f5d4;box-shadow:0 0 14px rgba(0,245,212,.4);';
+
+    const lineBg = b.lineBg || (dark ? 'rgba(255,255,255,0.08)' : '#ffffff');
+    const lineFg = b.lineFg || b.fg;
+    const lineBorder = b.lineBorder || 'transparent';
+
+    return '<div class="tcd-pv-page" style="background:' + pageBg + '">' +
+      '<div class="tcd-pv-head" style="background:' + (t.headerBg || '#102f44') + ';color:#ffffff">BAUER · ДИЗАЙН</div>' +
+      '<div class="tcd-pv-block" style="' + blockStyle + '">' +
+        '<div class="tcd-pv-title" style="display:flex;justify-content:space-between;align-items:center"><span>Приветствие</span><span style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;background:' + b.pillBg + ';color:' + b.pillFg + ';border:1px solid ' + b.pillBorder + '">01 / 07</span></div>' +
+        '<div class="tcd-pv-line" style="background:' + lineBg + ';color:' + lineFg + ';border:1px solid ' + lineBorder + '">Добрый день! Меня зовут Анна, компания BAUER. Звоню подтвердить ваше участие...</div>' +
+        '<div class="tcd-pv-sub">Частые возражения</div>' +
+        '<div class="tcd-pv-chips"><span style="background:' + lineBg + ';color:' + lineFg + ';border:1px solid ' + lineBorder + '">Если отмазка ↗</span><span style="background:' + lineBg + ';color:' + lineFg + ';border:1px solid ' + lineBorder + '">Если не помню ↗</span></div>' +
+      '</div>' +
+      '<div class="tcd-pv-foot" style="color:' + (pi ? pi.fg : (dark ? '#fff' : '#12262e')) + ';text-shadow:' + (pi ? pi.shadow : 'none') + '">' +
+        '<span>Этап 1 из 7</span>' +
+        '<span class="tcd-pv-next" style="background:' + accent + '">Далее →</span>' +
+      '</div>' +
+    '</div>';
   }
-  if (bgSig) root.dataset.hasBg = '1'; else delete root.dataset.hasBg;
 
-  const pv = document.getElementById('tcd-preview');
-  if (pv) pv.innerHTML = previewInner();
+  function applyTheme(cfg, save = true) {
+    if (cfg) Object.assign(currentTheme, cfg);
+    const root = document.documentElement;
 
-  if (save) {
-    clearTimeout(applyTheme._t);
-    applyTheme._t = setTimeout(() => {
-      try { localStorage.setItem(getThemeStorageKey(), JSON.stringify(currentTheme)); } catch {}
-    }, 250);
+    if (currentTheme.theme) root.dataset.theme = currentTheme.theme;
+    root.dataset.themePreset = currentTheme.preset || 'custom';
+    root.dataset.cardStyle = cardModeOf(currentTheme);
+
+    const bInfo = blockInfo();
+    if (bInfo.bg) {
+      root.style.setProperty('--custom-card-bg', bInfo.bg);
+      root.style.setProperty('--custom-block-fg', bInfo.fg);
+    } else {
+      root.style.removeProperty('--custom-card-bg');
+      root.style.removeProperty('--custom-block-fg');
+    }
+    if (bInfo.mode === 'glass') {
+      root.style.setProperty('--custom-card-blur', bInfo.blurPx + 'px');
+      root.style.setProperty('--custom-line-bg', bInfo.lineBg);
+      root.style.setProperty('--custom-line-fg', bInfo.lineFg);
+      root.style.setProperty('--custom-line-shadow', bInfo.lineShadow);
+      root.style.setProperty('--custom-line-blur', bInfo.lineBlur);
+      root.style.setProperty('--custom-line-border', bInfo.lineBorder);
+      root.style.setProperty('--custom-pill-bg', bInfo.pillBg);
+      root.style.setProperty('--custom-pill-fg', bInfo.pillFg);
+      root.style.setProperty('--custom-pill-border', bInfo.pillBorder);
+    } else {
+      root.style.removeProperty('--custom-card-blur');
+      root.style.removeProperty('--custom-line-bg');
+      root.style.removeProperty('--custom-line-fg');
+      root.style.removeProperty('--custom-line-shadow');
+      root.style.removeProperty('--custom-line-blur');
+      root.style.removeProperty('--custom-line-border');
+      root.style.setProperty('--custom-pill-bg', bInfo.pillBg);
+      root.style.setProperty('--custom-pill-fg', bInfo.pillFg);
+      root.style.setProperty('--custom-pill-border', bInfo.pillBorder);
+    }
+
+    const pInfo = pageInfo();
+    if (pInfo) {
+      root.style.setProperty('--custom-page-fg', pInfo.fg);
+      root.style.setProperty('--custom-page-shadow', pInfo.shadow);
+      root.style.setProperty('--custom-page-soft', pInfo.soft);
+      root.style.setProperty('--custom-page-line', pInfo.line);
+    } else {
+      ['--custom-page-fg','--custom-page-shadow','--custom-page-soft','--custom-page-line'].forEach(k => root.style.removeProperty(k));
+    }
+    root.dataset.headerPattern = currentTheme.headerPattern || 'none';
+    root.dataset.bodyPattern = currentTheme.bodyPattern || 'none';
+
+    if (currentTheme.headerBg) {
+      root.style.setProperty('--custom-header-bg', currentTheme.headerBg);
+      const dark = headerIsDark(currentTheme.headerBg);
+      root.style.setProperty('--custom-header-fg', dark ? '#ffffff' : '#12262e');
+      root.style.setProperty('--custom-header-soft', dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.07)');
+      root.style.setProperty('--custom-header-line', dark ? 'rgba(255,255,255,.28)' : 'rgba(0,0,0,.2)');
+    } else {
+      ['--custom-header-bg','--custom-header-fg','--custom-header-soft','--custom-header-line'].forEach(k => root.style.removeProperty(k));
+    }
+
+    if (currentTheme.bodyBg) root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
+    else root.style.removeProperty('--custom-body-bg');
+
+    const effAccent = currentTheme.accent || '#008578';
+    root.style.setProperty('--custom-accent', effAccent);
+    const accDark = headerIsDark(effAccent);
+    root.style.setProperty('--custom-accent-fg', accDark ? '#ffffff' : '#142026');
+    root.style.setProperty('--custom-accent-border', accDark ? 'color-mix(in srgb, ' + effAccent + ' 80%, #ffffff)' : 'color-mix(in srgb, ' + effAccent + ' 80%, #000000)');
+
+    // Step buttons: High contrast inactive buttons
+    const pDark = pageLum() < 0.42;
+    root.style.setProperty('--custom-step-bg', 'rgba(255, 255, 255, 0.92)');
+    root.style.setProperty('--custom-step-border', pDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.16)');
+    root.style.setProperty('--custom-step-fg', '#142026');
+    root.style.setProperty('--custom-step-num-bg', 'rgba(0, 0, 0, 0.08)');
+    root.style.setProperty('--custom-step-hover', '#ffffff');
+
+    let bgStyle = document.getElementById('custom-bg-style');
+    if (!bgStyle) { bgStyle = document.createElement('style'); bgStyle.id = 'custom-bg-style'; document.head.appendChild(bgStyle); }
+    const bgSig = currentTheme.bgImage || '';
+    if (bgStyle.dataset.sig !== bgSig) {
+      bgStyle.dataset.sig = bgSig;
+      bgStyle.textContent = bgSig ? ':root{--custom-bg-image:url("' + bgSig + '")}' : '';
+    }
+    if (bgSig) root.dataset.hasBg = '1'; else delete root.dataset.hasBg;
+
+    const pv = document.getElementById('tcd-preview');
+    if (pv) pv.innerHTML = previewInner();
+
+    // Synchronous immediate save so reloads never lose state
+    if (save) {
+      try {
+        localStorage.setItem('bauer-active-theme', JSON.stringify(currentTheme));
+        localStorage.setItem(getUserThemeKey(), JSON.stringify(currentTheme));
+      } catch (e) {}
+    }
   }
-}
 
-// Initial application
-applyTheme(currentTheme, false);
-
-function refreshUserTheme(){
-  currentTheme = loadSavedTheme();
+  // Initial application
   applyTheme(currentTheme, false);
-}
-window.refreshUserTheme = refreshUserTheme;
 
-// Refresh theme when user auth changes
-window.addEventListener('bauer:auth-changed', refreshUserTheme);
+  function refreshUserTheme() {
+    currentTheme = loadSavedTheme();
+    applyTheme(currentTheme, false);
+    fetchSharedThemes();
+  }
+  window.refreshUserTheme = refreshUserTheme;
+  window.addEventListener('bauer:auth-changed', refreshUserTheme);
 
-function renderDesignSection(){
-  const headerColors = ['#102f44', '#0d3832', '#0d0221', '#2a1a08', '#070b18', '#090a0b', '#1b3b36', '#3b1248', '#881337'];
-  const accents = ['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'];
-  const curLogin = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : 'сотрудник';
-  const blockColors = ['#ffffff', '#e2f3ef', '#fff6de', '#e6f0fa', '#f1edff', '#1a1f32', '#0e1c20', '#2a1a08'];
-  const cardMode = cardModeOf(currentTheme);
-  const transparency = typeof currentTheme.cardTransparency === 'number' ? currentTheme.cardTransparency : 60;
-  const lineTransparency = typeof currentTheme.lineTransparency === 'number' ? currentTheme.lineTransparency : 40;
-  const escapeFn = (typeof escapeHTML === 'function') ? escapeHTML : (s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
+  // Close open dropdowns when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.tcd-dots-btn') && !e.target.closest('.tcd-menu-dropdown')) {
+      document.querySelectorAll('.tcd-menu-dropdown').forEach(m => m.hidden = true);
+    }
+  });
 
-  return `<div class="owner-card" style="margin-bottom:24px">
-    <div class="owner-card-head" style="align-items:flex-start">
-      <div>
-        <div class="kicker" style="color:var(--amber,#f5b544);font-weight:800;font-size:11px;letter-spacing:.08em;margin-bottom:4px">ПЕРСОНАЛИЗАЦИЯ РАБОЧЕГО МЕСТА</div>
-        <h2 style="margin:0 0 6px;font-size:24px;font-weight:800;letter-spacing:-.02em">🎨 Персональный дизайн интерфейса</h2>
-        <p style="margin:0;font-size:13px;line-height:1.6;color:var(--muted)">
-          Настройки дизайна сохраняются <b>только для вас (@${escapeFn(curLogin)})</b> в вашем браузере. Они не влияют на других сотрудников, рабочий текст или логику скрипта.
-        </p>
+  function renderDesignSection() {
+    const headerColors = ['#102f44', '#0d3832', '#0d0221', '#2a1a08', '#070b18', '#090a0b', '#1b3b36', '#3b1248', '#881337', '#1e293b'];
+    const accents = ['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'];
+    const curLogin = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : 'сотрудник';
+    const blockColors = ['#ffffff', '#e2f3ef', '#fff6de', '#e6f0fa', '#f1edff', '#1a1f32', '#0e1c20', '#2a1a08'];
+    const cardMode = cardModeOf(currentTheme);
+    const transparency = typeof currentTheme.cardTransparency === 'number' ? currentTheme.cardTransparency : 60;
+    const lineTransparency = typeof currentTheme.lineTransparency === 'number' ? currentTheme.lineTransparency : 40;
+    const escapeFn = (typeof escapeHTML === 'function') ? escapeHTML : (s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
+
+    return `<div class="owner-card" style="margin-bottom:24px">
+      <div class="owner-card-head" style="align-items:flex-start">
+        <div>
+          <div class="kicker" style="color:var(--amber,#f5b544);font-weight:800;font-size:11px;letter-spacing:.08em;margin-bottom:4px">ПЕРСОНАЛИЗАЦИЯ РАБОЧЕГО МЕСТА</div>
+          <h2 style="margin:0 0 6px;font-size:24px;font-weight:800;letter-spacing:-.02em">🎨 Персональный дизайн интерфейса</h2>
+          <p style="margin:0;font-size:13px;line-height:1.6;color:var(--muted)">
+            Настройки дизайна сохраняются <b>только для вас (@${escapeFn(curLogin)})</b> в вашем браузере. Вы также можете делиться темами с коллегами в отделе.
+          </p>
+        </div>
       </div>
-    </div>
 
-    <div class="theme-nav-tabs" style="margin:16px 0 20px">
-      <button type="button" class="${activeDesignTab==='presets'?'active':''}" data-tcd-tab="presets">🌟 Готовые темы</button>
-      <button type="button" class="${activeDesignTab==='header'?'active':''}" data-tcd-tab="header">🎨 Шапка и узоры</button>
-      <button type="button" class="${activeDesignTab==='background'?'active':''}" data-tcd-tab="background">🖼️ Фон страницы</button>
-      <button type="button" class="${activeDesignTab==='blocks'?'active':''}" data-tcd-tab="blocks">🪟 Блоки и карточки</button>
-    </div>
+      <div class="theme-nav-tabs" style="margin:16px 0 20px">
+        <button type="button" class="${activeDesignTab==='presets'?'active':''}" data-tcd-tab="presets">🌟 Готовые темы</button>
+        <button type="button" class="${activeDesignTab==='header'?'active':''}" data-tcd-tab="header">🎨 Шапка и узоры</button>
+        <button type="button" class="${activeDesignTab==='background'?'active':''}" data-tcd-tab="background">🖼️ Фон страницы</button>
+        <button type="button" class="${activeDesignTab==='blocks'?'active':''}" data-tcd-tab="blocks">🪟 Блоки и карточки</button>
+      </div>
 
-    <div class="tcd-body">
-      ${activeDesignTab === 'presets' ? `
-        <div class="preset-grid">
-          ${allThemes().map(p => `
-            <div class="preset-card ${currentTheme.id===p.id?'active':''}" data-apply-preset="${p.id}" style="position:relative">
-              ${p.custom ? `<button type="button" class="tcd-del" data-del-theme="${p.id}" title="Удалить тему" aria-label="Удалить тему">✕</button>` : ''}
-              <div class="preset-swatch" style="background:${p.bgImage ? 'url(&quot;'+p.bgImage+'&quot;) center/cover' : (p.bodyBg||(p.theme==='dark'?'#0a181a':'#eef2f0'))};border:1.5px solid ${p.accent||'#008578'}">
-                <div class="preset-swatch-header" style="background:${p.headerBg||'#102f44'}"></div>
+      <div class="tcd-body">
+        ${activeDesignTab === 'presets' ? `
+          <div class="preset-grid">
+            ${allThemes().map(p => `
+              <div class="preset-card ${currentTheme.id===p.id?'active':''}" data-apply-preset="${p.id}" style="position:relative;overflow:visible">
+                <button type="button" class="tcd-dots-btn" data-theme-dots="${p.id}" title="Меню действий с темой" aria-label="Меню темы">⋮</button>
+                <div class="tcd-menu-dropdown" id="tcd-menu-${p.id}" hidden>
+                  <button type="button" class="tcd-menu-item" data-theme-act="update" data-theme-id="${p.id}">✏️ Обновить текущими настройками</button>
+                  <button type="button" class="tcd-menu-item" data-theme-act="rename" data-theme-id="${p.id}">🏷️ Переименовать тему</button>
+                  <button type="button" class="tcd-menu-item" data-theme-act="share-user" data-theme-id="${p.id}">👤 Поделиться с сотрудником отдела</button>
+                  <button type="button" class="tcd-menu-item" data-theme-act="share-all" data-theme-id="${p.id}">🌐 Поделиться со всеми</button>
+                  ${(p.custom || p.shared) ? `<button type="button" class="tcd-menu-item danger" data-theme-act="delete" data-theme-id="${p.id}">🗑️ Удалить тему</button>` : ''}
+                </div>
+                <div class="preset-swatch" style="background:${p.bgImage ? 'url(&quot;'+p.bgImage+'&quot;) center/cover' : (p.bodyBg||'#eef2f0')}">
+                  <div class="preset-swatch-header" style="background:${p.headerBg||'#102f44'}"></div>
+                </div>
+                <div>
+                  <strong>${escapeFn(p.name)}</strong>
+                  <p>${escapeFn(p.desc||'')}</p>
+                </div>
               </div>
-              <div>
-                <strong>${escapeFn(p.name)}</strong>
-                <p>${escapeFn(p.desc||'')}</p>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      ` : ''}
-
-      ${activeDesignTab === 'header' ? `
-        <div class="tcd-section">
-          <div class="tcd-row">
-            <span class="tcd-label">Цвет фона шапки</span>
-            <div class="tcd-color-row">
-              ${headerColors.map(c => `
-                <button type="button" class="tcd-color-swatch ${(currentTheme.headerBg||'#102f44')===c?'selected':''}" style="background:${c}" data-tcd-prop="headerBg" data-val="${c}" title="${c}"></button>
-              `).join('')}
-              <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
-                <span>Свой цвет:</span>
-                <input type="color" class="tcd-header-picker" id="tcd-header-picker" value="${currentTheme.headerBg||'#102f44'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
-              </label>
-            </div>
+            `).join('')}
           </div>
+        ` : ''}
 
-          <div class="tcd-row">
-            <span class="tcd-label">Узор на шапке</span>
-            <div class="tcd-options-grid">
-              <button type="button" class="tcd-option-btn ${(!currentTheme.headerPattern||currentTheme.headerPattern==='none')?'selected':''}" data-tcd-prop="headerPattern" data-val="none">Без узора</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='leopard'?'selected':''}" data-tcd-prop="headerPattern" data-val="leopard">🐆 Леопард</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='cyber'?'selected':''}" data-tcd-prop="headerPattern" data-val="cyber">⚡ Неон Сетка</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stars'?'selected':''}" data-tcd-prop="headerPattern" data-val="stars">✨ Звёзды</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='carbon'?'selected':''}" data-tcd-prop="headerPattern" data-val="carbon">🏎️ Карбон</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stripes'?'selected':''}" data-tcd-prop="headerPattern" data-val="stripes">Линии</button>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
-      ${activeDesignTab === 'background' ? `
-        <div class="tcd-section">
-          <div class="tcd-row">
-            <span class="tcd-label">Узор страницы</span>
-            <div class="tcd-options-grid">
-              <button type="button" class="tcd-option-btn ${(!currentTheme.bodyPattern||currentTheme.bodyPattern==='none')?'selected':''}" data-tcd-prop="bodyPattern" data-val="none">Без узора</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='leopard'?'selected':''}" data-tcd-prop="bodyPattern" data-val="leopard">🐆 Леопард</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='cyber'?'selected':''}" data-tcd-prop="bodyPattern" data-val="cyber">⚡ Неон Сетка</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='stars'?'selected':''}" data-tcd-prop="bodyPattern" data-val="stars">✨ Звёзды</button>
-              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='carbon'?'selected':''}" data-tcd-prop="bodyPattern" data-val="carbon">🏎️ Карбон</button>
-            </div>
-          </div>
-
-          <div class="tcd-row">
-            <span class="tcd-label">Своё фоновое изображение</span>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <input type="file" id="tcd-bg-file" class="tcd-bg-file" accept="image/jpeg,image/png,image/webp" hidden>
-              <button type="button" class="primary tcd-bg-upload-btn" id="tcd-bg-upload-btn">📁 Загрузить фоновую картинку</button>
-              ${currentTheme.bgImage ? `<button type="button" class="danger-text tcd-bg-remove-btn" id="tcd-bg-remove-btn">✕ Убрать картинку</button>` : ''}
-              <small style="color:var(--muted)">Изображение масштабируется на весь экран и фиксируется при прокрутке (до 5 МБ).</small>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
-      ${activeDesignTab === 'blocks' ? `
-        <div class="tcd-split">
+        ${activeDesignTab === 'header' ? `
           <div class="tcd-section">
             <div class="tcd-row">
-              <span class="tcd-label">Вид блоков скрипта</span>
+              <span class="tcd-label">Цвет фона шапки</span>
+              <div class="tcd-color-row">
+                ${headerColors.map(c => `
+                  <button type="button" class="tcd-color-swatch ${(currentTheme.headerBg||'#102f44')===c?'selected':''}" style="background:${c}" data-tcd-prop="headerBg" data-val="${c}" title="${c}"></button>
+                `).join('')}
+                <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" class="tcd-header-picker" id="tcd-header-picker" value="${currentTheme.headerBg||'#102f44'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Узор на шапке</span>
               <div class="tcd-options-grid">
-                <button type="button" class="tcd-option-btn ${cardMode==='default'?'selected':''}" data-tcd-prop="cardStyle" data-val="default">🟦 Сплошной цвет</button>
-                <button type="button" class="tcd-option-btn ${cardMode==='glass'?'selected':''}" data-tcd-prop="cardStyle" data-val="glass">💎 Прозрачный</button>
-                <button type="button" class="tcd-option-btn ${cardMode==='neon'?'selected':''}" data-tcd-prop="cardStyle" data-val="neon">⚡ Неон</button>
-              </div>
-            </div>
-
-            ${cardMode !== 'neon' ? `
-            <div class="tcd-row">
-              <span class="tcd-label">Цвет блока</span>
-              <div class="tcd-color-row">
-                <button type="button" class="tcd-option-btn ${!currentTheme.cardColor?'selected':''}" style="padding:6px 10px" data-tcd-prop="cardColor" data-val="">Стандарт</button>
-                ${blockColors.map(c => `
-                  <button type="button" class="tcd-color-swatch ${(currentTheme.cardColor||'')===c?'selected':''}" style="background:${c}" data-tcd-prop="cardColor" data-val="${c}" title="${c}"></button>
-                `).join('')}
-                <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
-                  <span>Свой цвет:</span>
-                  <input type="color" class="tcd-card-picker" id="tcd-card-picker" value="${currentTheme.cardColor||'#ffffff'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
-                </label>
-              </div>
-            </div>` : ''}
-
-            ${cardMode === 'glass' ? `
-            <div class="tcd-row">
-              <span class="tcd-label">Прозрачность блока (рамка и подложка): <b id="tcd-opacity-val">${transparency}%</b></span>
-              <input type="range" id="tcd-card-opacity" min="0" max="100" step="1" value="${transparency}" style="width:100%;accent-color:var(--ui)">
-              <small style="color:var(--muted)">0% — сплошной блок, 100% — блок полностью прозрачен и виден только фон.</small>
-            </div>
-
-            <div class="tcd-row" style="margin-top:8px">
-              <span class="tcd-label">Прозрачность реплик (карточек с текстом): <b id="tcd-line-opacity-val">${lineTransparency}%</b></span>
-              <input type="range" id="tcd-line-opacity" min="0" max="100" step="1" value="${lineTransparency}" style="width:100%;accent-color:var(--ui)">
-              <small style="color:var(--muted)">0% — сплошные светлые карточки, 100% — полностью прозрачные (текст поверх фона).</small>
-            </div>` : ''}
-
-            <div class="tcd-row">
-              <span class="tcd-label">Акцентный цвет кнопок и подсветки</span>
-              <div class="tcd-color-row">
-                ${accents.map(c => `
-                  <button type="button" class="tcd-color-swatch ${(currentTheme.accent||'#008578')===c?'selected':''}" style="background:${c}" data-tcd-prop="accent" data-val="${c}" title="${c}"></button>
-                `).join('')}
-                <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
-                  <span>Свой цвет:</span>
-                  <input type="color" class="tcd-accent-picker" id="tcd-accent-picker" value="${currentTheme.accent||'#008578'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
-                </label>
+                <button type="button" class="tcd-option-btn ${(!currentTheme.headerPattern||currentTheme.headerPattern==='none')?'selected':''}" data-tcd-prop="headerPattern" data-val="none">Без узора</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='leopard'?'selected':''}" data-tcd-prop="headerPattern" data-val="leopard">🐆 Леопард</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='cyber'?'selected':''}" data-tcd-prop="headerPattern" data-val="cyber">⚡ Киберсетка</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stars'?'selected':''}" data-tcd-prop="headerPattern" data-val="stars">✨ Звёзды</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='carbon'?'selected':''}" data-tcd-prop="headerPattern" data-val="carbon">🏁 Карбон</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stripes'?'selected':''}" data-tcd-prop="headerPattern" data-val="stripes">💈 Полосы</button>
               </div>
             </div>
           </div>
-          <div class="tcd-preview-wrap">
-            <span class="tcd-label">Пример</span>
-            <div id="tcd-preview" class="tcd-preview">${previewInner()}</div>
-          </div>
-        </div>
-      ` : ''}
-    </div>
+        ` : ''}
 
-    <div class="tcd-foot" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-      <button type="button" class="tcd-reset-btn" id="tcd-reset-btn" style="color:var(--muted)">Сбросить всё к стандарту</button>
-      <div style="display:flex;gap:10px">
-        <button type="button" class="primary tcd-save-btn" id="tcd-save-btn">✓ Сохранить оформление</button>
+        ${activeDesignTab === 'background' ? `
+          <div class="tcd-section">
+            <div class="tcd-row">
+              <span class="tcd-label">Узор страницы</span>
+              <div class="tcd-options-grid">
+                <button type="button" class="tcd-option-btn ${(!currentTheme.bodyPattern||currentTheme.bodyPattern==='none')?'selected':''}" data-tcd-prop="bodyPattern" data-val="none">Без узора</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='leopard'?'selected':''}" data-tcd-prop="bodyPattern" data-val="leopard">🐆 Леопард</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='cyber'?'selected':''}" data-tcd-prop="bodyPattern" data-val="cyber">⚡ Киберсетка</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='stars'?'selected':''}" data-tcd-prop="bodyPattern" data-val="stars">✨ Звёзды</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='carbon'?'selected':''}" data-tcd-prop="bodyPattern" data-val="carbon">🏁 Карбон</button>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Своё фоновое изображение</span>
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <input type="file" id="tcd-bg-file" class="tcd-bg-file" accept="image/jpeg,image/png,image/webp" hidden>
+                <button type="button" class="primary tcd-bg-upload-btn" id="tcd-bg-upload-btn">📁 Загрузить фоновую картинку</button>
+                ${currentTheme.bgImage ? `<button type="button" class="danger-text tcd-bg-remove-btn" id="tcd-bg-remove-btn">Удалить фон</button>` : ''}
+                <small style="color:var(--muted)">Изображение масштабируется на весь экран и фиксируется при прокрутке.</small>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+
+        ${activeDesignTab === 'blocks' ? `
+          <div class="tcd-split">
+            <div class="tcd-section">
+              <div class="tcd-row">
+                <span class="tcd-label">Вид блоков скрипта</span>
+                <div class="tcd-options-grid">
+                  <button type="button" class="tcd-option-btn ${cardMode==='default'?'selected':''}" data-tcd-prop="cardStyle" data-val="default">🟦 Сплошной цвет</button>
+                  <button type="button" class="tcd-option-btn ${cardMode==='glass'?'selected':''}" data-tcd-prop="cardStyle" data-val="glass">💎 Прозрачный</button>
+                  <button type="button" class="tcd-option-btn ${cardMode==='neon'?'selected':''}" data-tcd-prop="cardStyle" data-val="neon">⚡ Неон</button>
+                </div>
+              </div>
+
+              ${cardMode !== 'neon' ? `
+              <div class="tcd-row">
+                <span class="tcd-label">Цвет блока</span>
+                <div class="tcd-color-row">
+                  <button type="button" class="tcd-option-btn ${!currentTheme.cardColor?'selected':''}" style="padding:6px 10px" data-tcd-prop="cardColor" data-val="">Стандарт</button>
+                  ${blockColors.map(c => `
+                    <button type="button" class="tcd-color-swatch ${(currentTheme.cardColor||'')===c?'selected':''}" style="background:${c}" data-tcd-prop="cardColor" data-val="${c}" title="${c}"></button>
+                  `).join('')}
+                  <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
+                    <span>Свой цвет:</span>
+                    <input type="color" class="tcd-card-picker" id="tcd-card-picker" value="${currentTheme.cardColor||'#ffffff'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
+                  </label>
+                </div>
+              </div>` : ''}
+
+              ${cardMode === 'glass' ? `
+              <div class="tcd-row">
+                <span class="tcd-label">Прозрачность блока (рамка и подложка): <b id="tcd-opacity-val">${transparency}%</b></span>
+                <input type="range" id="tcd-card-opacity" min="0" max="100" step="1" value="${transparency}" style="width:100%;accent-color:var(--ui)">
+                <small style="color:var(--muted)">0% — сплошной блок, 100% — блок полностью прозрачен и виден только фон.</small>
+              </div>
+
+              <div class="tcd-row" style="margin-top:8px">
+                <span class="tcd-label">Прозрачность реплик (карточек с текстом): <b id="tcd-line-opacity-val">${lineTransparency}%</b></span>
+                <input type="range" id="tcd-line-opacity" min="0" max="100" step="1" value="${lineTransparency}" style="width:100%;accent-color:var(--ui)">
+                <small style="color:var(--muted)">0% — сплошные светлые карточки, 100% — полностью прозрачные (текст поверх фона).</small>
+              </div>` : ''}
+
+              <div class="tcd-row">
+                <span class="tcd-label">Акцентный цвет кнопок и подсветки</span>
+                <div class="tcd-color-row">
+                  ${accents.map(c => `
+                    <button type="button" class="tcd-color-swatch ${(currentTheme.accent||'#008578')===c?'selected':''}" style="background:${c}" data-tcd-prop="accent" data-val="${c}" title="${c}"></button>
+                  `).join('')}
+                  <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
+                    <span>Свой цвет:</span>
+                    <input type="color" class="tcd-accent-picker" id="tcd-accent-picker" value="${currentTheme.accent||'#008578'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="tcd-preview-wrap">
+              <span class="tcd-label">Пример</span>
+              <div id="tcd-preview" class="tcd-preview">${previewInner()}</div>
+            </div>
+          </div>
+        ` : ''}
       </div>
-    </div>
-  </div>`;
-}
-window.renderDesignSection = renderDesignSection;
 
-// Global robust event handlers for ALL design controls (both in Profile tab and Dialog)
-document.addEventListener('click', (e) => {
-  // Tab switch
-  const tabBtn = e.target.closest('[data-tcd-tab]');
-  if (tabBtn) {
-    activeDesignTab = tabBtn.dataset.tcdTab;
-    if (window.__rerenderDesign) window.__rerenderDesign();
-    return;
+      <div class="tcd-foot" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <button type="button" class="tcd-reset-btn" id="tcd-reset-btn" style="color:var(--muted)">Сбросить всё к стандарту</button>
+        <div style="display:flex;gap:10px">
+          <button type="button" class="primary tcd-save-btn" id="tcd-save-btn">✓ Сохранить оформление</button>
+        </div>
+      </div>
+    </div>`;
   }
+  window.renderDesignSection = renderDesignSection;
 
-  // Delete saved theme
-  const delBtn = e.target.closest('[data-del-theme]');
-  if (delBtn) {
-    e.stopPropagation();
-    const id = delBtn.dataset.delTheme;
-    if (window.confirm('Удалить эту тему из готовых?')) {
-      storeCustomThemes(loadCustomThemes().filter(x => x.id !== id));
-      if (currentTheme.id === id) currentTheme.id = 'custom';
-      if (window.__rerenderDesign) window.__rerenderDesign();
-      if (typeof toast === 'function') toast('Тема удалена');
-    }
-    return;
-  }
-
-  // Preset click
-  const presetCard = e.target.closest('[data-apply-preset]');
-  if (presetCard) {
-    const p = allThemes().find(x => x.id === presetCard.dataset.applyPreset);
-    if (p) {
-      const base = { cardColor: '', cardTransparency: 60, bgLum: undefined };
-      applyTheme(p.custom ? { ...base, ...p, id: p.id } : { ...base, ...p, id: p.id, bgImage: currentTheme.bgImage, bgLum: currentTheme.bgLum });
-      if (window.__rerenderDesign) window.__rerenderDesign();
-      if (typeof toast === 'function') toast('Применена тема «' + p.name + '»');
-    }
-    return;
-  }
-
-  // Property swatch or button click
-  const propBtn = e.target.closest('[data-tcd-prop]');
-  if (propBtn) {
-    const prop = propBtn.dataset.tcdProp;
-    const val = propBtn.dataset.val;
-    applyTheme({ [prop]: val, id: 'custom' });
-    if (window.__rerenderDesign) window.__rerenderDesign();
-    return;
-  }
-
-  // Upload button click
-  const uploadBtn = e.target.closest('#tcd-bg-upload-btn, .tcd-bg-upload-btn');
-  if (uploadBtn) {
-    const fileInp = document.querySelector('.tcd-bg-file') || document.getElementById('tcd-bg-file');
-    fileInp?.click();
-    return;
-  }
-
-  // Remove bg image
-  const removeBgBtn = e.target.closest('#tcd-bg-remove-btn, .tcd-bg-remove-btn');
-  if (removeBgBtn) {
-    applyTheme({ bgImage: '', id: 'custom' });
-    if (window.__rerenderDesign) window.__rerenderDesign();
-    if (typeof toast === 'function') toast('Фоновое изображение удалено');
-    return;
-  }
-
-  // Reset to default
-  const resetBtn = e.target.closest('#tcd-reset-btn, .tcd-reset-btn');
-  if (resetBtn) {
-    applyTheme({ ...PRESETS[0], bgImage: '', bgLum: undefined, cardColor: '', cardTransparency: 60 });
-    if (window.__rerenderDesign) window.__rerenderDesign();
-    if (typeof toast === 'function') toast('Оформление сброшено к классическому стандарту');
-    return;
-  }
-
-  // Save button
-  const saveBtn = e.target.closest('#tcd-save-btn, .tcd-save-btn');
-  if (saveBtn) {
-    applyTheme(currentTheme, true);
-    const list = loadCustomThemes();
-    const name = window.prompt('Название новой темы (она появится в «Готовых темах»):', 'Моя тема ' + (list.length + 1));
-    if (name && name.trim()) {
-      const { id, custom, ...rest } = currentTheme;
-      const newId = 'u' + Date.now().toString(36);
-      list.push({ ...rest, id: newId, name: '⭐ ' + name.trim().slice(0, 40), desc: 'Моя сохранённая тема' });
-      if (storeCustomThemes(list)) {
-        currentTheme.id = newId;
-        applyTheme({ id: newId }, true);
-        activeDesignTab = 'presets';
-        if (window.__rerenderDesign) window.__rerenderDesign();
-        if (typeof toast === 'function') toast('✓ Тема «' + name.trim() + '» добавлена в готовые темы');
-      } else if (typeof toast === 'function') toast('Не удалось сохранить тему: мало места в браузере (уберите фоновую картинку)');
-    } else if (typeof toast === 'function') toast('✓ Оформление сохранено');
-    return;
-  }
-});
-
-// Color picker inputs
-document.addEventListener('input', (e) => {
-  if (e.target.matches('#tcd-header-picker, .tcd-header-picker')) {
-    applyTheme({ headerBg: e.target.value, id: 'custom' });
-  } else if (e.target.matches('#tcd-accent-picker, .tcd-accent-picker')) {
-    applyTheme({ accent: e.target.value, id: 'custom' });
-  } else if (e.target.matches('#tcd-card-picker')) {
-    applyTheme({ cardColor: e.target.value, id: 'custom' });
-  } else if (e.target.matches('#tcd-card-opacity')) {
-    const v = Math.max(0, Math.min(100, +e.target.value || 0));
-    applyTheme({ cardTransparency: v, id: 'custom' });
-    const lbl = document.getElementById('tcd-opacity-val'); if (lbl) lbl.textContent = v + '%';
-  } else if (e.target.matches('#tcd-line-opacity')) {
-    const v = Math.max(0, Math.min(100, +e.target.value || 0));
-    applyTheme({ lineTransparency: v, id: 'custom' });
-    const lbl = document.getElementById('tcd-line-opacity-val'); if (lbl) lbl.textContent = v + '%';
-  }
-});
-
-// File input handler
-document.addEventListener('change', (e) => {
-  if (e.target.matches('#tcd-bg-file, .tcd-bg-file')) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      if (typeof toast === 'function') toast('Размер фонового файла не должен превышать 5 МБ');
+  // Global event delegation
+  document.addEventListener('click', async (e) => {
+    // 3-dots button toggle
+    const dotsBtn = e.target.closest('[data-theme-dots]');
+    if (dotsBtn) {
+      e.stopPropagation();
+      const id = dotsBtn.dataset.themeDots;
+      const menu = document.getElementById('tcd-menu-' + id);
+      const wasHidden = menu ? menu.hidden : true;
+      document.querySelectorAll('.tcd-menu-dropdown').forEach(m => m.hidden = true);
+      if (menu) menu.hidden = !wasHidden;
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
-        const cv = document.createElement('canvas');
-        cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
-        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-        const dataUrl = cv.toDataURL('image/jpeg', 0.82);
-        let bgLum = 0.5;
-        try {
-          const sm = document.createElement('canvas'); sm.width = 24; sm.height = 24;
-          const sx = sm.getContext('2d'); sx.drawImage(cv, 0, 0, 24, 24);
-          const px = sx.getImageData(0, 0, 24, 24).data; let s = 0;
-          for (let i = 0; i < px.length; i += 4) s += relLum([px[i], px[i+1], px[i+2]]);
-          bgLum = s / (px.length / 4);
-        } catch {}
-        applyTheme({ bgImage: dataUrl, bgLum, id: 'custom' });
+
+    // 3-dots Menu Actions
+    const menuAct = e.target.closest('[data-theme-act]');
+    if (menuAct) {
+      e.stopPropagation();
+      const act = menuAct.dataset.themeAct;
+      const themeId = menuAct.dataset.themeId;
+      document.querySelectorAll('.tcd-menu-dropdown').forEach(m => m.hidden = true);
+      const targetTheme = allThemes().find(x => x.id === themeId);
+      if (!targetTheme) return;
+
+      // 1. UPDATE: Overwrite this theme with current active settings
+      if (act === 'update') {
+        const { id, name, desc, custom, shared, senderId, ...activeProps } = currentTheme;
+        const list = loadCustomThemes();
+        const existingIdx = list.findIndex(x => x.id === themeId);
+        if (existingIdx >= 0) {
+          list[existingIdx] = { ...list[existingIdx], ...activeProps };
+          storeCustomThemes(list);
+          currentTheme.id = themeId;
+          applyTheme({ id: themeId }, true);
+          if (window.__rerenderDesign) window.__rerenderDesign();
+          if (typeof toast === 'function') toast('✓ Тема «' + targetTheme.name + '» обновлена вашими настройками');
+        } else {
+          // If updating a preset, save it as custom
+          const newId = 'u' + Date.now().toString(36);
+          list.push({ ...targetTheme, ...activeProps, id: newId, name: targetTheme.name + ' (копия)' });
+          storeCustomThemes(list);
+          currentTheme.id = newId;
+          applyTheme({ id: newId }, true);
+          if (window.__rerenderDesign) window.__rerenderDesign();
+          if (typeof toast === 'function') toast('✓ Настройки сохранены в новую тему');
+        }
+        return;
+      }
+
+      // 2. RENAME
+      if (act === 'rename') {
+        const newName = window.prompt('Новое название темы:', targetTheme.name.replace(/^⭐s*/, ''));
+        if (newName && newName.trim()) {
+          const list = loadCustomThemes();
+          const existingIdx = list.findIndex(x => x.id === themeId);
+          if (existingIdx >= 0) {
+            list[existingIdx].name = '⭐ ' + newName.trim();
+            storeCustomThemes(list);
+            if (currentTheme.id === themeId) currentTheme.name = list[existingIdx].name;
+            if (window.__rerenderDesign) window.__rerenderDesign();
+            if (typeof toast === 'function') toast('✓ Тема переименована');
+          } else {
+            // Preset rename -> create custom copy
+            const newId = 'u' + Date.now().toString(36);
+            list.push({ ...targetTheme, id: newId, name: '⭐ ' + newName.trim() });
+            storeCustomThemes(list);
+            currentTheme.id = newId;
+            if (window.__rerenderDesign) window.__rerenderDesign();
+            if (typeof toast === 'function') toast('✓ Создана копия с новым именем');
+          }
+        }
+        return;
+      }
+
+      // 3. SHARE WITH SPECIFIC USER IN DEPARTMENT
+      if (act === 'share-user') {
+        openShareDialog(targetTheme, false);
+        return;
+      }
+
+      // 4. SHARE WITH ALL IN DEPARTMENT
+      if (act === 'share-all') {
+        if (window.confirm('Поделиться темой «' + targetTheme.name + '» со ВСЕМИ коллегами в вашем отделе?')) {
+          try {
+            await api('/api/themes/shared', {
+              method: 'POST',
+              body: JSON.stringify({ theme: targetTheme, shareAll: true })
+            });
+            if (typeof toast === 'function') toast('✓ Тема отправлена всем в отделе!');
+            fetchSharedThemes();
+          } catch (err) {
+            if (typeof toast === 'function') toast('Ошибка отправки: ' + err.message);
+          }
+        }
+        return;
+      }
+
+      // 5. DELETE
+      if (act === 'delete') {
+        if (window.confirm('Удалить тему «' + targetTheme.name + '»?')) {
+          if (targetTheme.shared) {
+            try {
+              await api('/api/themes/shared?id=' + encodeURIComponent(targetTheme.id), { method: 'DELETE' });
+              serverSharedThemes = serverSharedThemes.filter(x => x.id !== targetTheme.id);
+            } catch (err) {
+              if (typeof toast === 'function') toast('Ошибка удаления темы: ' + err.message);
+              return;
+            }
+          } else {
+            storeCustomThemes(loadCustomThemes().filter(x => x.id !== themeId));
+          }
+          if (currentTheme.id === themeId) currentTheme.id = 'custom';
+          if (window.__rerenderDesign) window.__rerenderDesign();
+          if (typeof toast === 'function') toast('Тема удалена');
+        }
+        return;
+      }
+    }
+
+    // Tab switch
+    const tabBtn = e.target.closest('[data-tcd-tab]');
+    if (tabBtn) {
+      activeDesignTab = tabBtn.dataset.tcdTab;
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
+
+    // Preset card click (apply)
+    const presetCard = e.target.closest('[data-apply-preset]');
+    if (presetCard && !e.target.closest('.tcd-dots-btn') && !e.target.closest('.tcd-menu-dropdown')) {
+      const p = allThemes().find(x => x.id === presetCard.dataset.applyPreset);
+      if (p) {
+        const base = { cardColor: '', cardTransparency: 60, bgLum: undefined };
+        applyTheme(p.custom ? { ...base, ...p, id: p.id } : { ...base, ...p, id: p.id, bgImage: currentTheme.bgImage, bgLum: currentTheme.bgLum }, true);
         if (window.__rerenderDesign) window.__rerenderDesign();
-        if (typeof toast === 'function') toast('Фоновое изображение успешно установлено!');
+        if (typeof toast === 'function') toast('Применена тема «' + p.name + '»');
+      }
+      return;
+    }
+
+    // Property swatch or button click
+    const propBtn = e.target.closest('[data-tcd-prop]');
+    if (propBtn) {
+      const prop = propBtn.dataset.tcdProp;
+      const val = propBtn.dataset.val;
+      applyTheme({ [prop]: val, id: 'custom' }, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
+
+    // Upload button click
+    const uploadBtn = e.target.closest('#tcd-bg-upload-btn, .tcd-bg-upload-btn');
+    if (uploadBtn) {
+      const fileInp = document.querySelector('.tcd-bg-file') || document.getElementById('tcd-bg-file');
+      fileInp?.click();
+      return;
+    }
+
+    // Remove bg image
+    const removeBgBtn = e.target.closest('#tcd-bg-remove-btn, .tcd-bg-remove-btn');
+    if (removeBgBtn) {
+      applyTheme({ bgImage: '', id: 'custom' }, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      if (typeof toast === 'function') toast('Фоновое изображение удалено');
+      return;
+    }
+
+    // Reset to default
+    const resetBtn = e.target.closest('#tcd-reset-btn, .tcd-reset-btn');
+    if (resetBtn) {
+      applyTheme({ ...PRESETS[0], bgImage: '', bgLum: undefined, cardColor: '', cardTransparency: 60 }, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      if (typeof toast === 'function') toast('Оформление сброшено к классическому стандарту');
+      return;
+    }
+
+    // Save button (creates new theme in presets)
+    const saveBtn = e.target.closest('#tcd-save-btn, .tcd-save-btn');
+    if (saveBtn) {
+      applyTheme(currentTheme, true);
+      const list = loadCustomThemes();
+      const name = window.prompt('Название новой темы (она появится в «Готовых темах»):', 'Моя тема ' + (list.length + 1));
+      if (name && name.trim()) {
+        const { id, custom, shared, ...rest } = currentTheme;
+        const newId = 'u' + Date.now().toString(36);
+        list.push({ ...rest, id: newId, name: '⭐ ' + name.trim().slice(0, 40), desc: 'Моя сохранённая тема' });
+        if (storeCustomThemes(list)) {
+          currentTheme.id = newId;
+          applyTheme({ id: newId }, true);
+          activeDesignTab = 'presets';
+          if (window.__rerenderDesign) window.__rerenderDesign();
+          if (typeof toast === 'function') toast('✓ Тема «' + name.trim() + '» добавлена в готовые темы');
+        } else if (typeof toast === 'function') {
+          toast('Не удалось сохранить тему: мало места в браузере (уберите фоновую картинку)');
+        }
+      } else if (typeof toast === 'function') {
+        toast('✓ Оформление сохранено');
+      }
+      return;
+    }
+  });
+
+  // Color & Opacity pickers input handlers
+  document.addEventListener('input', (e) => {
+    if (e.target.matches('#tcd-header-picker, .tcd-header-picker')) {
+      applyTheme({ headerBg: e.target.value, id: 'custom' }, true);
+    } else if (e.target.matches('#tcd-accent-picker, .tcd-accent-picker')) {
+      applyTheme({ accent: e.target.value, id: 'custom' }, true);
+    } else if (e.target.matches('#tcd-card-picker')) {
+      applyTheme({ cardColor: e.target.value, id: 'custom' }, true);
+    } else if (e.target.matches('#tcd-card-opacity')) {
+      const v = Math.max(0, Math.min(100, +e.target.value || 0));
+      applyTheme({ cardTransparency: v, id: 'custom' }, true);
+      const lbl = document.getElementById('tcd-opacity-val'); if (lbl) lbl.textContent = v + '%';
+    } else if (e.target.matches('#tcd-line-opacity')) {
+      const v = Math.max(0, Math.min(100, +e.target.value || 0));
+      applyTheme({ lineTransparency: v, id: 'custom' }, true);
+      const lbl = document.getElementById('tcd-line-opacity-val'); if (lbl) lbl.textContent = v + '%';
+    }
+  });
+
+  // Background Image Upload with downscaling & brightness detection
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('#tcd-bg-file, .tcd-bg-file')) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > 15 * 1024 * 1024) {
+        if (typeof toast === 'function') toast('Файл слишком большой (макс. 15 МБ)');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 1920;
+          let w = img.width, h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+
+          // Compute average luminance across sampled pixels
+          let totalLum = 0, samples = 0;
+          try {
+            const idata = ctx.getImageData(0, 0, Math.min(w, 400), Math.min(h, 400)).data;
+            for (let i = 0; i < idata.length; i += 16) {
+              totalLum += (idata[i]*0.299 + idata[i+1]*0.587 + idata[i+2]*0.114) / 255;
+              samples++;
+            }
+          } catch (err) {}
+          const avgLum = samples ? (totalLum / samples) : 0.25;
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+
+          applyTheme({ bgImage: compressed, bgLum: avgLum, id: 'custom' }, true);
+          if (window.__rerenderDesign) window.__rerenderDesign();
+          if (typeof toast === 'function') toast('Фоновое изображение установлено!');
+        };
+        img.src = ev.target.result;
       };
-      img.onerror = () => { if (typeof toast === 'function') toast('Не удалось прочитать изображение'); };
-      img.src = reader.result;
-      return;
-      const dataUrl = reader.result;
-      applyTheme({ bgImage: dataUrl, id: 'custom' });
-      if (window.__rerenderDesign) window.__rerenderDesign();
-      if (typeof toast === 'function') toast('Фоновое изображение успешно установлено!');
-    };
-    reader.readAsDataURL(file);
-  }
-});
+      reader.readAsDataURL(file);
+    }
+  });
 
-window.applyTheme = applyTheme;
-window.PRESETS = PRESETS;
+  // Share Dialog Functionality
+  let themeToShare = null;
+  async function openShareDialog(theme) {
+    themeToShare = theme;
+    let dlg = document.getElementById('share-theme-dialog');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'share-theme-dialog';
+      dlg.className = 'auth-dialog';
+      dlg.style.width = 'min(480px, 92vw)';
+      document.body.appendChild(dlg);
+    }
+
+    dlg.innerHTML = `<button type="button" class="dialog-x" id="share-dlg-close" aria-label="Закрыть">✕</button>
+      <div class="lock-emblem" style="background:#e8f4f1;color:var(--teal)">🎨</div>
+      <div class="kicker" style="color:var(--teal);font-weight:750;letter-spacing:1px">ПОДЕЛИТЬСЯ ТЕМОЙ</div>
+      <h2 style="font-size:22px;margin:6px 0 10px">${escapeFn(theme.name)}</h2>
+      <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 18px">
+        Выберите коллегу в вашем отделе, которому хотите отправить это оформление:
+      </p>
+      <div id="share-colleagues-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:18px">
+        <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">Загрузка списка коллег…</div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button type="button" id="share-dlg-cancel">Отмена</button>
+      </div>`;
+
+    dlg.showModal();
+
+    dlg.querySelector('#share-dlg-close').onclick = () => dlg.close();
+    dlg.querySelector('#share-dlg-cancel').onclick = () => dlg.close();
+
+    const listEl = dlg.querySelector('#share-colleagues-list');
+    try {
+      const res = await api('/api/department/colleagues');
+      const cols = res.colleagues || [];
+      if (!cols.length) {
+        listEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">В вашем отделе пока нет других сотрудников.</div>';
+        return;
+      }
+      listEl.innerHTML = cols.map(c => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f8faf8;border:1px solid var(--line);border-radius:10px">
+          <div>
+            <div style="font-weight:700;font-size:13px">${escapeFn(c.displayName || c.login)}</div>
+            <div style="font-size:11px;color:var(--muted)">@${escapeFn(c.login)} · ${c.role === 'HEAD' ? 'Руководитель' : (c.role === 'OWNER' ? 'Владелец' : 'Менеджер')}</div>
+          </div>
+          <button type="button" class="primary" style="padding:7px 14px;font-size:12px" data-share-to-user="${c.id}" data-share-user-name="${escapeFn(c.displayName || c.login)}">Отправить</button>
+        </div>
+      `).join('');
+
+      listEl.querySelectorAll('[data-share-to-user]').forEach(btn => {
+        btn.onclick = async () => {
+          btn.disabled = true;
+          btn.textContent = 'Отправка…';
+          try {
+            await api('/api/themes/shared', {
+              method: 'POST',
+              body: JSON.stringify({
+                theme: themeToShare,
+                targetUserId: btn.dataset.shareToUser,
+                targetUserName: btn.dataset.shareUserName
+              })
+            });
+            dlg.close();
+            if (typeof toast === 'function') toast('✓ Тема отправлена сотруднику ' + btn.dataset.shareUserName + '!');
+            fetchSharedThemes();
+          } catch (err) {
+            btn.disabled = false;
+            btn.textContent = 'Отправить';
+            if (typeof toast === 'function') toast('Ошибка отправки: ' + err.message);
+          }
+        };
+      });
+    } catch (err) {
+      listEl.innerHTML = '<div style="padding:16px;text-align:center;color:#d32f2f;font-size:12px">Не удалось загрузить список коллег: ' + escapeFn(err.message) + '</div>';
+    }
+  }
+
 })();
-</script>
-<script id="owner-module">
+</script><script id="owner-module">
 (()=>{
 const E=escapeHTML;
 const PERM_LABELS={
