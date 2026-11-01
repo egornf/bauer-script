@@ -866,15 +866,29 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root:root:root[data-card-style="glass"] .stage-heading {
   border-bottom: 1px solid rgba(255, 255, 255, 0.22) !important;
 }
+/* Stage count 03/07 badge (Скрин 1) */
+.stage-count {
+  background: var(--custom-pill-bg, var(--surface-alt)) !important;
+  color: var(--custom-block-fg, var(--muted)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+.stage-count strong {
+  color: var(--custom-block-fg, var(--ink)) !important;
+  text-shadow: var(--custom-line-shadow, none) !important;
+}
+
 :root:root:root[data-card-style="glass"] .script-pane .line,
 :root:root:root[data-card-style="glass"] .objections-pane .objection-button,
 :root:root:root[data-card-style="glass"] .script-gift,
 :root:root:root[data-card-style="glass"] .script-gift-photo {
   background: var(--custom-line-bg, rgba(255, 255, 255, 0.22)) !important;
   color: var(--custom-line-fg, inherit) !important;
-  backdrop-filter: blur(4px) !important;
-  -webkit-backdrop-filter: blur(4px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  text-shadow: var(--custom-line-shadow, none) !important;
+  backdrop-filter: blur(var(--custom-line-blur, 4px)) !important;
+  -webkit-backdrop-filter: blur(var(--custom-line-blur, 4px)) !important;
+  border: 1px solid var(--custom-line-border, rgba(255, 255, 255, 0.25)) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
 }
 
@@ -3479,18 +3493,40 @@ function blockInfo(){
   const tint = t.cardColor || (dark ? '#1a1f32' : '#ffffff');
   const rgb = hexRgb(tint) || [255,255,255];
   const tl = relLum(rgb);
+
   if (mode === 'glass') {
+    // 1. Block transparency (0% to 100%)
     const trans = Math.max(0, Math.min(100, typeof t.cardTransparency === 'number' ? t.cardTransparency : 60));
     const a = Math.max(0, Math.min(1, (100 - trans) / 100));
     const bg = a <= 0.001 ? 'transparent' : ('rgba(' + rgb.join(',') + ',' + a.toFixed(2) + ')');
     const blurPx = trans >= 98 ? 0 : Math.round(8 * (1 - trans / 100) + 1);
-    const effLum = a <= 0.05 ? pageLum() : (a * tl + (1 - a) * pageLum());
+
+    // 2. Line (reply cards) transparency (0% to 100%)
+    const lineTrans = Math.max(0, Math.min(100, typeof t.lineTransparency === 'number' ? t.lineTransparency : 40));
+    const lineA = Math.max(0, Math.min(1, (100 - lineTrans) / 100));
+    const lineRgb = dark ? [22, 30, 48] : [255, 255, 255];
+    const lineBg = lineA <= 0.001 ? 'transparent' : ('rgba(' + lineRgb.join(',') + ',' + lineA.toFixed(2) + ')');
+    const lineBlur = lineTrans >= 98 ? '0px' : '4px';
+    const lineBorder = lineA <= 0.001 ? 'rgba(255,255,255,0.18)' : ('rgba(255,255,255,' + (0.15 + 0.25 * lineA).toFixed(2) + ')');
+
+    // Luminance & foreground text adaptation
+    const effLum = (a <= 0.05) ? pageLum() : (a * tl + (1 - a) * pageLum());
     const fg = effLum < 0.42 ? '#ffffff' : '#12262e';
-    const lineA = Math.max(0.12, 0.12 + 0.76 * a);
-    const lineBg = 'rgba(' + (dark ? '20,26,45' : '255,255,255') + ',' + lineA.toFixed(2) + ')';
-    const lineFg = fg;
-    return { mode, a, trans, bg, blurPx, fg, lineBg, lineFg };
+
+    const lineEffLum = (lineA <= 0.05) ? pageLum() : (lineA * relLum(lineRgb) + (1 - lineA) * effLum);
+    const lineFg = lineEffLum < 0.42 ? '#ffffff' : '#12262e';
+    const lineShadow = lineEffLum < 0.42 ? '0 1px 2px rgba(0,0,0,0.6)' : 'none';
+
+    // Stage count badge backing (Скрин 1)
+    const pillBg = effLum < 0.42 ? 'rgba(0, 0, 0, 0.44)' : 'rgba(255, 255, 255, 0.72)';
+
+    return {
+      mode, a, trans, bg, blurPx, fg,
+      lineTrans, lineA, lineBg, lineBlur, lineBorder, lineFg, lineShadow,
+      pillBg
+    };
   }
+
   if (mode === 'default' && t.cardColor) return { mode: 'solid', bg: t.cardColor, fg: tl < 0.42 ? '#ffffff' : '#12262e' };
   if (mode === 'neon') return { mode, bg: 'rgba(10,16,26,.88)', fg: '#e6f2f0' };
   return { mode: 'default', bg: tint, fg: dark ? '#edf0ff' : '#20263d' };
@@ -3500,18 +3536,22 @@ function previewInner(){
   const pageBg = t.bgImage ? 'url(&quot;' + t.bgImage + '&quot;) center/cover no-repeat' : (t.bodyBg || (dark ? '#101321' : '#eef2f0'));
   const accent = t.accent || '#008578';
   let blockStyle = 'background:' + b.bg + ';color:' + b.fg + ';';
-  if (b.mode === 'glass') blockStyle += 'backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.35);';
+  if (b.mode === 'glass') blockStyle += (b.blurPx ? 'backdrop-filter:blur(6px);' : '') + 'border:1px solid rgba(255,255,255,' + (0.35 * Math.max(0.15, b.a)).toFixed(2) + ');';
   else if (b.mode === 'neon') blockStyle += 'border:2px solid #00f5d4;box-shadow:0 0 14px rgba(0,245,212,.4);';
   else blockStyle += 'border:1px solid rgba(0,0,0,.12);';
-  const lineBg = dark ? '#20263d' : '#f5f6fc', lineFg = dark ? '#edf0ff' : '#20263d';
+
+  const lineBg = (b.mode === 'glass' && b.lineBg) ? b.lineBg : (dark ? '#20263d' : '#f5f6fc');
+  const lineFg = (b.mode === 'glass' && b.lineFg) ? b.lineFg : (dark ? '#edf0ff' : '#20263d');
+  const lineBorder = (b.mode === 'glass' && b.lineBorder) ? b.lineBorder : 'transparent';
   const pfg = pi ? pi.fg : (dark ? '#edf0ff' : '#20263d');
+
   return '<div class="tcd-pv-page" style="background:' + pageBg + '">' +
     '<div class="tcd-pv-head" style="background:' + (t.headerBg || '#102f44') + ';color:' + (headerIsDark(t.headerBg || '#102f44') ? '#fff' : '#12262e') + '">BAUER</div>' +
     '<div class="tcd-pv-block" style="' + blockStyle + '">' +
-      '<div class="tcd-pv-title">Приветствие</div>' +
-      '<div class="tcd-pv-line" style="background:' + lineBg + ';color:' + lineFg + ';border-left:3px solid ' + accent + '">Здравствуйте! Это пример реплики оператора.</div>' +
+      '<div class="tcd-pv-title" style="display:flex;justify-content:space-between;align-items:center"><span>Приветствие</span><span style="font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:' + (b.pillBg || 'rgba(0,0,0,0.3)') + ';color:' + b.fg + ';border:1px solid rgba(255,255,255,0.25)">01 / 07</span></div>' +
+      '<div class="tcd-pv-line" style="background:' + lineBg + ';color:' + lineFg + ';border-left:3px solid ' + accent + ';border-top:1px solid ' + lineBorder + ';border-right:1px solid ' + lineBorder + ';border-bottom:1px solid ' + lineBorder + '">Здравствуйте! Это пример реплики оператора.</div>' +
       '<div class="tcd-pv-sub">Частые возражения</div>' +
-      '<div class="tcd-pv-chips"><span style="background:' + lineBg + ';color:' + lineFg + '">Если отмазка</span><span style="background:' + lineBg + ';color:' + lineFg + '">Если негатив</span></div>' +
+      '<div class="tcd-pv-chips"><span style="background:' + lineBg + ';color:' + lineFg + ';border:1px solid ' + lineBorder + '">Если отмазка</span><span style="background:' + lineBg + ';color:' + lineFg + ';border:1px solid ' + lineBorder + '">Если негатив</span></div>' +
     '</div>' +
     '<div class="tcd-pv-foot" style="color:' + pfg + ';' + (pi ? 'text-shadow:' + pi.shadow : '') + '"><span>← Назад</span><span>Этап 1 из 7</span><span class="tcd-pv-next" style="background:' + accent + '">Далее →</span></div>' +
   '</div>';
@@ -3541,10 +3581,18 @@ function applyTheme(cfg, save = true){
     root.style.setProperty('--custom-card-blur', bInfo.blurPx + 'px');
     root.style.setProperty('--custom-line-bg', bInfo.lineBg);
     root.style.setProperty('--custom-line-fg', bInfo.lineFg);
+    root.style.setProperty('--custom-line-shadow', bInfo.lineShadow);
+    root.style.setProperty('--custom-line-blur', bInfo.lineBlur);
+    root.style.setProperty('--custom-line-border', bInfo.lineBorder);
+    root.style.setProperty('--custom-pill-bg', bInfo.pillBg);
   } else {
     root.style.removeProperty('--custom-card-blur');
     root.style.removeProperty('--custom-line-bg');
     root.style.removeProperty('--custom-line-fg');
+    root.style.removeProperty('--custom-line-shadow');
+    root.style.removeProperty('--custom-line-blur');
+    root.style.removeProperty('--custom-line-border');
+    root.style.removeProperty('--custom-pill-bg');
   }
   if (currentTheme.cardColor && cardModeOf(currentTheme) === 'default') root.dataset.cardColor = '1'; else delete root.dataset.cardColor;
   const pInfo = pageInfo();
@@ -3633,6 +3681,7 @@ function renderDesignSection(){
   const blockColors = ['#ffffff', '#e2f3ef', '#fff6de', '#e6f0fa', '#f1edff', '#1a1f32', '#0e1c20', '#2a1a08'];
   const cardMode = cardModeOf(currentTheme);
   const transparency = typeof currentTheme.cardTransparency === 'number' ? currentTheme.cardTransparency : 60;
+  const lineTransparency = typeof currentTheme.lineTransparency === 'number' ? currentTheme.lineTransparency : 40;
   const escapeFn = (typeof escapeHTML === 'function') ? escapeHTML : (s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
 
   return `<div class="owner-card" style="margin-bottom:24px">
@@ -3754,9 +3803,15 @@ function renderDesignSection(){
 
             ${cardMode === 'glass' ? `
             <div class="tcd-row">
-              <span class="tcd-label">Степень прозрачности: <b id="tcd-opacity-val">${transparency}%</b></span>
+              <span class="tcd-label">Прозрачность блока (рамка и подложка): <b id="tcd-opacity-val">${transparency}%</b></span>
               <input type="range" id="tcd-card-opacity" min="0" max="100" step="1" value="${transparency}" style="width:100%;accent-color:var(--ui)">
-              <small style="color:var(--muted)">0% — сплошной блок, 100% — полностью прозрачный. Реплики остаются выделенными.</small>
+              <small style="color:var(--muted)">0% — сплошной блок, 100% — блок полностью прозрачен и виден только фон.</small>
+            </div>
+
+            <div class="tcd-row" style="margin-top:8px">
+              <span class="tcd-label">Прозрачность реплик (карточек с текстом): <b id="tcd-line-opacity-val">${lineTransparency}%</b></span>
+              <input type="range" id="tcd-line-opacity" min="0" max="100" step="1" value="${lineTransparency}" style="width:100%;accent-color:var(--ui)">
+              <small style="color:var(--muted)">0% — сплошные светлые карточки, 100% — полностью прозрачные (текст поверх фона).</small>
             </div>` : ''}
 
             <div class="tcd-row">
@@ -3897,6 +3952,10 @@ document.addEventListener('input', (e) => {
     const v = Math.max(0, Math.min(100, +e.target.value || 0));
     applyTheme({ cardTransparency: v, id: 'custom' });
     const lbl = document.getElementById('tcd-opacity-val'); if (lbl) lbl.textContent = v + '%';
+  } else if (e.target.matches('#tcd-line-opacity')) {
+    const v = Math.max(0, Math.min(100, +e.target.value || 0));
+    applyTheme({ lineTransparency: v, id: 'custom' });
+    const lbl = document.getElementById('tcd-line-opacity-val'); if (lbl) lbl.textContent = v + '%';
   }
 });
 
