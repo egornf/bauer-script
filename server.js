@@ -1291,7 +1291,14 @@ function createAppServer(options = {}) {
           colleagues = allUsers.filter(u => u.id !== user.id && !u.blocked && (u.managerId === user.id || u.role === 'HEAD' || u.role === 'OWNER'));
         } else {
           // Operator: their manager and peer operators under the same manager
-          colleagues = allUsers.filter(u => u.id !== user.id && !u.blocked && (u.id === user.managerId || (user.managerId && u.managerId === user.managerId)));
+          const myManagerId = user.managerId || null;
+          colleagues = allUsers.filter(u => {
+            if (u.id === user.id || u.blocked) return false;
+            if (myManagerId) {
+              return u.id === myManagerId || u.managerId === myManagerId;
+            }
+            return u.role === 'HEAD' || u.role === 'OWNER' || !u.managerId;
+          });
         }
         return sendJson(res, 200, {
           colleagues: colleagues.map(u => ({
