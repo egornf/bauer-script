@@ -20,6 +20,7 @@
     
     if (raw) {
       const ut = JSON.parse(raw);
+      if (ut.id === 'velvet-night') { localStorage.removeItem('bauer-active-theme'); return; }
       const root = document.documentElement;
       if (ut.preset) root.dataset.themePreset = ut.preset;
       const cardStyle = ut.cardStyle === 'frosted' ? 'glass' : (ut.cardStyle || 'default');
@@ -3588,18 +3589,6 @@ body.auth-locked #auth-close{display:none!important}
       cardStyle: 'default',
       bodyPattern: 'none',
       bodyBg: 'linear-gradient(135deg, #e6f4f1 0%, #cce7e1 100%)'
-    },
-    {
-      id: 'velvet-night',
-      name: 'Королевский бархат',
-      desc: 'Глубокий винный оттенок и изысканный тёмный фон',
-      headerBg: '#3b1248',
-      headerPattern: 'stripes',
-      theme: 'dark',
-      accent: '#ec4899',
-      cardStyle: 'glass',
-      bodyPattern: 'none',
-      bodyBg: '#13091c'
     }
   ];
 
@@ -3613,6 +3602,7 @@ body.auth-locked #auth-close{display:none!important}
       const activeRaw = localStorage.getItem('bauer-active-theme');
       if (activeRaw) {
         const o = JSON.parse(activeRaw);
+        if (o.id === 'velvet-night') return { ...PRESETS[0] };
         if (o.cardStyle === 'frosted') o.cardStyle = 'glass';
         return o;
       }
