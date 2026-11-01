@@ -887,7 +887,7 @@ async function download(){
   const doc=document.documentElement.cloneNode(true);
   doc.querySelectorAll('.venue-picker').forEach(x=>x.remove());
   const lvEl=doc.querySelector('#layouts-view');if(lvEl){lvEl.innerHTML='';lvEl.hidden=true;lvEl.classList.remove('v4-giftmode');}
-  for(const id of ['addresses-view','address-dialog','whole-view']){const els=[...doc.querySelectorAll('#'+id)];els.slice(1).forEach(el=>el.remove());if(els[0]){els[0].hidden=true;els[0].innerHTML='';}}
+  for(const id of ['addresses-view','address-dialog','whole-view','owner-view']){const els=[...doc.querySelectorAll('#'+id)];els.slice(1).forEach(el=>el.remove());if(els[0]){els[0].hidden=true;els[0].innerHTML='';}}for(const sel of ['#user-modal','#recovery-modal','#owner-recover-dialog','#header-user-btn','#owner-tab','#open-owner-recovery']){doc.querySelectorAll(sel).forEach(el=>el.remove());}
   doc.querySelector('#sms-data').textContent=JSON.stringify(smsSource).replace(/</g,'\\u003c');
   doc.querySelector('#script-data').textContent=JSON.stringify(snapshot).replace(/</g,'\\u003c');
   let ldEl=doc.querySelector('#layouts-data');
@@ -939,70 +939,39 @@ function giftMarkup(gifts=data.gifts,readonly=false,settings=data.settings){
 }
 function smsMarkup(){return `<section class="sms-helper"><div class="kicker">ПРИГЛАШЕНИЕ ПОСЛЕ ЗВОНКА</div><h3>Конструктор SMS-приглашений BAUER</h3><p>Выберите город, зал и программу — подготовим персональное сообщение клиенту.</p><button type="button" class="primary" data-open-sms>Составить SMS →</button></section>`;}
 
-/* Local backend (browser storage) for the editor and layouts: works from a file or a hosted page without a server */
-let localMode=true;
-const LDB={db:null,open(){return this.db||(this.db=new Promise((ok,no)=>{const r=indexedDB.open('bauer-local',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}))},
-async get(k){const d=await this.open();return new Promise((ok,no)=>{const q=d.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)})},
-async set(k,v){const d=await this.open();return new Promise((ok,no)=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>ok();t.onerror=()=>no(t.error)})}};
-const pwHash=t=>{let x=5381;for(const c of 'bauer:'+t)x=(((x*33)&0xFFFFFFFF)^c.charCodeAt(0))>>>0;return x};
+/* Server-backed API for BAUER: all authentication, roles, and permissions are verified by the local backend server */
+let localMode=false,currentUser=null,csrfToken=null;
+const LDB={
+  async get(k){if(k==='giftbase'){try{return await api('/api/giftbase');}catch{return null;}}return null;},
+  async set(k,v){if(k==='giftbase'){if(!adminUnlocked)return;try{await api('/api/giftbase',{method:'PUT',body:JSON.stringify(v)});}catch(e){toast(e.message);}}}
+};
 const fail=(m,st)=>{const e=new Error(m);e.status=st;return e};
 const seedLayouts=(()=>{try{return JSON.parse(document.getElementById('layouts-data')?.textContent||'[]');}catch{return [];}})();
 async function getLocalLayouts(){
-  let list=(await LDB.get('layouts'))||[];
-  const needsRestore=!list.length||localStorage.getItem('bauer-prime-restored-v2')!=='1'||!list.some(l=>l&&l.id==='prime-ksh');
-  if(needsRestore&&seedLayouts.length){
-    list=list.filter(l=>l&&!/^Основной скрипт(\s+BAUER)?$/i.test((l.name||'').trim()));
-    const seedGifts=seedLayouts[0]?.data?.gifts||[];
-    for(const sl of [...seedLayouts].reverse()){
-      const idx=list.findIndex(l=>l.id===sl.id||l.name===sl.name);
-      if(idx>=0)list[idx]={...sl,id:sl.id,name:sl.name};
-      else list.unshift(clone(sl));
-    }
-    list.forEach(l=>{
-      if(!l?.data)return;
-      const gList=Array.isArray(l.data.gifts)?l.data.gifts:[];
-      for(const sg of seedGifts){if(!gList.some(x=>x.id===sg.id))gList.push(clone(sg));}
-      l.data.gifts=gList;
-    });
-    await LDB.set('layouts',list);
-    if(localStorage.getItem('bauer-prime-restored-v2')!=='1'){
-      localStorage.setItem('bauer-prime-restored-v2','1');
-      if(!localStorage.getItem('bauer-script-choice')||localStorage.getItem('bauer-script-choice')==='main'){
-        localStorage.setItem('bauer-script-choice','prime-ksh');
-      }
-      try{localStorage.removeItem('bauer-layout-draft-v4');}catch{}
-    }
-  }
-  return list;
+  try{return ((await api('/api/scripts')).layouts)||[];}catch{return [];}
 }
-async function localApi(path,o={}){
-  const m=(o.method||'GET').toUpperCase(),body=o.body?JSON.parse(o.body):{},ok=()=>true;
-  if(path==='/api/admin/status')return{unlocked:ok(),configured:true,signedIn:true,canSetup:true};
-  if(path==='/api/admin/login'||path==='/api/admin/setup'){if(pwHash((body.login||'').trim().toLowerCase()+':'+(body.password||''))!==169101042)throw fail('Неверный логин или пароль.',401);sessionStorage.setItem('bauer-admin','1');return{ok:true}}
-  if(path==='/api/admin/logout'){sessionStorage.removeItem('bauer-admin');return{ok:true}}
-  if(path==='/api/content'){if(m==='PUT'){if(!ok())throw fail('Нужен пароль.',401);const u=Date.now();await LDB.set('content',{data:{...body.data,gifts:[]},updatedAt:u});return{updatedAt:u}}const c=await LDB.get('content');return c||{data:null,updatedAt:0}}
-  if(path==='/api/scripts')return{layouts:await getLocalLayouts()};
-  if(path==='/api/addresses'){if(m==='PUT'){if(!ok())throw fail('Нужен пароль.',401);const rev=(((await LDB.get('addresses'))||{}).revision||0)+1;await LDB.set('addresses',{venues:body.venues,revision:rev});return{revision:rev,venues:body.venues}}return(await LDB.get('addresses'))||{revision:0,venues:smsSource.venues}}
-  if(path==='/api/layouts-order'&&m==='PUT'){const all=await getLocalLayouts(),ids=Array.isArray(body.ids)?body.ids:[],by=new Map(all.map(l=>[l.id,l]));
-    const head=ids.map(i=>by.get(i)).filter(Boolean),rest=all.filter(l=>!ids.includes(l.id));await LDB.set('layouts',[...head,...rest]);dispatchEvent(new Event('layouts-changed'));return{ok:true};}
-  let list=await getLocalLayouts();const id=(path.split('/')[3]||null);
-  if(m==='GET')return{layouts:list};
-  if(!ok())throw fail('Нужен пароль.',401);
-  if(m==='DELETE'){list=list.filter(l=>l.id!==id);await LDB.set('layouts',list);dispatchEvent(new Event('layouts-changed'));return{ok:true}}
-  const layout={id:id||('l'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)),name:String(body.name||'Без названия').slice(0,120),data:{...body.data,gifts:[]},savedAt:Date.now()};
-  if(list.some(l=>l.id===layout.id))list=list.map(l=>l.id===layout.id?layout:l);
-  else list=[layout,...list].slice(0,40);
-  await LDB.set('layouts',list);dispatchEvent(new Event('layouts-changed'));return{layout};
+function getCsrfCookie(){
+  const m=document.cookie.match(/(?:^|;\s*)bauer_csrf=([^;]+)/);
+  return m?decodeURIComponent(m[1]):'';
 }
 async function api(path,options={}){
-  if(localMode)return localApi(path,options);
-  try{return await api_remote(path,options)}catch(e){if(e.status)throw e;localMode=true;return localApi(path,options)}
+  return api_remote(path,options);
 }
 async function api_remote(path,options={}){
-  
-  const response=await fetch(path,{...options,credentials:'same-origin',headers:{...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})}});let result;
+  const token=csrfToken||getCsrfCookie();
+  const headers={...(options.body?{'Content-Type':'application/json'}:{}),...(token?{'X-CSRF-Token':token}:{}),...(options.headers||{})};
+  let response;
+  try{
+    response=await fetch(path,{...options,credentials:'same-origin',headers});
+  }catch{
+    throw new Error('Локальный сервер BAUER недоступен. Запустите сервер командой: npm start (node server.js)');
+  }
+  let result;
   try{result=await response.json();}catch{throw new Error('Сервис временно недоступен. Попробуйте ещё раз.');}
-  if(!response.ok){if(response.status===401)adminUnlocked=false;const error=new Error(result.error||'Не удалось выполнить действие.');error.status=response.status;throw error;}return result;
+  if(result&&result.csrfToken)csrfToken=result.csrfToken;
+  if(result&&result.user!==undefined)currentUser=result.user;
+  if(!response.ok){if(response.status===401){adminUnlocked=false;currentUser=null;dispatchEvent(new Event('auth-changed'));}const error=new Error(result.error||'Не удалось выполнить действие.');error.status=response.status;throw error;}
+  return result;
 }
 function setTab(name){document.querySelectorAll('.section-tab').forEach(button=>{const active=button.id===name+'-tab';button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});}
 function showScript(index=current,tab='script'){$('#sms-view').hidden=true;$('#objections-view').hidden=true;$('#layouts-view').hidden=true;$('.workspace').hidden=false;$('#edit').hidden=false;$('#all-objections').hidden=false;setTab(tab);go(index);}
@@ -1010,12 +979,22 @@ function showGifts(){const i=data.stages.findIndex(s=>s.showGifts&&!s.hidden);if
 function showSMS(){openSmsBuilder();}
 async function ensureAdmin(action){
   try{
-    const state=await api('/api/admin/status');if(state.unlocked){adminUnlocked=true;return await action();}
-    adminUnlocked=false;afterAuth=action;authSetup=!state.configured;$('#admin-password').value='';$('#admin-login').value='';$('#password-confirm').value='';$('#auth-error').textContent='';$('#admin-password').type='password';$('#password-visibility').textContent='Показать';
-    $('#confirm-wrap').hidden=!authSetup;$('#password-confirm').required=authSetup;$('#admin-password').autocomplete=authSetup?'new-password':'current-password';$('#auth-title').textContent=authSetup?'Задайте пароль':'Вход в редактор';
-    $('#auth-description').textContent=authSetup?'Придумайте пароль для закрытой вкладки. Здесь можно полностью управлять блоками и сохранять макеты.':'Введите логин и пароль, чтобы открыть редактор и сохранённые макеты.';$('#auth-submit').textContent=authSetup?'Создать пароль и войти':'Войти';
-    const blocked=!state.signedIn||(authSetup&&!state.canSetup);$('#auth-form').hidden=blocked;$('#owner-signin').hidden=!blocked;
-    if(blocked)$('#auth-description').textContent=!state.signedIn?'Для доступа к закрытой вкладке войдите в свой аккаунт ChatGPT. После входа сможете ввести пароль.':'Первый пароль задаёт владелец сайта. Откройте сайт под аккаунтом владельца.';
+    const state=await api('/api/admin/status');
+    currentUser=state.user||null;
+    if(state.csrfToken)csrfToken=state.csrfToken;
+    dispatchEvent(new Event('auth-changed'));
+    if(state.unlocked){adminUnlocked=true;return await action();}
+    adminUnlocked=false;afterAuth=action;authSetup=!state.configured;
+    $('#admin-password').value='';$('#admin-login').value='';$('#password-confirm').value='';$('#auth-error').textContent='';
+    $('#admin-password').type='password';$('#password-visibility').textContent='Показать';
+    $('#confirm-wrap').hidden=!authSetup;$('#password-confirm').required=authSetup;
+    $('#admin-password').autocomplete=authSetup?'new-password':'current-password';
+    $('#auth-title').textContent=authSetup?'Создание главной записи OWNER':'Вход в систему BAUER';
+    $('#auth-description').textContent=authSetup?'В системе может быть только один OWNER (Владелец) с полным доступом. Задайте логин и пароль от 8 символов.':'Введите логин и пароль своей учётной записи (OWNER, Администратор или Редактор).';
+    $('#auth-submit').textContent=authSetup?'Создать OWNER и войти':'Войти';
+    const recBtn=document.getElementById('open-owner-recovery');
+    if(recBtn)recBtn.hidden=authSetup;
+    $('#auth-form').hidden=false;$('#owner-signin').hidden=true;
     $('#auth-dialog').showModal();
   }catch(error){toast(error.message);}
 }
@@ -1049,7 +1028,16 @@ $('#password-visibility').addEventListener('click',()=>{const input=$('#admin-pa
 $('#auth-form').addEventListener('submit',async event=>{
   event.preventDefault();const password=$('#admin-password').value;if(authSetup&&password!==$('#password-confirm').value){$('#auth-error').textContent='Пароли не совпадают.';return;}
   const button=$('#auth-submit');button.disabled=true;$('#auth-error').textContent='';
-  try{await api('/api/admin/'+(authSetup?'setup':'login'),{method:'POST',body:JSON.stringify({password,login:$('#admin-login').value})});adminUnlocked=true;$('#auth-dialog').close();if(authSetup){try{await saveNamedLayout('Основной скрипт BAUER');}catch{}}const action=afterAuth;afterAuth=null;if(action)await action();}
+  try{
+    const res=await api('/api/admin/'+(authSetup?'setup':'login'),{method:'POST',body:JSON.stringify({password,login:$('#admin-login').value})});
+    adminUnlocked=true;currentUser=res.user||null;if(res.csrfToken)csrfToken=res.csrfToken;
+    dispatchEvent(new Event('auth-changed'));
+    $('#auth-dialog').close();
+    if(res.recoveryCodes&&res.recoveryCodes.length&&typeof window.showOwnerRecoveryCodesModal==='function'){
+      await window.showOwnerRecoveryCodesModal(res.recoveryCodes,true);
+    }
+    const action=afterAuth;afterAuth=null;if(action)await action();
+  }
   catch(error){if(!$('#auth-dialog').open)toast(error.message);else $('#auth-error').textContent=error.message;}finally{button.disabled=false;}
 });
 $('#preview-close').addEventListener('click',()=>$('#layout-preview').close());$('#preview-apply').addEventListener('click',()=>applyLayout());
@@ -1664,8 +1652,7 @@ lv.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-v4
     let ch=!rec;ch=mergeGifts(data.gifts)||ch;
     for(const l of layouts)ch=mergeGifts(l&&l.data&&l.data.gifts)||ch;
     giftReady=true;
-    if(ch){await LDB.set('giftbase',{gifts:clone(giftBase),deleted:[...giftDeleted],updatedAt:Date.now()});}
-    if(layouts.some(l=>l&&l.data&&l.data.gifts&&l.data.gifts.length)){const all=(await LDB.get('layouts'))||[];all.forEach(l=>{if(l&&l.data)l.data.gifts=[];});await LDB.set('layouts',all);}
+    /* Server already seeds giftbase and layouts */
     adoptGifts(data);
     if(typeof editorDraft!=='undefined'&&editorDraft)editorDraft.gifts=clone(giftBase);
     renderCards();
@@ -1697,4 +1684,695 @@ if(typeof applyVenues==='function'){const orig=applyVenues;applyVenues=function(
 api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{applyVenues(r.venues)}catch{smsSource.venues=r.venues;fill()}try{renderCards()}catch{}}}).catch(()=>{});
 })();
 </script>
+<style id="owner-styles">@media screen{
+.owner-view{flex:1;min-height:0;overflow-y:auto;width:100%;max-width:1580px;margin:0 auto;padding:24px 28px 44px}
+.owner-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.owner-header h1{font-size:28px;font-weight:800;letter-spacing:-.03em;margin:6px 0 6px}
+.owner-header p{margin:0;color:var(--muted);font-size:13px}
+.owner-badge-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.role-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 13px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.role-pill.owner{background:var(--amber);color:#2a1d00}
+.role-pill.admin{background:var(--ui-soft);color:var(--accent-ink);border:1px solid var(--ui-border)}
+.role-pill.editor{background:var(--surface-alt);color:var(--ink);border:1px solid var(--line)}
+.role-pill.operator{background:var(--surface-alt);color:var(--muted);border:1px solid var(--line)}
+.status-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700}
+.status-pill.active{background:var(--ui-soft);color:var(--accent-ink)}
+.status-pill.blocked{background:var(--purple-soft);color:var(--purple)}
+.owner-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;padding:5px;background:var(--surface);border:1px solid var(--line);border-radius:14px;width:fit-content;max-width:100%}
+.owner-nav button{border:0;background:transparent;min-height:38px;padding:0 16px;border-radius:10px;font-weight:700;font-size:13px}
+.owner-nav button:hover{background:var(--ui-soft)}
+.owner-nav button.on{background:var(--bar);color:#fff}
+:root[data-theme=dark] .owner-nav button.on{background:var(--ui);color:#052521}
+.owner-card{background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:22px 26px;margin-bottom:20px}
+.owner-card-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.owner-card-head h2{margin:0;font-size:20px;font-weight:800}
+.owner-card-head p{margin:4px 0 0;font-size:12px;color:var(--muted)}
+.owner-grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px}
+.user-list{display:flex;flex-direction:column;gap:12px}
+.user-row{display:grid;grid-template-columns:minmax(220px,1.2fr) minmax(220px,1.6fr) auto;gap:16px;align-items:center;padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--surface-alt)}
+.user-row.is-owner{border:2px solid var(--amber);background:color-mix(in srgb,var(--amber-soft) 45%,var(--surface))}
+.user-row.is-blocked{opacity:.72;border-color:color-mix(in srgb,var(--purple) 40%,var(--line))}
+.user-main{display:flex;flex-direction:column;gap:5px;min-width:0}
+.user-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:16px;font-weight:800}
+.user-meta{font-size:12px;color:var(--muted);line-height:1.5}
+.perm-chips{display:flex;flex-wrap:wrap;gap:6px}
+.perm-chip{font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.perm-chip.all{background:var(--amber-soft);border-color:var(--amber-line);color:var(--ink);font-weight:700}
+.user-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.user-actions button{min-height:36px;padding:0 13px;font-size:12px}
+.session-row{display:grid;grid-template-columns:minmax(200px,1fr) minmax(220px,1.5fr) auto;gap:14px;align-items:center;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface-alt);margin-bottom:10px}
+.session-row.current{border-color:var(--ui);background:var(--ui-soft)}
+.audit-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.audit-toolbar input,.audit-toolbar select{height:40px;padding:0 13px;border-radius:11px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);font:inherit;font-size:13px}
+.audit-toolbar input{flex:1;min-width:220px}
+.audit-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px}
+.audit-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}
+.audit-table th,.audit-table td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.audit-table th{background:var(--surface-alt);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800}
+.audit-table tr:last-child td{border-bottom:0}
+.audit-status{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
+.audit-status.success{background:var(--ui-soft);color:var(--accent-ink)}
+.audit-status.denied,.audit-status.failed{background:var(--purple-soft);color:var(--purple)}
+.owner-dialog{width:min(560px,calc(100% - 28px));max-height:90dvh;overflow-y:auto;padding:28px;background:var(--surface);color:var(--ink);border-radius:22px;border:1px solid var(--line)}
+.owner-dialog h2{margin:6px 0 10px;font-size:24px;font-weight:800}
+.owner-dialog label{display:block;font-size:12px;font-weight:700;margin:14px 0 6px;color:var(--ink)}
+.owner-dialog input:not([type=checkbox]),.owner-dialog select{width:100%;height:42px;padding:0 13px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);font:inherit;font-size:14px}
+.perm-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-alt)}
+.perm-grid label{display:flex;align-items:center;gap:8px;margin:0;font-size:12px;font-weight:600;cursor:pointer}
+.perm-grid input{width:16px;height:16px;accent-color:var(--ui)}
+.recovery-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0;padding:16px;border:2px dashed var(--amber);border-radius:14px;background:var(--amber-soft)}
+.recovery-code-item{font-family:ui-monospace,Consolas,monospace;font-size:15px;font-weight:800;letter-spacing:.08em;padding:10px 12px;background:var(--surface);border:1px solid var(--amber-line);border-radius:9px;text-align:center;color:var(--ink);user-select:all}
+.header-user-badge{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:10px;background:#ffffff14;border:1px solid #ffffff24;color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.header-user-badge:hover{background:#ffffff24}
+.header-user-badge .dot-owner{width:8px;height:8px;border-radius:50%;background:var(--amber)}
+.auth-recover-link{display:block;width:100%;margin-top:12px;padding:8px;border:0;background:transparent;color:var(--accent-ink);font-size:12px;font-weight:600;text-align:center;text-decoration:underline;cursor:pointer}
+@media(max-width:900px){.user-row,.session-row{grid-template-columns:1fr}.user-actions{justify-content:flex-start}.perm-grid,.recovery-grid{grid-template-columns:1fr}}
+}</style>
+<script id="owner-module">
+(()=>{
+const E=escapeHTML;
+const PERM_LABELS={
+  'content.edit':'Редактирование и публикация скрипта',
+  'layouts.manage':'Создание и удаление макетов',
+  'gifts.manage':'Управление базой подарков',
+  'addresses.manage':'Управление адресами площадок',
+  'settings.manage':'Настройки оформления сайта',
+  'users.view':'Просмотр списка пользователей',
+  'audit.view':'Просмотр журнала действий'
+};
+const ROLE_NAMES={
+  OWNER:'OWNER · Владелец',
+  ADMIN:'Администратор',
+  EDITOR:'Редактор',
+  OPERATOR:'Оператор'
+};
+const ACTION_LABELS={
+  'owner.setup':'Первичная регистрация OWNER',
+  'owner.setup.denied':'Попытка повторного создания OWNER',
+  'auth.login.success':'Успешный вход в систему',
+  'auth.login.failed':'Неудачная попытка входа',
+  'auth.login.blocked':'Попытка входа заблокированного пользователя',
+  'auth.login.rate_limited':'Блокировка перебора пароля (Rate Limit)',
+  'auth.logout':'Выход из системы',
+  'owner.recovery.success':'Восстановление доступа OWNER по резервному коду',
+  'owner.recovery.failed':'Неудачная попытка восстановления OWNER',
+  'owner.recovery_codes.regenerated':'Перевыпуск резервных кодов OWNER',
+  'owner.profile.updated':'Обновление профиля OWNER',
+  'owner.protection.triggered':'Заблокирована попытка ограничить права OWNER',
+  'owner.promotion.denied':'Заблокирована попытка назначить второго OWNER',
+  'owner.delete.denied':'Заблокирована попытка удалить OWNER',
+  'users.create':'Создание пользователя',
+  'users.update':'Изменение пользователя / прав',
+  'users.delete':'Удаление пользователя',
+  'users.manage.denied':'Отказ в доступе к управлению пользователями',
+  'sessions.revoke':'Принудительное завершение сессии',
+  'sessions.revoke_user':'Завершение всех сессий пользователя',
+  'content.publish':'Публикация рабочего скрипта',
+  'layouts.create':'Создание макета',
+  'layouts.update':'Обновление макета',
+  'layouts.delete':'Удаление макета',
+  'layouts.reorder':'Изменение порядка скриптов',
+  'gifts.update':'Обновление базы подарков',
+  'addresses.update':'Обновление адресов площадок',
+  'user.password.changed':'Смена пароля'
+};
+
+const navTabs=document.querySelector('.switcher-tabs');
+if(navTabs&&!document.getElementById('owner-tab')){
+  navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">OWNER · Управление</span></button>');
+}
+if(!document.getElementById('owner-view')){
+  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog>');
+}
+
+const authFoot=document.querySelector('#auth-dialog .auth-foot');
+if(authFoot&&!document.getElementById('open-owner-recovery')){
+  authFoot.insertAdjacentHTML('beforebegin','<button type="button" id="open-owner-recovery" class="auth-recover-link">Забыли пароль OWNER? Восстановить по резервному коду →</button>');
+}
+
+const toolsBar=document.querySelector('.app-header .tools');
+if(toolsBar&&!document.getElementById('header-user-btn')){
+  toolsBar.insertAdjacentHTML('afterbegin','<button type="button" id="header-user-btn" class="header-user-badge" hidden></button>');
+}
+
+const origSetTab=setTab;
+setTab=function(name){
+  const ov=document.getElementById('owner-view');
+  if(ov)ov.hidden=name!=='owner';
+  origSetTab(name);
+};
+const origShowScript=showScript;
+showScript=function(index=current,tab='script'){
+  const ov=document.getElementById('owner-view');
+  if(ov)ov.hidden=true;
+  origShowScript(index,tab);
+};
+
+let ownerTab='users',usersList=[],sessionsList=[],auditList=[],auditFilterUser='',auditFilterAction='',roleDefaults={};
+
+function fmtTime(ts){
+  if(!ts)return '—';
+  return new Intl.DateTimeFormat('ru-RU',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(ts));
+}
+
+function updateHeaderBadge(){
+  const btn=document.getElementById('header-user-btn');
+  const tabLbl=document.getElementById('owner-tab-label');
+  if(!btn)return;
+  if(currentUser){
+    btn.hidden=false;
+    const isOwner=currentUser.role==='OWNER';
+    btn.innerHTML=`${isOwner?'<span class="dot-owner"></span>':''}<span>${E(currentUser.login)} · ${E(currentUser.role)}</span>`;
+    if(tabLbl)tabLbl.textContent=isOwner?'OWNER · Управление':'Профиль ('+currentUser.role+')';
+  }else{
+    btn.hidden=true;
+    if(tabLbl)tabLbl.textContent='OWNER · Управление';
+  }
+}
+
+addEventListener('auth-changed',updateHeaderBadge);
+api('/api/admin/status').then(st=>{
+  adminUnlocked=Boolean(st.unlocked);
+  currentUser=st.user||null;
+  if(st.csrfToken)csrfToken=st.csrfToken;
+  if(st.roleDefaults)roleDefaults=st.roleDefaults;
+  updateHeaderBadge();
+}).catch(()=>{});
+
+async function openOwnerPanel(){
+  await ensureAdmin(async()=>{
+    if(!$('#drawer').hidden)closeDrawer();
+    for(const el of document.querySelectorAll('main'))el.hidden=true;
+    $('#edit').hidden=true;$('#all-objections').hidden=true;
+    setTab('owner');
+    await loadOwnerData();
+    renderOwnerView();
+  });
+}
+
+document.getElementById('owner-tab')?.addEventListener('click',openOwnerPanel);
+document.getElementById('header-user-btn')?.addEventListener('click',openOwnerPanel);
+
+async function loadOwnerData(){
+  try{
+    const st=await api('/api/admin/status');
+    currentUser=st.user||null;
+    roleDefaults=st.roleDefaults||roleDefaults;
+    updateHeaderBadge();
+    if(!currentUser)return;
+    if(currentUser.role==='OWNER'||(currentUser.permissions||[]).includes('users.view')){
+      const uRes=await api('/api/users');
+      usersList=uRes.users||[];
+      roleDefaults=uRes.roleDefaults||roleDefaults;
+    }
+    if(currentUser.role==='OWNER'){
+      const sRes=await api('/api/sessions');
+      sessionsList=sRes.sessions||[];
+    }
+    if(currentUser.role==='OWNER'||(currentUser.permissions||[]).includes('audit.view')){
+      const params=new URLSearchParams({limit:'200'});
+      if(auditFilterUser)params.set('user',auditFilterUser);
+      if(auditFilterAction)params.set('action',auditFilterAction);
+      const aRes=await api('/api/audit?'+params.toString());
+      auditList=aRes.events||[];
+    }
+  }catch(e){
+    toast(e.message);
+  }
+}
+
+function renderUsersSection(){
+  const isOwner=currentUser?.role==='OWNER';
+  return `<div class="owner-card">
+    <div class="owner-card-head">
+      <div>
+        <h2>Учётные записи и полномочия (${usersList.length})</h2>
+        <p>В системе может быть только один <b>OWNER (Владелец)</b>. Ни один пользователь, включая администраторов, не может удалить, заблокировать или изменить права OWNER.</p>
+      </div>
+      ${isOwner?`<button type="button" class="primary" data-owner-act="create-user">+ Добавить пользователя / администратора</button>`:''}
+    </div>
+    <div class="user-list">
+      ${usersList.map(u=>{
+        const uIsOwner=u.role==='OWNER';
+        const roleClass=u.role.toLowerCase();
+        return `<article class="user-row ${uIsOwner?'is-owner':''} ${u.blocked?'is-blocked':''}">
+          <div class="user-main">
+            <div class="user-title">
+              <span>${E(u.displayName||u.login)}</span>
+              <span style="color:var(--muted);font-weight:500;font-size:13px">@${E(u.login)}</span>
+              <span class="role-pill ${E(roleClass)}">${E(ROLE_NAMES[u.role]||u.role)}</span>
+              <span class="status-pill ${u.blocked?'blocked':'active'}">${u.blocked?'Заблокирован':'Активен'}</span>
+            </div>
+            <div class="user-meta">
+              Создан: ${fmtTime(u.createdAt)} · Последний вход: ${fmtTime(u.lastLoginAt)} · Активных сессий: <b>${u.activeSessionsCount||0}</b>
+            </div>
+          </div>
+          <div class="perm-chips">
+            ${uIsOwner
+              ?'<span class="perm-chip all">★ Полный доступ ко всем функциям, настройкам и пользователям (Неизменяемый OWNER)</span>'
+              :(u.permissions&&u.permissions.length
+                ?u.permissions.map(p=>`<span class="perm-chip">${E(PERM_LABELS[p]||p)}</span>`).join('')
+                :'<span class="user-meta">Только чтение рабочего скрипта (Оператор)</span>')}
+          </div>
+          <div class="user-actions">
+            ${uIsOwner
+              ?(isOwner?`<button type="button" data-owner-act="edit-owner-profile">Профиль и пароль OWNER</button><button type="button" data-owner-act="regen-codes">Резервные коды (${u.recoveryCodesRemaining??0})</button>`:`<span class="user-meta">Защищено системой</span>`)
+              :(isOwner?`
+                <button type="button" data-owner-act="edit-user" data-id="${E(u.id)}">Права и роль</button>
+                <button type="button" data-owner-act="toggle-block" data-id="${E(u.id)}" data-blocked="${u.blocked?'1':'0'}">${u.blocked?'Разблокировать':'Блокировать'}</button>
+                ${u.activeSessionsCount?`<button type="button" data-owner-act="revoke-user-sessions" data-id="${E(u.id)}">Сбросить сессии (${u.activeSessionsCount})</button>`:''}
+                <button type="button" class="danger-text" data-owner-act="delete-user" data-id="${E(u.id)}" data-login="${E(u.login)}">Удалить</button>
+              `:'')}
+          </div>
+        </article>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderSessionsSection(){
+  return `<div class="owner-card">
+    <div class="owner-card-head">
+      <div>
+        <h2>Активные сессии пользователей (${sessionsList.length})</h2>
+        <p>OWNER видит все открытые сессии и может принудительно завершить любую из них.</p>
+      </div>
+      <button type="button" data-owner-act="refresh">↻ Обновить</button>
+    </div>
+    <div>
+      ${sessionsList.map(s=>`<div class="session-row ${s.current?'current':''}">
+        <div>
+          <div class="user-title">
+            <span>${E(s.displayName||s.userLogin)}</span>
+            <span class="role-pill ${E((s.userRole||'').toLowerCase())}">${E(s.userRole)}</span>
+            ${s.current?'<span class="status-pill active">Текущая сессия</span>':''}
+          </div>
+          <div class="user-meta">Логин: @${E(s.userLogin)} · IP: ${E(s.ip||'local')}</div>
+        </div>
+        <div class="user-meta">
+          <div>Вход: <b>${fmtTime(s.createdAt)}</b></div>
+          <div>Активность: <b>${fmtTime(s.lastActiveAt)}</b></div>
+          <div style="font-size:11px;opacity:.8">${E((s.userAgent||'').slice(0,95))}</div>
+        </div>
+        <div class="user-actions">
+          <button type="button" class="danger-text" data-owner-act="kill-session" data-id="${E(s.id)}">${s.current?'Завершить и выйти':'Завершить сессию ✕'}</button>
+        </div>
+      </div>`).join('')||'<p class="v4-empty">Активных сессий не найдено.</p>'}
+    </div>
+  </div>`;
+}
+
+function renderAuditSection(){
+  return `<div class="owner-card">
+    <div class="owner-card-head">
+      <div>
+        <h2>Журнал входов и действий (Audit Log)</h2>
+        <p>Фиксируются все входы, попытки подбора пароля, изменения ролей, блокировки, сессии и правки контента.</p>
+      </div>
+      <button type="button" data-owner-act="refresh">↻ Обновить журнал</button>
+    </div>
+    <div class="audit-toolbar">
+      <input type="search" id="audit-filter-user" placeholder="Фильтр по логину пользователя или цели…" value="${E(auditFilterUser)}">
+      <input type="search" id="audit-filter-action" placeholder="Фильтр по типу события (например: auth, users, layouts)…" value="${E(auditFilterAction)}">
+      <button type="button" class="primary" data-owner-act="filter-audit">Найти</button>
+      ${(auditFilterUser||auditFilterAction)?`<button type="button" data-owner-act="clear-audit-filter">Сбросить</button>`:''}
+    </div>
+    <div class="audit-table-wrap">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Дата и время</th>
+            <th>Статус</th>
+            <th>Пользователь</th>
+            <th>Действие</th>
+            <th>Объект / Детали</th>
+            <th>IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${auditList.map(ev=>{
+            const det=ev.details&&Object.keys(ev.details).length?JSON.stringify(ev.details):'';
+            return `<tr>
+              <td style="white-space:nowrap">${fmtTime(ev.timestamp)}</td>
+              <td><span class="audit-status ${E(ev.status||'success')}">${ev.status==='denied'?'ОТКАЗ':ev.status==='failed'?'ОШИБКА':'ОК'}</span></td>
+              <td><b>${E(ev.actorLogin||'anonymous')}</b>${ev.actorRole?` <small style="color:var(--muted)">(${E(ev.actorRole)})</small>`:''}</td>
+              <td><b>${E(ACTION_LABELS[ev.action]||ev.action)}</b><br><small style="color:var(--muted)">${E(ev.action)}</small></td>
+              <td>${ev.target?`<b>${E(ev.target)}</b> `:''}${det?`<small style="color:var(--muted);word-break:break-all">${E(det)}</small>`:''}</td>
+              <td style="white-space:nowrap;color:var(--muted)">${E(ev.ip||'—')}</td>
+            </tr>`;
+          }).join('')||'<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">Записей в журнале не найдено.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderSecuritySection(){
+  const isOwner=currentUser?.role==='OWNER';
+  return `<div class="owner-grid-2">
+    <div class="owner-card">
+      <div class="owner-card-head">
+        <div>
+          <h2>Профиль и смена пароля</h2>
+          <p>Ваша учётная запись: <b>@${E(currentUser?.login)}</b> (${E(ROLE_NAMES[currentUser?.role]||currentUser?.role)})</p>
+        </div>
+      </div>
+      ${isOwner?`<form id="owner-profile-form" style="margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--line)">
+        <label for="own-prof-login">Логин OWNER</label>
+        <input id="own-prof-login" name="login" required maxlength="64" value="${E(currentUser.login)}" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+        <label for="own-prof-name" style="display:block;margin-top:12px">Отображаемое имя</label>
+        <input id="own-prof-name" name="displayName" maxlength="100" value="${E(currentUser.displayName||currentUser.login)}" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+        <button type="submit" style="margin-top:12px">Сохранить профиль OWNER</button>
+      </form>`:''}
+      <form id="self-password-form">
+        <h3 style="margin:0 0 10px;font-size:16px">Изменить пароль</h3>
+        <label for="self-cur-pw" style="display:block;margin:10px 0 5px;font-size:12px;font-weight:700">Текущий пароль</label>
+        <input id="self-cur-pw" type="password" required maxlength="128" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+        <label for="self-new-pw" style="display:block;margin:10px 0 5px;font-size:12px;font-weight:700">Новый пароль (не менее 8 символов)</label>
+        <input id="self-new-pw" type="password" required minlength="8" maxlength="128" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+        <button type="submit" class="primary" style="margin-top:14px">Обновить пароль</button>
+      </form>
+    </div>
+    ${isOwner?`<div class="owner-card">
+      <div class="owner-card-head">
+        <div>
+          <h2>Аварийное восстановление доступа OWNER</h2>
+          <p>Одноразовые резервные коды хранятся на сервере в захешированном виде (scrypt) и позволяют восстановить доступ OWNER при утере пароля без внешних серверов.</p>
+        </div>
+      </div>
+      <p style="font-size:14px;line-height:1.6">Доступно неиспользованных резервных кодов: <b style="font-size:18px;color:var(--accent-ink)">${currentUser.recoveryCodesRemaining??0} из 6</b></p>
+      <form id="regen-recovery-form" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
+        <label for="regen-pw" style="display:block;margin-bottom:6px;font-size:12px;font-weight:700">Подтвердите текущий пароль OWNER для выпуска новых кодов</label>
+        <input id="regen-pw" type="password" required maxlength="128" placeholder="Текущий пароль OWNER" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+        <p style="font-size:12px;color:var(--muted);margin:8px 0 12px">При перевыпуске старые резервные коды немедленно аннулируются.</p>
+        <button type="submit" class="primary">Сгенерировать новые резервные коды</button>
+      </form>
+    </div>`:''}
+  </div>`;
+}
+
+function renderOwnerView(){
+  const ov=document.getElementById('owner-view');
+  if(!ov||!currentUser)return;
+  const isOwner=currentUser.role==='OWNER';
+  const canViewUsers=isOwner||(currentUser.permissions||[]).includes('users.view');
+  const canViewAudit=isOwner||(currentUser.permissions||[]).includes('audit.view');
+  if(ownerTab==='users'&&!canViewUsers)ownerTab='security';
+  if(ownerTab==='sessions'&&!isOwner)ownerTab='security';
+  if(ownerTab==='audit'&&!canViewAudit)ownerTab='security';
+
+  const navItems=[];
+  if(canViewUsers)navItems.push(['users',`👥 Пользователи и роли (${usersList.length})`]);
+  if(isOwner)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
+  if(canViewAudit)navItems.push(['audit',`📋 Журнал действий`]);
+  navItems.push(['security',`🔐 Безопасность и профиль`]);
+
+  ov.innerHTML=`<header class="owner-header">
+    <div>
+      <div class="kicker">${isOwner?'ГЛАВНАЯ УЧЁТНАЯ ЗАПИСЬ ВЛАДЕЛЬЦА':'УЧЁТНАЯ ЗАПИСЬ СОТРУДНИКА'}</div>
+      <h1>${isOwner?'Центр управления OWNER':'Профиль и доступ'}</h1>
+      <p>Все пароли хешируются (scrypt), права доступа и защита учётной записи OWNER проверяются локальным сервером.</p>
+    </div>
+    <div class="owner-badge-bar">
+      <span class="role-pill ${E(currentUser.role.toLowerCase())}">${E(ROLE_NAMES[currentUser.role]||currentUser.role)} · @${E(currentUser.login)}</span>
+      <button type="button" data-owner-act="back">← К скрипту</button>
+      <button type="button" class="danger-text" data-owner-act="logout">Выйти из аккаунта</button>
+    </div>
+  </header>
+  <nav class="owner-nav" role="tablist">
+    ${navItems.map(([id,lbl])=>`<button type="button" role="tab" class="${ownerTab===id?'on':''}" data-owner-tab="${id}">${lbl}</button>`).join('')}
+  </nav>
+  ${ownerTab==='users'?renderUsersSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():renderSecuritySection()}`;
+}
+
+function openUserModal(editUser=null){
+  const dlg=document.getElementById('user-modal');
+  const isEdit=Boolean(editUser);
+  const role=editUser?editUser.role:'ADMIN';
+  const perms=editUser?editUser.permissions:(roleDefaults[role]||[]);
+  dlg.innerHTML=`<button type="button" class="dialog-x" data-close-modal="user-modal" aria-label="Закрыть">✕</button>
+    <div class="kicker">${isEdit?'НАСТРОЙКА ПОЛНОМОЧИЙ':'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}</div>
+    <h2 id="user-modal-title">${isEdit?`Пользователь @${E(editUser.login)}`:'Создать пользователя'}</h2>
+    <form id="user-modal-form" data-edit-id="${isEdit?E(editUser.id):''}">
+      <label for="um-login">Логин (латиница, цифры, . _ -)</label>
+      <input id="um-login" name="login" required maxlength="64" value="${isEdit?E(editUser.login):''}" autocomplete="off">
+      <label for="um-name">Имя / должность</label>
+      <input id="um-name" name="displayName" maxlength="100" value="${isEdit?E(editUser.displayName||''):''}" placeholder="Например: Старший администратор Анна">
+      <label for="um-password">${isEdit?'Новый пароль (оставьте пустым, чтобы не менять)':'Пароль (не менее 8 символов)'}</label>
+      <input id="um-password" name="password" type="password" ${isEdit?'':'required'} minlength="8" maxlength="128" autocomplete="new-password">
+      <label for="um-role">Роль в системе (OWNER может быть только один)</label>
+      <select id="um-role" name="role">
+        <option value="ADMIN" ${role==='ADMIN'?'selected':''}>Администратор (управление контентом, макетами, настройками)</option>
+        <option value="EDITOR" ${role==='EDITOR'?'selected':''}>Редактор (правка скрипта, подарков и адресов)</option>
+        <option value="OPERATOR" ${role==='OPERATOR'?'selected':''}>Оператор (работа со скриптом + выбранные права)</option>
+      </select>
+      <label>Детальные права доступа (проверяются сервером)</label>
+      <div class="perm-grid" id="um-perm-grid">
+        ${Object.entries(PERM_LABELS).map(([k,lbl])=>`<label><input type="checkbox" name="perm" value="${E(k)}" ${perms.includes(k)?'checked':''}><span>${E(lbl)}</span></label>`).join('')}
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
+        <input type="checkbox" name="blocked" ${editUser?.blocked?'checked':''} style="width:16px;height:16px">
+        <span>Заблокировать вход этому пользователю</span>
+      </label>
+      <p id="um-error" class="form-error" role="alert"></p>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="submit" class="primary" style="flex:1">${isEdit?'Сохранить изменения':'Создать пользователя'}</button>
+        <button type="button" data-close-modal="user-modal">Отмена</button>
+      </div>
+    </form>`;
+  const roleSelect=dlg.querySelector('#um-role');
+  roleSelect.addEventListener('change',()=>{
+    const defs=roleDefaults[roleSelect.value]||[];
+    dlg.querySelectorAll('input[name="perm"]').forEach(cb=>{cb.checked=defs.includes(cb.value);});
+  });
+  dlg.showModal();
+}
+
+window.showOwnerRecoveryCodesModal=function(codes,isInitial=false){
+  return new Promise(resolve=>{
+    const dlg=document.getElementById('recovery-modal');
+    dlg.innerHTML=`<div class="kicker">БЕЗОПАСНОЕ ВОССТАНОВЛЕНИЕ ДОСТУПА OWNER</div>
+      <h2 id="recovery-modal-title">${isInitial?'Главная запись OWNER создана!':'Новые резервные коды OWNER'}</h2>
+      <p style="font-size:13px;line-height:1.6;color:var(--muted)">Сохраните эти одноразовые резервные коды в надёжном месте. На сервере хранятся только их криптографические хеши. Любой из этих кодов позволит восстановить доступ к главной записи <b>OWNER</b>, если вы забудете пароль.</p>
+      <div class="recovery-grid">
+        ${codes.map(c=>`<div class="recovery-code-item">${E(c)}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" id="copy-recovery-codes">Скопировать коды</button>
+        <button type="button" class="primary" id="close-recovery-codes" style="flex:1">Я сохранил(а) резервные коды →</button>
+      </div>`;
+    dlg.querySelector('#copy-recovery-codes').addEventListener('click',async()=>{
+      try{await navigator.clipboard.writeText(codes.join('\n'));toast('Резервные коды скопированы в буфер обмена');}catch{}
+    });
+    dlg.querySelector('#close-recovery-codes').addEventListener('click',()=>{
+      dlg.close();resolve();
+    });
+    dlg.showModal();
+  });
+};
+
+document.getElementById('open-owner-recovery')?.addEventListener('click',()=>{
+  document.getElementById('auth-dialog')?.close();
+  const dlg=document.getElementById('owner-recover-dialog');
+  dlg.innerHTML=`<button type="button" class="dialog-x" data-close-modal="owner-recover-dialog" aria-label="Закрыть">✕</button>
+    <div class="kicker">АВАРИЙНОЕ ВОССТАНОВЛЕНИЕ</div>
+    <h2 id="owner-recover-title">Восстановление доступа OWNER</h2>
+    <p style="font-size:12px;line-height:1.6;color:var(--muted)">Введите логин владельца (OWNER), один из неиспользованных резервных кодов восстановления и задайте новый пароль. Все старые сессии будут завершены.</p>
+    <form id="owner-recover-form">
+      <label for="rec-login">Текущий логин OWNER</label>
+      <input id="rec-login" name="login" required maxlength="64" autocomplete="username">
+      <label for="rec-code">Одноразовый резервный код (XXXX-XXXX-XXXX)</label>
+      <input id="rec-code" name="recoveryCode" required maxlength="32" placeholder="XXXX-XXXX-XXXX" autocomplete="off" style="font-family:ui-monospace,monospace;letter-spacing:.08em">
+      <label for="rec-new-pw">Новый пароль OWNER (от 8 символов)</label>
+      <input id="rec-new-pw" name="newPassword" type="password" required minlength="8" maxlength="128" autocomplete="new-password">
+      <p id="rec-error" class="form-error" role="alert"></p>
+      <button type="submit" class="primary" style="width:100%;min-height:44px;margin-top:8px">Восстановить доступ OWNER и войти</button>
+    </form>`;
+  dlg.showModal();
+});
+
+document.addEventListener('click',async e=>{
+  const closeBtn=e.target.closest('[data-close-modal]');
+  if(closeBtn){document.getElementById(closeBtn.dataset.closeModal)?.close();return;}
+
+  const tabBtn=e.target.closest('[data-owner-tab]');
+  if(tabBtn){
+    ownerTab=tabBtn.dataset.ownerTab;
+    await loadOwnerData();
+    renderOwnerView();
+    return;
+  }
+
+  const actBtn=e.target.closest('[data-owner-act]');
+  if(!actBtn)return;
+  const act=actBtn.dataset.ownerAct;
+  if(act==='back'){showScript();return;}
+  if(act==='refresh'){await loadOwnerData();renderOwnerView();toast('Данные обновлены');return;}
+  if(act==='logout'){
+    try{
+      await api('/api/admin/logout',{method:'POST',body:'{}'});
+      adminUnlocked=false;currentUser=null;updateHeaderBadge();
+      showScript();toast('Вы вышли из учётной записи');
+    }catch(err){toast(err.message);}
+    return;
+  }
+  if(act==='create-user'){openUserModal(null);return;}
+  if(act==='edit-user'){
+    const u=usersList.find(x=>x.id===actBtn.dataset.id);
+    if(u)openUserModal(u);
+    return;
+  }
+  if(act==='edit-owner-profile'||act==='regen-codes'){
+    ownerTab='security';renderOwnerView();
+    return;
+  }
+  if(act==='toggle-block'){
+    const id=actBtn.dataset.id,nextBlocked=actBtn.dataset.blocked!=='1';
+    try{
+      await api('/api/users/'+id,{method:'PATCH',body:JSON.stringify({blocked:nextBlocked})});
+      await loadOwnerData();renderOwnerView();
+      toast(nextBlocked?'Пользователь заблокирован, его сессии завершены':'Пользователь разблокирован');
+    }catch(err){toast(err.message);}
+    return;
+  }
+  if(act==='delete-user'){
+    const id=actBtn.dataset.id,login=actBtn.dataset.login;
+    if(!confirm('Удалить учётную запись @'+login+'?'))return;
+    try{
+      await api('/api/users/'+id,{method:'DELETE'});
+      await loadOwnerData();renderOwnerView();
+      toast('Пользователь @'+login+' удалён');
+    }catch(err){toast(err.message);}
+    return;
+  }
+  if(act==='revoke-user-sessions'){
+    const id=actBtn.dataset.id;
+    try{
+      const r=await api('/api/sessions/revoke-user',{method:'POST',body:JSON.stringify({userId:id})});
+      await loadOwnerData();renderOwnerView();
+      toast('Завершено сессий: '+(r.revokedCount||0));
+    }catch(err){toast(err.message);}
+    return;
+  }
+  if(act==='kill-session'){
+    const id=actBtn.dataset.id;
+    try{
+      await api('/api/sessions/'+id,{method:'DELETE'});
+      await loadOwnerData();
+      if(!currentUser){showScript();toast('Текущая сессия завершена');return;}
+      renderOwnerView();toast('Сессия принудительно завершена');
+    }catch(err){toast(err.message);}
+    return;
+  }
+  if(act==='filter-audit'){
+    auditFilterUser=document.getElementById('audit-filter-user')?.value.trim()||'';
+    auditFilterAction=document.getElementById('audit-filter-action')?.value.trim()||'';
+    await loadOwnerData();renderOwnerView();
+    return;
+  }
+  if(act==='clear-audit-filter'){
+    auditFilterUser='';auditFilterAction='';
+    await loadOwnerData();renderOwnerView();
+    return;
+  }
+});
+
+document.addEventListener('submit',async e=>{
+  if(e.target.id==='user-modal-form'){
+    e.preventDefault();
+    const form=e.target,editId=form.dataset.editId;
+    const errEl=document.getElementById('um-error');errEl.textContent='';
+    const fd=new FormData(form);
+    const permissions=[...form.querySelectorAll('input[name="perm"]:checked')].map(cb=>cb.value);
+    const payload={
+      login:String(fd.get('login')||'').trim(),
+      displayName:String(fd.get('displayName')||'').trim(),
+      role:String(fd.get('role')||'OPERATOR'),
+      permissions,
+      blocked:form.querySelector('input[name="blocked"]').checked
+    };
+    const pw=String(fd.get('password')||'');
+    if(pw)payload.password=pw;
+    try{
+      if(editId){
+        await api('/api/users/'+editId,{method:'PATCH',body:JSON.stringify(payload)});
+        toast('Данные и права пользователя обновлены');
+      }else{
+        await api('/api/users',{method:'POST',body:JSON.stringify(payload)});
+        toast('Пользователь создан');
+      }
+      document.getElementById('user-modal').close();
+      await loadOwnerData();renderOwnerView();
+    }catch(err){errEl.textContent=err.message;}
+    return;
+  }
+
+  if(e.target.id==='owner-recover-form'){
+    e.preventDefault();
+    const form=e.target,errEl=document.getElementById('rec-error');errEl.textContent='';
+    const fd=new FormData(form);
+    try{
+      const res=await api('/api/owner/recover',{
+        method:'POST',
+        body:JSON.stringify({
+          login:String(fd.get('login')||'').trim(),
+          recoveryCode:String(fd.get('recoveryCode')||'').trim(),
+          newPassword:String(fd.get('newPassword')||'')
+        })
+      });
+      adminUnlocked=true;currentUser=res.user||null;if(res.csrfToken)csrfToken=res.csrfToken;
+      updateHeaderBadge();
+      document.getElementById('owner-recover-dialog').close();
+      toast('Доступ OWNER успешно восстановлен! Осталось резервных кодов: '+res.remainingRecoveryCodes);
+      await openOwnerPanel();
+    }catch(err){errEl.textContent=err.message;}
+    return;
+  }
+
+  if(e.target.id==='owner-profile-form'){
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    try{
+      const res=await api('/api/owner/profile',{
+        method:'PATCH',
+        body:JSON.stringify({
+          login:String(fd.get('login')||'').trim(),
+          displayName:String(fd.get('displayName')||'').trim()
+        })
+      });
+      currentUser=res.user;updateHeaderBadge();
+      await loadOwnerData();renderOwnerView();
+      toast('Профиль OWNER обновлён');
+    }catch(err){toast(err.message);}
+    return;
+  }
+
+  if(e.target.id==='self-password-form'){
+    e.preventDefault();
+    const curPw=document.getElementById('self-cur-pw').value;
+    const newPw=document.getElementById('self-new-pw').value;
+    try{
+      await api('/api/me/password',{method:'POST',body:JSON.stringify({currentPassword:curPw,newPassword:newPw})});
+      e.target.reset();
+      toast('Пароль успешно изменён. Все остальные ваши сессии завершены.');
+      await loadOwnerData();renderOwnerView();
+    }catch(err){toast(err.message);}
+    return;
+  }
+
+  if(e.target.id==='regen-recovery-form'){
+    e.preventDefault();
+    const pw=document.getElementById('regen-pw').value;
+    try{
+      const res=await api('/api/owner/recovery-codes',{method:'POST',body:JSON.stringify({password:pw})});
+      e.target.reset();
+      await loadOwnerData();renderOwnerView();
+      if(res.recoveryCodes)await window.showOwnerRecoveryCodesModal(res.recoveryCodes,false);
+    }catch(err){toast(err.message);}
+    return;
+  }
+});
+})();
+</script>
+
 </body></html>
