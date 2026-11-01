@@ -3361,9 +3361,7 @@ document.addEventListener('click', (e) => {
   const tabBtn = e.target.closest('[data-tcd-tab]');
   if (tabBtn) {
     activeDesignTab = tabBtn.dataset.tcdTab;
-    if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
-      renderOwnerView();
-    }
+    if (window.__rerenderDesign) window.__rerenderDesign();
     return;
   }
 
@@ -3373,9 +3371,7 @@ document.addEventListener('click', (e) => {
     const p = PRESETS.find(x => x.id === presetCard.dataset.applyPreset);
     if (p) {
       applyTheme({ ...p, id: p.id, bgImage: currentTheme.bgImage });
-      if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
-        renderOwnerView();
-      }
+      if (window.__rerenderDesign) window.__rerenderDesign();
       if (typeof toast === 'function') toast('Применена тема «' + p.name + '»');
     }
     return;
@@ -3387,9 +3383,7 @@ document.addEventListener('click', (e) => {
     const prop = propBtn.dataset.tcdProp;
     const val = propBtn.dataset.val;
     applyTheme({ [prop]: val, id: 'custom' });
-    if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
-      renderOwnerView();
-    }
+    if (window.__rerenderDesign) window.__rerenderDesign();
     return;
   }
 
@@ -3405,9 +3399,7 @@ document.addEventListener('click', (e) => {
   const removeBgBtn = e.target.closest('#tcd-bg-remove-btn, .tcd-bg-remove-btn');
   if (removeBgBtn) {
     applyTheme({ bgImage: '', id: 'custom' });
-    if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
-      renderOwnerView();
-    }
+    if (window.__rerenderDesign) window.__rerenderDesign();
     if (typeof toast === 'function') toast('Фоновое изображение удалено');
     return;
   }
@@ -3416,9 +3408,7 @@ document.addEventListener('click', (e) => {
   const resetBtn = e.target.closest('#tcd-reset-btn, .tcd-reset-btn');
   if (resetBtn) {
     applyTheme({ ...PRESETS[0], bgImage: '' });
-    if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
-      renderOwnerView();
-    }
+    if (window.__rerenderDesign) window.__rerenderDesign();
     if (typeof toast === 'function') toast('Оформление сброшено к классическому стандарту');
     return;
   }
@@ -3460,7 +3450,7 @@ document.addEventListener('change', (e) => {
         cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
         const dataUrl = cv.toDataURL('image/jpeg', 0.82);
         applyTheme({ bgImage: dataUrl, id: 'custom' });
-        if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') renderOwnerView();
+        if (window.__rerenderDesign) window.__rerenderDesign();
         if (typeof toast === 'function') toast('Фоновое изображение успешно установлено!');
       };
       img.onerror = () => { if (typeof toast === 'function') toast('Не удалось прочитать изображение'); };
@@ -3468,9 +3458,7 @@ document.addEventListener('change', (e) => {
       return;
       const dataUrl = reader.result;
       applyTheme({ bgImage: dataUrl, id: 'custom' });
-      if (typeof ownerTab !== 'undefined' && ownerTab === 'design' && typeof renderOwnerView === 'function') {
-        renderOwnerView();
-      }
+      if (window.__rerenderDesign) window.__rerenderDesign();
       if (typeof toast === 'function') toast('Фоновое изображение успешно установлено!');
     };
     reader.readAsDataURL(file);
@@ -3999,9 +3987,8 @@ function renderSecuritySection(){
 }
 
 
-function renderDesignSection(){
-  return (typeof window.renderDesignSection === 'function') ? window.renderDesignSection() : '';
-}
+window.__rerenderDesign=function(){if(ownerTab==='design')renderOwnerView();};
+const renderDesignSection=()=>window.renderDesignSection?window.renderDesignSection():'';
 
 function renderOwnerView(){
   const ov=document.getElementById('owner-view');
