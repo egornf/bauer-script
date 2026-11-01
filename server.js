@@ -194,8 +194,9 @@ function extractSeedFromIndexHtml(htmlPath = INDEX_PATH) {
       }
     }
     if (Array.isArray(layoutsData)) {
-      seed.layouts = layoutsData;
-      for (const l of layoutsData) {
+      const activeLayouts = layoutsData.filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+      seed.layouts = activeLayouts;
+      for (const l of activeLayouts) {
         if (l && l.data && Array.isArray(l.data.gifts)) {
           for (const g of l.data.gifts) {
             if (g && g.id && !seed.gifts.some(x => x.id === g.id)) {
@@ -255,6 +256,14 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       giftbase: { gifts: seed.gifts || [], deleted: [], updatedAt: Date.now() }
     };
     writeJsonAtomic(files.appData, appData);
+  }
+
+  if (appData && Array.isArray(appData.layouts)) {
+    const prevCount = appData.layouts.length;
+    appData.layouts = appData.layouts.filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+    if (appData.layouts.length !== prevCount) {
+      writeJsonAtomic(files.appData, appData);
+    }
   }
 
   function enforceOwnerInvariants() {
@@ -362,6 +371,13 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
           const remoteApp = await new Response(appRes.stream).json();
           if (remoteApp && typeof remoteApp === 'object') {
             appData = remoteApp;
+            if (Array.isArray(appData?.layouts)) {
+              const prevCount = appData.layouts.length;
+              appData.layouts = appData.layouts.filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+              if (appData.layouts.length !== prevCount) {
+                dirtyAppData = true;
+              }
+            }
           }
         }
         blobAppDataLoaded = true;
@@ -1147,7 +1163,7 @@ function createAppServer(options = {}) {
       }
 
       if (pathname === '/api/scripts' && method === 'GET') {
-        const allLayouts = appData.layouts || [];
+        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
         let resultLayouts = allLayouts;
         let deptScripts = [];
         if (auth && auth.user) {
@@ -1181,7 +1197,7 @@ function createAppServer(options = {}) {
       if (pathname === '/api/department/scripts') {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
         const allUsers = store.getUsers();
-        const allLayouts = appData.layouts || [];
+        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
         const isOwner = auth.user.role === 'OWNER';
         const isHead = auth.user.role === 'HEAD';
         const isAdmin = auth.user.role === 'ADMIN';
@@ -1327,7 +1343,8 @@ function createAppServer(options = {}) {
           if (!hasPermission(auth.user, 'content.edit') && !hasPermission(auth.user, 'layouts.manage')) {
             return sendJson(res, 403, { error: 'Недостаточно прав для просмотра редактора макетов.' });
           }
-          return sendJson(res, 200, { layouts: appData.layouts || [] });
+          const activeLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+          return sendJson(res, 200, { layouts: activeLayouts });
         }
         if (!hasPermission(auth.user, 'layouts.manage')) {
           store.logEvent({ action: 'layouts.modify.denied', actor: auth.user, ip, userAgent, status: 'denied' });
