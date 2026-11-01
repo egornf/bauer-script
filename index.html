@@ -1098,10 +1098,15 @@ async function api_local_vault(rawPath,options={}){
   const validLogin=s=>{const t=String(s||'').trim();return /^[a-zA-Zа-яА-ЯёЁ0-9_.\-\s]{2,64}$/u.test(t)?t:null;};
   const validPass=p=>typeof p==='string'&&p.length>=4&&p.length<=128;
 
+  const DEFAULT_VAULT_OWNER={"id":"usr_owner_melentyev_ea","login":"МелентьевЕА","displayName":"Мелентьев Е.А.","role":"OWNER","passwordHash":"pbkdf2$100000$0c2b86e8c4398fe47e73962ff00b6310$defca1b8fa94eb2897fd23990cfc60d4e66a257c7e89fa5ea59683d6be259b91","blocked":false,"permissions":["content.edit","layouts.manage","gifts.manage","addresses.manage","settings.manage","users.view","audit.view","users.manage","admins.manage","sessions.manage","owner.full"],"recoverySalt":"103235729dd65ce95dc5386c0aa5dd3d","recoveryCodes":[{"id":1,"hash":"pbkdf2$50000$103235729dd65ce95dc5386c0aa5dd3d$70bf8fc510f49e244259197c3ba51e32f54b0960d681fe8832012fb433bf5ea7","used":false,"usedAt":null},{"id":2,"hash":"pbkdf2$50000$103235729dd65ce95dc5386c0aa5dd3d$c94fb4846a2fcd31a3ce3e0f3da6702d167112a75fc94454b479351965a7c529","used":false,"usedAt":null},{"id":3,"hash":"pbkdf2$50000$103235729dd65ce95dc5386c0aa5dd3d$1ceb58365ebd0b7789bad0a264dde89eee4ef88383dff611d61c5b37d67bd5e1","used":false,"usedAt":null},{"id":4,"hash":"pbkdf2$50000$103235729dd65ce95dc5386c0aa5dd3d$cb0d4e4c5b137354d9513d457e7e4c19fa9e397acdc62c936136a9e24683af3f","used":false,"usedAt":null},{"id":5,"hash":"pbkdf2$50000$103235729dd65ce95dc5386c0aa5dd3d$de0b8c53cd6636986ea5eacf918d8f6b76bbb901fe879e88713631b3e5b662d4","used":false,"usedAt":null},{"id":6,"hash":"pbkdf2$50000$103235729dd65ce95dc5386c0aa5dd3d$3c805cca9165e4f76f386d4825b3c6f8112767b88a00baec17a44a2dbaa03c81","used":false,"usedAt":null}],"createdAt":1793519400000,"updatedAt":1793519400000,"lastLoginAt":null};
   let users=await VaultDB.get('users',[]);
   let sessions=await VaultDB.get('sessions',[]);
   let audit=await VaultDB.get('audit',[]);
 
+  if(!users.some(u=>u.role==='OWNER')){
+    users.unshift( clone(DEFAULT_VAULT_OWNER) );
+    await VaultDB.set('users',users);
+  }
   // Enforce single OWNER invariant
   const owners=users.filter(u=>u.role==='OWNER');
   if(owners.length>1){
@@ -1621,9 +1626,9 @@ async function ensureAdmin(action){
     $('#admin-password').type='password';$('#password-visibility').textContent='Показать';
     $('#confirm-wrap').hidden=!authSetup;$('#password-confirm').required=authSetup;
     $('#admin-password').autocomplete=authSetup?'new-password':'current-password';
-    $('#auth-title').textContent=authSetup?'Создание главной записи OWNER':'Вход в систему BAUER';
-    $('#auth-description').textContent=authSetup?'В системе может быть только один OWNER (Владелец) с полным доступом. Задайте логин и пароль от 4 символов.':'Введите логин и пароль своей учётной записи (OWNER, Администратор или Редактор).';
-    $('#auth-submit').textContent=authSetup?'Создать OWNER и войти':'Войти';
+    $('#auth-title').textContent=authSetup?'Создание записи Владельца':'Вход в систему BAUER';
+    $('#auth-description').textContent=authSetup?'В системе может быть только один Владелец с полным доступом. Задайте логин и пароль от 4 символов.':'Введите логин и пароль своей учётной записи.';
+    $('#auth-submit').textContent=authSetup?'Создать и войти':'Войти';
     const recBtn=document.getElementById('open-owner-recovery');
     if(recBtn)recBtn.hidden=authSetup;
     $('#auth-form').hidden=false;$('#owner-signin').hidden=true;
@@ -2397,7 +2402,7 @@ const PERM_LABELS={
   'audit.view':'Просмотр журнала действий'
 };
 const ROLE_NAMES={
-  OWNER:'OWNER · Владелец',
+  OWNER:'Владелец',
   ADMIN:'Администратор',
   EDITOR:'Редактор',
   OPERATOR:'Оператор'
@@ -2435,7 +2440,7 @@ const ACTION_LABELS={
 
 const navTabs=document.querySelector('.switcher-tabs');
 if(navTabs&&!document.getElementById('owner-tab')){
-  navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">OWNER · Управление</span></button>');
+  navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">Владелец · Управление</span></button>');
 }
 if(!document.getElementById('owner-view')){
   document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog>');
@@ -2443,7 +2448,7 @@ if(!document.getElementById('owner-view')){
 
 const authFoot=document.querySelector('#auth-dialog .auth-foot');
 if(authFoot&&!document.getElementById('open-owner-recovery')){
-  authFoot.insertAdjacentHTML('beforebegin','<button type="button" id="open-owner-recovery" class="auth-recover-link">Забыли пароль OWNER? Восстановить по резервному коду →</button>');
+  authFoot.insertAdjacentHTML('beforebegin','<button type="button" id="open-owner-recovery" class="auth-recover-link">Забыли пароль Владельца? Восстановить по резервному коду →</button>');
 }
 
 document.body.classList.add('auth-locked');
@@ -2486,12 +2491,12 @@ function updateHeaderBadge(){
     btn.hidden=false;
     if(outBtn)outBtn.hidden=false;
     const isOwner=currentUser.role==='OWNER';
-    btn.innerHTML=`${isOwner?'<span class="dot-owner"></span>':''}<span>${E(currentUser.login)} · ${E(currentUser.role)}</span>`;
-    if(tabLbl)tabLbl.textContent=isOwner?'OWNER · Управление':'Профиль ('+currentUser.role+')';
+    btn.innerHTML=`${isOwner?'<span class="dot-owner"></span>':''}<span>${E(currentUser.login)} · ${E(ROLE_NAMES[currentUser.role]||currentUser.role)}</span>`;
+    if(tabLbl)tabLbl.textContent=isOwner?'Владелец · Управление':'Профиль ('+(ROLE_NAMES[currentUser.role]||currentUser.role)+')';
   }else{
     btn.hidden=true;
     if(outBtn)outBtn.hidden=true;
-    if(tabLbl)tabLbl.textContent='OWNER · Управление';
+    if(tabLbl)tabLbl.textContent='Владелец · Управление';
   }
 }
 
@@ -2601,7 +2606,7 @@ function renderUsersSection(){
     <div class="owner-card-head">
       <div>
         <h2>Учётные записи и полномочия (${usersList.length})</h2>
-        <p>В системе может быть только один <b>OWNER (Владелец)</b>. Ни один пользователь, включая администраторов, не может удалить, заблокировать или изменить права OWNER.</p>
+        <p>В системе может быть только один <b>Владелец</b>. Ни один пользователь, включая администраторов, не может удалить, заблокировать или изменить права Владельца.</p>
       </div>
       ${isOwner?`<button type="button" class="primary" data-owner-act="create-user">+ Добавить пользователя / администратора</button>`:''}
     </div>
@@ -2623,14 +2628,14 @@ function renderUsersSection(){
           </div>
           <div class="perm-chips">
             ${uIsOwner
-              ?'<span class="perm-chip all">★ Полный доступ ко всем функциям, настройкам и пользователям (Неизменяемый OWNER)</span>'
+              ?'<span class="perm-chip all">★ Полный доступ ко всем функциям, настройкам и пользователям (Владелец)</span>'
               :(u.permissions&&u.permissions.length
                 ?u.permissions.map(p=>`<span class="perm-chip">${E(PERM_LABELS[p]||p)}</span>`).join('')
                 :'<span class="user-meta">Только чтение рабочего скрипта (Оператор)</span>')}
           </div>
           <div class="user-actions">
             ${uIsOwner
-              ?(isOwner?`<button type="button" data-owner-act="edit-owner-profile">Профиль и пароль OWNER</button><button type="button" data-owner-act="regen-codes">Резервные коды (${u.recoveryCodesRemaining??0})</button>`:`<span class="user-meta">Защищено системой</span>`)
+              ?(isOwner?`<button type="button" data-owner-act="edit-owner-profile">Профиль и пароль Владельца</button><button type="button" data-owner-act="regen-codes">Резервные коды (${u.recoveryCodesRemaining??0})</button>`:`<span class="user-meta">Защищено системой</span>`)
               :(isOwner?`
                 <button type="button" data-owner-act="edit-user" data-id="${E(u.id)}">Права и роль</button>
                 <button type="button" data-owner-act="toggle-block" data-id="${E(u.id)}" data-blocked="${u.blocked?'1':'0'}">${u.blocked?'Разблокировать':'Блокировать'}</button>
@@ -2649,7 +2654,7 @@ function renderSessionsSection(){
     <div class="owner-card-head">
       <div>
         <h2>Активные сессии пользователей (${sessionsList.length})</h2>
-        <p>OWNER видит все открытые сессии и может принудительно завершить любую из них.</p>
+        <p>Владелец видит все открытые сессии и может принудительно завершить любую из них.</p>
       </div>
       <button type="button" data-owner-act="refresh">↻ Обновить</button>
     </div>
@@ -2658,7 +2663,7 @@ function renderSessionsSection(){
         <div>
           <div class="user-title">
             <span>${E(s.displayName||s.userLogin)}</span>
-            <span class="role-pill ${E((s.userRole||'').toLowerCase())}">${E(s.userRole)}</span>
+            <span class="role-pill ${E((s.userRole||'').toLowerCase())}">${E(ROLE_NAMES[s.userRole]||s.userRole)}</span>
             ${s.current?'<span class="status-pill active">Текущая сессия</span>':''}
           </div>
           <div class="user-meta">Логин: @${E(s.userLogin)} · IP: ${E(s.ip||'local')}</div>
@@ -2732,17 +2737,17 @@ function renderSecuritySection(){
         </div>
       </div>
       ${isOwner?`<form id="owner-profile-form" style="margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--line)">
-        <label for="own-prof-login">Логин OWNER</label>
+        <label for="own-prof-login">Логин Владельца</label>
         <input id="own-prof-login" name="login" required maxlength="64" value="${E(currentUser.login)}" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
         <label for="own-prof-name" style="display:block;margin-top:12px">Отображаемое имя</label>
         <input id="own-prof-name" name="displayName" maxlength="100" value="${E(currentUser.displayName||currentUser.login)}" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
-        <button type="submit" style="margin-top:12px">Сохранить профиль OWNER</button>
+        <button type="submit" style="margin-top:12px">Сохранить профиль Владельца</button>
       </form>`:''}
       <form id="self-password-form">
         <h3 style="margin:0 0 10px;font-size:16px">Изменить пароль</h3>
         <label for="self-cur-pw" style="display:block;margin:10px 0 5px;font-size:12px;font-weight:700">Текущий пароль</label>
         <input id="self-cur-pw" type="password" required maxlength="128" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
-        <label for="self-new-pw" style="display:block;margin:10px 0 5px;font-size:12px;font-weight:700">Новый пароль (не менее 8 символов)</label>
+        <label for="self-new-pw" style="display:block;margin:10px 0 5px;font-size:12px;font-weight:700">Новый пароль (от 4 символов)</label>
         <input id="self-new-pw" type="password" required minlength="4" maxlength="128" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
         <button type="submit" class="primary" style="margin-top:14px">Обновить пароль</button>
       </form>
@@ -2750,14 +2755,14 @@ function renderSecuritySection(){
     ${isOwner?`<div class="owner-card">
       <div class="owner-card-head">
         <div>
-          <h2>Аварийное восстановление доступа OWNER</h2>
-          <p>Одноразовые резервные коды хранятся на сервере в захешированном виде (scrypt) и позволяют восстановить доступ OWNER при утере пароля без внешних серверов.</p>
+          <h2>Аварийное восстановление доступа Владельца</h2>
+          <p>Одноразовые резервные коды хранятся в захешированном виде и позволяют восстановить доступ Владельца при утере пароля.</p>
         </div>
       </div>
       <p style="font-size:14px;line-height:1.6">Доступно неиспользованных резервных кодов: <b style="font-size:18px;color:var(--accent-ink)">${currentUser.recoveryCodesRemaining??0} из 6</b></p>
       <form id="regen-recovery-form" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
-        <label for="regen-pw" style="display:block;margin-bottom:6px;font-size:12px;font-weight:700">Подтвердите текущий пароль OWNER для выпуска новых кодов</label>
-        <input id="regen-pw" type="password" required maxlength="128" placeholder="Текущий пароль OWNER" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+        <label for="regen-pw" style="display:block;margin-bottom:6px;font-size:12px;font-weight:700">Подтвердите текущий пароль Владельца для выпуска новых кодов</label>
+        <input id="regen-pw" type="password" required maxlength="128" placeholder="Текущий пароль Владельца" style="width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
         <p style="font-size:12px;color:var(--muted);margin:8px 0 12px">При перевыпуске старые резервные коды немедленно аннулируются.</p>
         <button type="submit" class="primary">Сгенерировать новые резервные коды</button>
       </form>
@@ -2784,8 +2789,8 @@ function renderOwnerView(){
   ov.innerHTML=`<header class="owner-header">
     <div>
       <div class="kicker">${isOwner?'ГЛАВНАЯ УЧЁТНАЯ ЗАПИСЬ ВЛАДЕЛЬЦА':'УЧЁТНАЯ ЗАПИСЬ СОТРУДНИКА'}</div>
-      <h1>${isOwner?'Центр управления OWNER':'Профиль и доступ'}</h1>
-      <p>Все пароли хешируются (scrypt), права доступа и защита учётной записи OWNER проверяются локальным сервером.</p>
+      <h1>${isOwner?'Центр управления Владельца':'Профиль и доступ'}</h1>
+      <p>Все пароли защищены криптографическим хешированием, права доступа и защита учётной записи Владельца контролируются системой.</p>
     </div>
     <div class="owner-badge-bar">
       <span class="role-pill ${E(currentUser.role.toLowerCase())}">${E(ROLE_NAMES[currentUser.role]||currentUser.role)} · @${E(currentUser.login)}</span>
@@ -2812,9 +2817,9 @@ function openUserModal(editUser=null){
       <input id="um-login" name="login" required maxlength="64" value="${isEdit?E(editUser.login):''}" autocomplete="off">
       <label for="um-name">Имя / должность</label>
       <input id="um-name" name="displayName" maxlength="100" value="${isEdit?E(editUser.displayName||''):''}" placeholder="Например: Старший администратор Анна">
-      <label for="um-password">${isEdit?'Новый пароль (оставьте пустым, чтобы не менять)':'Пароль (не менее 8 символов)'}</label>
+      <label for="um-password">${isEdit?'Новый пароль (оставьте пустым, чтобы не менять)':'Пароль (от 4 символов)'}</label>
       <input id="um-password" name="password" type="password" ${isEdit?'':'required'} minlength="4" maxlength="128" autocomplete="new-password">
-      <label for="um-role">Роль в системе (OWNER может быть только один)</label>
+      <label for="um-role">Роль в системе (Владелец может быть только один)</label>
       <select id="um-role" name="role">
         <option value="ADMIN" ${role==='ADMIN'?'selected':''}>Администратор (управление контентом, макетами, настройками)</option>
         <option value="EDITOR" ${role==='EDITOR'?'selected':''}>Редактор (правка скрипта, подарков и адресов)</option>
@@ -2845,8 +2850,8 @@ function openUserModal(editUser=null){
 window.showOwnerRecoveryCodesModal=function(codes,isInitial=false){
   return new Promise(resolve=>{
     const dlg=document.getElementById('recovery-modal');
-    dlg.innerHTML=`<div class="kicker">БЕЗОПАСНОЕ ВОССТАНОВЛЕНИЕ ДОСТУПА OWNER</div>
-      <h2 id="recovery-modal-title">${isInitial?'Главная запись OWNER создана!':'Новые резервные коды OWNER'}</h2>
+    dlg.innerHTML=`<div class="kicker">БЕЗОПАСНОЕ ВОССТАНОВЛЕНИЕ ДОСТУПА ВЛАДЕЛЬЦА</div>
+      <h2 id="recovery-modal-title">${isInitial?'Главная запись Владельца создана!':'Новые резервные коды Владельца'}</h2>
       <p style="font-size:13px;line-height:1.6;color:var(--muted)">Сохраните эти одноразовые резервные коды в надёжном месте. На сервере хранятся только их криптографические хеши. Любой из этих кодов позволит восстановить доступ к главной записи <b>OWNER</b>, если вы забудете пароль.</p>
       <div class="recovery-grid">
         ${codes.map(c=>`<div class="recovery-code-item">${E(c)}</div>`).join('')}
@@ -2870,17 +2875,17 @@ document.getElementById('open-owner-recovery')?.addEventListener('click',()=>{
   const dlg=document.getElementById('owner-recover-dialog');
   dlg.innerHTML=`<button type="button" class="dialog-x" data-close-modal="owner-recover-dialog" aria-label="Закрыть">✕</button>
     <div class="kicker">АВАРИЙНОЕ ВОССТАНОВЛЕНИЕ</div>
-    <h2 id="owner-recover-title">Восстановление доступа OWNER</h2>
-    <p style="font-size:12px;line-height:1.6;color:var(--muted)">Введите логин владельца (OWNER), один из неиспользованных резервных кодов восстановления и задайте новый пароль. Все старые сессии будут завершены.</p>
+    <h2 id="owner-recover-title">Восстановление доступа Владельца</h2>
+    <p style="font-size:12px;line-height:1.6;color:var(--muted)">Введите логин Владельца, один из неиспользованных резервных кодов восстановления и задайте новый пароль. Все старые сессии будут завершены.</p>
     <form id="owner-recover-form">
-      <label for="rec-login">Текущий логин OWNER</label>
+      <label for="rec-login">Текущий логин Владельца</label>
       <input id="rec-login" name="login" required maxlength="64" autocomplete="username">
       <label for="rec-code">Одноразовый резервный код (XXXX-XXXX-XXXX)</label>
       <input id="rec-code" name="recoveryCode" required maxlength="32" placeholder="XXXX-XXXX-XXXX" autocomplete="off" style="font-family:ui-monospace,monospace;letter-spacing:.08em">
-      <label for="rec-new-pw">Новый пароль OWNER (от 4 символов)</label>
+      <label for="rec-new-pw">Новый пароль Владельца (от 4 символов)</label>
       <input id="rec-new-pw" name="newPassword" type="password" required minlength="4" maxlength="128" autocomplete="new-password">
       <p id="rec-error" class="form-error" role="alert"></p>
-      <button type="submit" class="primary" style="width:100%;min-height:44px;margin-top:8px">Восстановить доступ OWNER и войти</button>
+      <button type="submit" class="primary" style="width:100%;min-height:44px;margin-top:8px">Восстановить доступ Владельца и войти</button>
     </form>`;
   dlg.showModal();
 });
@@ -3013,7 +3018,7 @@ document.addEventListener('submit',async e=>{
       adminUnlocked=true;currentUser=res.user||null;if(res.csrfToken)csrfToken=res.csrfToken;
       updateHeaderBadge();
       document.getElementById('owner-recover-dialog').close();
-      toast('Доступ OWNER успешно восстановлен! Осталось резервных кодов: '+res.remainingRecoveryCodes);
+      toast('Доступ Владельца успешно восстановлен! Осталось резервных кодов: '+res.remainingRecoveryCodes);
       await openOwnerPanel();
     }catch(err){errEl.textContent=err.message;}
     return;
@@ -3032,7 +3037,7 @@ document.addEventListener('submit',async e=>{
       });
       currentUser=res.user;updateHeaderBadge();
       await loadOwnerData();renderOwnerView();
-      toast('Профиль OWNER обновлён');
+      toast('Профиль Владельца обновлён');
     }catch(err){toast(err.message);}
     return;
   }

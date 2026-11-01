@@ -31,6 +31,70 @@ const DEFAULT_ROLE_PERMISSIONS = {
   OPERATOR: []
 };
 
+const DEFAULT_OWNER_USER = {
+  "id": "usr_owner_melentyev_ea",
+  "login": "МелентьевЕА",
+  "displayName": "Мелентьев Е.А.",
+  "role": "OWNER",
+  "passwordHash": "scrypt$16384$8$1$0fdf9fa25649ad4b8df72268798a79c0$e6be6c83790f1e583c8992338cb571975faf8b4566bef6393fdf2f42f8970131289d940eabd62ca8086c0d4aef6208139a225831491d51e85786ec5d91705204",
+  "blocked": false,
+  "permissions": [
+    "content.edit",
+    "layouts.manage",
+    "gifts.manage",
+    "addresses.manage",
+    "settings.manage",
+    "users.view",
+    "audit.view",
+    "users.manage",
+    "admins.manage",
+    "sessions.manage",
+    "owner.full"
+  ],
+  "recoverySalt": "162cd43facda08bbafa57045e1021526",
+  "recoveryCodes": [
+    {
+      "id": 1,
+      "hash": "25784949ae7bf50721d19844971bdc7a3123ccaecd8641812c07af5580841b82",
+      "used": false,
+      "usedAt": null
+    },
+    {
+      "id": 2,
+      "hash": "26b251ee262ed71d38a204c61b792ca2192e84f72683dcd5f7efd4408077b05c",
+      "used": false,
+      "usedAt": null
+    },
+    {
+      "id": 3,
+      "hash": "e6a149ee4e5142b0e4e582be3bd8cc9737efa12937ea4a1ca1fa7c543ad50de9",
+      "used": false,
+      "usedAt": null
+    },
+    {
+      "id": 4,
+      "hash": "11ee1b05df646928fecb6f4708174b99dfea42441f158f789a2c723ae3dd2041",
+      "used": false,
+      "usedAt": null
+    },
+    {
+      "id": 5,
+      "hash": "1ac34eb10d33efc0b24e3586dcc20130294739da02386d85e4f1bfe3b4fe7884",
+      "used": false,
+      "usedAt": null
+    },
+    {
+      "id": 6,
+      "hash": "c6e4e1ac2466463ed6ebad44a15e228efd6f561bed96c5927fbb9581f189ecfb",
+      "used": false,
+      "usedAt": null
+    }
+  ],
+  "createdAt": 1793519400000,
+  "updatedAt": 1793519400000,
+  "lastLoginAt": null
+};
+
 function normalizeLogin(login) {
   return String(login || '').trim().toLocaleLowerCase('ru');
 }
@@ -139,7 +203,7 @@ function extractSeedFromIndexHtml(htmlPath = INDEX_PATH) {
   return seed;
 }
 
-function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH) {
+function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefaultOwner = true) {
   fs.mkdirSync(dataDir, { recursive: true });
   const files = {
     users: path.join(dataDir, 'users.json'),
@@ -179,6 +243,10 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH) {
     writeJsonAtomic(files.appData, appData);
   }
 
+  if (seedDefaultOwner && !users.some(u => u.role === 'OWNER')) {
+    users.unshift(structuredClone(DEFAULT_OWNER_USER));
+    writeJsonAtomic(files.users, users);
+  }
   // Enforce single OWNER invariant on load
   const owners = users.filter(u => u.role === 'OWNER');
   if (owners.length > 1) {
@@ -440,7 +508,7 @@ function sendJson(res, status, payload, extraHeaders = {}) {
 function createAppServer(options = {}) {
   const dataDir = options.dataDir || DEFAULT_DATA_DIR;
   const htmlPath = options.htmlPath || INDEX_PATH;
-  const store = createStore(dataDir, htmlPath);
+  const store = createStore(dataDir, htmlPath, options.seedDefaultOwner !== false);
 
   // Brute-force rate limiter in memory
   const loginAttempts = new Map(); // key -> { count, resetAt }

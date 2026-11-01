@@ -70,7 +70,7 @@ function createTestClient(baseUrl) {
 
 test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bauer-test-'));
-  const { server, store } = createAppServer({ dataDir: tmpDir });
+  const { server, store } = createAppServer({ dataDir: tmpDir, seedDefaultOwner: false });
 
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
