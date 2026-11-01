@@ -50,6 +50,7 @@
 
       // Background Image & Body
       if (ut.bodyBg) root.style.setProperty('--custom-body-bg', ut.bodyBg);
+      if (typeof ut.bgDim === 'number') root.style.setProperty('--custom-bg-dim', ut.bgDim);
       if (ut.bgImage) {
         root.dataset.hasBg = '1';
         const st = document.createElement('style');
@@ -92,7 +93,9 @@
         root.style.setProperty('--custom-line-blur', lineTrans >= 98 ? '0px' : '4px');
         root.style.setProperty('--custom-line-border', lineA <= 0.001 ? 'rgba(255,255,255,0.18)' : ('rgba(255,255,255,' + (0.15 + 0.25 * lineA).toFixed(2) + ')'));
 
-        const effDark = (a < 0.3) ? pageDark : false;
+        let effDark = (a < 0.3) ? pageDark : false;
+        if (ut.textColorMode === 'light') effDark = true;
+        else if (ut.textColorMode === 'dark') effDark = false;
         const blockFg = effDark ? '#ffffff' : '#12262e';
         root.style.setProperty('--custom-block-fg', blockFg);
         root.style.setProperty('--custom-line-fg', blockFg);
@@ -641,10 +644,30 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   background: var(--custom-body-bg) !important;
 }
 :root[data-has-bg="1"] body {
-  background-image: var(--custom-bg-image) !important;
+  background-image: linear-gradient(rgba(0, 0, 0, var(--custom-bg-dim, 0)), rgba(0, 0, 0, var(--custom-bg-dim, 0))), var(--custom-bg-image) !important;
   background-size: cover !important;
   background-position: center !important;
   background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* Glass & custom theme adaptations for Drawer & Objections */
+:root[data-card-style="glass"] .drawer {
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+}
+:root[data-card-style="glass"][data-theme="dark"] .drawer {
+  background: rgba(15, 24, 32, 0.95) !important;
+}
+:root[style*="--custom-accent"] .drawer-footer button.primary {
+  background: var(--custom-accent) !important;
+  color: var(--custom-accent-fg, #ffffff) !important;
+  border-color: var(--custom-accent) !important;
+}
+:root[style*="--custom-accent"] .origin {
+  color: var(--custom-accent) !important;
+  background: color-mix(in srgb, var(--custom-accent) 15%, transparent) !important;
 }
 :root[data-body-pattern="leopard"] body {
   background-image: var(--pat-leopard) !important;
@@ -3735,12 +3758,17 @@ body.auth-locked #auth-close{display:none!important}
       const lineBorder = lineA <= 0.001 ? 'rgba(255,255,255,0.18)' : ('rgba(255,255,255,' + (0.15 + 0.25 * lineA).toFixed(2) + ')');
 
       const effLum = (a <= 0.05) ? pageLum() : (a * tl + (1 - a) * pageLum());
-      const effDark = effLum < 0.42;
+      let effDark = effLum < 0.42;
+      if (t.textColorMode === 'light') effDark = true;
+      else if (t.textColorMode === 'dark') effDark = false;
       const fg = effDark ? '#ffffff' : '#12262e';
 
       const lineEffLum = (lineA <= 0.05) ? pageLum() : (lineA * relLum(lineRgb) + (1 - lineA) * effLum);
-      const lineFg = lineEffLum < 0.42 ? '#ffffff' : '#12262e';
-      const lineShadow = lineEffLum < 0.42 ? '0 1px 2px rgba(0,0,0,0.6)' : 'none';
+      let lineDark = lineEffLum < 0.42;
+      if (t.textColorMode === 'light') lineDark = true;
+      else if (t.textColorMode === 'dark') lineDark = false;
+      const lineFg = lineDark ? '#ffffff' : '#12262e';
+      const lineShadow = lineDark ? '0 1px 2px rgba(0,0,0,0.6)' : 'none';
 
       // Stage count badge backing (High Contrast)
       const pillBg = effDark ? 'rgba(0, 0, 0, 0.50)' : 'rgba(255, 255, 255, 0.88)';
@@ -3755,7 +3783,7 @@ body.auth-locked #auth-close{display:none!important}
     }
 
     if (mode === 'default' && t.cardColor) {
-      const isDk = tl < 0.42;
+      let isDk = tl < 0.42; if (t.textColorMode === 'light') isDk = true; else if (t.textColorMode === 'dark') isDk = false;
       return {
         mode: 'solid', bg: t.cardColor, fg: isDk ? '#ffffff' : '#12262e',
         pillBg: isDk ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.85)',
@@ -3780,7 +3808,7 @@ body.auth-locked #auth-close{display:none!important}
 
   function previewInner() {
     const t = currentTheme, dark = t.theme === 'dark', b = blockInfo(), pi = pageInfo();
-    const pageBg = t.bgImage ? 'url(&quot;' + t.bgImage + '&quot;) center/cover no-repeat' : (t.bodyBg || (dark ? '#101321' : '#eef2f0'));
+    const dimVal = typeof t.bgDim === 'number' ? t.bgDim : 0; const pageBg = t.bgImage ? 'linear-gradient(rgba(0,0,0,' + dimVal + '),rgba(0,0,0,' + dimVal + ')),url(&quot;' + t.bgImage + '&quot;) center/cover no-repeat' : (t.bodyBg || (dark ? '#101321' : '#eef2f0'));
     const accent = t.accent || '#008578';
     let blockStyle = 'background:' + b.bg + ';color:' + b.fg + ';';
     if (b.mode === 'glass') blockStyle += (b.blurPx ? 'backdrop-filter:blur(6px);' : '') + 'border:1px solid rgba(255,255,255,' + (0.35 * Math.max(0.15, b.a)).toFixed(2) + ');';
@@ -3866,6 +3894,7 @@ body.auth-locked #auth-close{display:none!important}
     }
 
     if (currentTheme.bodyBg) root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
+    root.style.setProperty('--custom-bg-dim', typeof currentTheme.bgDim === 'number' ? currentTheme.bgDim : 0);
     else root.style.removeProperty('--custom-body-bg');
 
     const effAccent = currentTheme.accent || '#008578';
@@ -4025,6 +4054,15 @@ body.auth-locked #auth-close{display:none!important}
                 <small style="color:var(--muted)">Изображение масштабируется на весь экран и фиксируется при прокрутке.</small>
               </div>
             </div>
+
+            ${currentTheme.bgImage ? `
+            <div class="tcd-row" style="margin-top:14px;padding:14px;background:var(--surface-alt,#f8faf8);border-radius:12px;border:1px solid var(--line)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span class="tcd-label" style="margin:0">Затемнение фона для лучшей читаемости текста: <b id="tcd-bg-dim-val">${Math.round((currentTheme.bgDim || 0) * 100)}%</b></span>
+              </div>
+              <input type="range" id="tcd-bg-dim" min="0" max="75" step="5" value="${Math.round((currentTheme.bgDim || 0) * 100)}" style="width:100%;accent-color:var(--ui)">
+              <small style="color:var(--muted)">Мягко затемняет любое фото (даже очень яркое со светлым небом), чтобы весь рабочий текст читался без ряби в глазах.</small>
+            </div>` : ''}
           </div>
         ` : ''}
 
@@ -4067,6 +4105,16 @@ body.auth-locked #auth-close{display:none!important}
                 <input type="range" id="tcd-line-opacity" min="0" max="100" step="1" value="${lineTransparency}" style="width:100%;accent-color:var(--ui)">
                 <small style="color:var(--muted)">0% — сплошные светлые карточки, 100% — полностью прозрачные (текст поверх фона).</small>
               </div>` : ''}
+
+              <div class="tcd-row" style="margin-bottom:14px;padding:12px 14px;background:var(--surface-alt,#f8faf8);border-radius:12px;border:1px solid var(--line)">
+                <span class="tcd-label" style="margin-bottom:8px">Цвет шрифта в карточках и скрипте:</span>
+                <div class="tcd-options-grid" style="grid-template-columns:repeat(3,1fr)">
+                  <button type="button" class="tcd-option-btn ${(!currentTheme.textColorMode||currentTheme.textColorMode==='auto')?'selected':''}" data-tcd-prop="textColorMode" data-val="auto">⚡ Автоподбор</button>
+                  <button type="button" class="tcd-option-btn ${currentTheme.textColorMode==='dark'?'selected':''}" data-tcd-prop="textColorMode" data-val="dark">☀️ Тёмный текст</button>
+                  <button type="button" class="tcd-option-btn ${currentTheme.textColorMode==='light'?'selected':''}" data-tcd-prop="textColorMode" data-val="light">🌙 Светлый текст</button>
+                </div>
+                <small style="color:var(--muted)">Позволяет в один клик принудительно задать белый или графитовый цвет текста независимо от цвета карточки.</small>
+              </div>
 
               <div class="tcd-row">
                 <span class="tcd-label">Акцентный цвет кнопок и подсветки</span>
@@ -4339,6 +4387,10 @@ body.auth-locked #auth-close{display:none!important}
       const v = Math.max(0, Math.min(100, +e.target.value || 0));
       applyTheme({ lineTransparency: v, id: 'custom' }, true);
       const lbl = document.getElementById('tcd-line-opacity-val'); if (lbl) lbl.textContent = v + '%';
+    } else if (e.target.matches('#tcd-bg-dim')) {
+      const val = Math.max(0, Math.min(75, +e.target.value || 0)) / 100;
+      applyTheme({ bgDim: val, id: 'custom' }, true);
+      const lbl = document.getElementById('tcd-bg-dim-val'); if (lbl) lbl.textContent = Math.round(val * 100) + '%';
     }
   });
 
