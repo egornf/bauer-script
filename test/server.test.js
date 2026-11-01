@@ -571,4 +571,142 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     });
     assert.equal(adminDeleteLayout.status, 200);
   });
+
+  await t.test('11. Department scripts selection: HEAD and OWNER can choose scripts for their department; empty selection shows all scripts', async () => {
+    const headClient = createTestClient(baseUrl);
+    const mgrClient = createTestClient(baseUrl);
+    const ownerMgrClient = createTestClient(baseUrl);
+
+    await headClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'head_sergey', password: 'HeadPass123' }
+    });
+
+    // Create operator under head_sergey
+    const opRes = await headClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'op_dept_test',
+        password: 'Pass1234!',
+        role: 'OPERATOR'
+      }
+    });
+    assert.equal(opRes.status, 201);
+    const opUser = opRes.data.user;
+
+    await mgrClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'op_dept_test', password: 'Pass1234!' }
+    });
+
+    // 1. Initially nothing is selected for head_sergey: operator sees all scripts
+    const initialScripts = await mgrClient.request('/api/scripts');
+    assert.equal(initialScripts.status, 200);
+    assert.ok(initialScripts.data.layouts.length >= 2);
+    const totalScriptsCount = initialScripts.data.allLayouts.length;
+
+    // 2. HEAD chooses only the first script for their department
+    const targetScriptId = initialScripts.data.allLayouts[0].id;
+    const saveDeptRes = await headClient.request('/api/department/scripts', {
+      method: 'PUT',
+      body: { scriptIds: [targetScriptId] }
+    });
+    assert.equal(saveDeptRes.status, 200);
+    assert.deepEqual(saveDeptRes.data.scriptIds, [targetScriptId]);
+
+    // Operator in this department now sees only this 1 selected script
+    const filteredScripts = await mgrClient.request('/api/scripts');
+    assert.equal(filteredScripts.status, 200);
+    assert.equal(filteredScripts.data.layouts.length, 1);
+    assert.equal(filteredScripts.data.layouts[0].id, targetScriptId);
+
+    // 3. OWNER is also a department head: create an operator assigned to OWNER
+    const ownerCreateOp = await ownerClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'op_owner_dept',
+        password: 'PassOwner123!',
+        role: 'OPERATOR',
+        managerId: ownerUser.id
+      }
+    });
+    assert.equal(ownerCreateOp.status, 201);
+    assert.equal(ownerCreateOp.data.user.managerId, ownerUser.id);
+
+    await ownerMgrClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'op_owner_dept', password: 'PassOwner123!' }
+    });
+
+    // OWNER has not selected department scripts yet: operator sees all scripts
+    const ownerOpScripts = await ownerMgrClient.request('/api/scripts');
+    assert.equal(ownerOpScripts.status, 200);
+    assert.equal(ownerOpScripts.data.layouts.length, totalScriptsCount);
+
+    // 4. Reset HEAD's department scripts to empty array: operator again sees all scripts
+    const resetDeptRes = await headClient.request('/api/department/scripts', {
+      method: 'PUT',
+      body: { scriptIds: [] }
+    });
+    assert.equal(resetDeptRes.status, 200);
+
+    const afterResetScripts = await mgrClient.request('/api/scripts');
+    assert.equal(afterResetScripts.status, 200);
+    assert.equal(afterResetScripts.data.layouts.length, totalScriptsCount);
+  });
+
+  await t.test('12. OPERATOR permissions: can edit site styling, fonts, and block colors, but STRICTLY forbidden from modifying text', async () => {
+    const mgrClient = createTestClient(baseUrl);
+    await mgrClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'op_dept_test', password: 'Pass1234!' }
+    });
+
+    const contentRes = await mgrClient.request('/api/content');
+    assert.equal(contentRes.status, 200);
+    const originalContent = contentRes.data.data;
+
+    // 1. Operator updates styling: fontSize, accent color, and blockBg in lineFormats
+    const styledContent = structuredClone(originalContent);
+    styledContent.settings.fontSize = 24;
+    styledContent.settings.accent = '#2166cc';
+    if (styledContent.stages[0]) {
+      styledContent.stages[0].lineFormats = styledContent.stages[0].lineFormats || [];
+      styledContent.stages[0].lineFormats[0] = { style: { blockBg: '#daf5e4' }, ranges: [] };
+    }
+
+    const saveStylingRes = await mgrClient.request('/api/content', {
+      method: 'PUT',
+      body: { data: styledContent }
+    });
+    assert.equal(saveStylingRes.status, 200);
+
+    // 2. Operator attempts to alter text in lines: MUST fail with 403
+    const textHackedContent = structuredClone(styledContent);
+    textHackedContent.stages[0].lines[0] = 'HACKED TEXT BY OPERATOR';
+
+    const hackTextRes = await mgrClient.request('/api/content', {
+      method: 'PUT',
+      body: { data: textHackedContent }
+    });
+    assert.equal(hackTextRes.status, 403);
+    assert.match(hackTextRes.data.error, /не имеет права менять текст/);
+
+    // 3. Operator attempts to alter stage title: MUST fail with 403
+    const titleHackedContent = structuredClone(styledContent);
+    titleHackedContent.stages[0].title = 'HACKED STAGE TITLE';
+
+    const hackTitleRes = await mgrClient.request('/api/content', {
+      method: 'PUT',
+      body: { data: titleHackedContent }
+    });
+    assert.equal(hackTitleRes.status, 403);
+    assert.match(hackTitleRes.data.error, /не имеет права менять текст/);
+
+    // 4. Operator cannot delete layout
+    const deleteLayoutRes = await mgrClient.request('/api/layouts/any_id', {
+      method: 'DELETE'
+    });
+    assert.equal(deleteLayoutRes.status, 403);
+  });
 });

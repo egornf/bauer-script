@@ -1041,8 +1041,35 @@ const VAULT_ROLE_DEFAULTS={
   ADMIN:[...VAULT_PERMISSIONS],
   EDITOR:['content.edit','layouts.manage','layouts.delete','gifts.manage','addresses.manage','settings.manage'],
   HEAD:['content.edit','layouts.manage','users.view','audit.view'],
-  OPERATOR:[]
+  OPERATOR:['settings.manage']
 };
+function isScriptTextUnchanged(originalData, nextData) {
+  if (!originalData || !nextData) return false;
+  const origStages = Array.isArray(originalData.stages) ? originalData.stages : [];
+  const nextStages = Array.isArray(nextData.stages) ? nextData.stages : [];
+  if (origStages.length !== nextStages.length) return false;
+  for (let i = 0; i < origStages.length; i++) {
+    const o = origStages[i], n = nextStages[i];
+    if (o.id !== n.id) return false;
+    if (String(o.title || '') !== String(n.title || '')) return false;
+    if (String(o.tip || '') !== String(n.tip || '')) return false;
+    const oLines = Array.isArray(o.lines) ? o.lines : [];
+    const nLines = Array.isArray(n.lines) ? n.lines : [];
+    if (oLines.length !== nLines.length) return false;
+    for (let j = 0; j < oLines.length; j++) {
+      if (String(oLines[j] || '') !== String(nLines[j] || '')) return false;
+    }
+  }
+  const origObs = Array.isArray(originalData.objections) ? originalData.objections : [];
+  const nextObs = Array.isArray(nextData.objections) ? nextData.objections : [];
+  if (origObs.length !== nextObs.length) return false;
+  for (let i = 0; i < origObs.length; i++) {
+    const o = origObs[i], n = nextObs[i];
+    if (String(o.title || '') !== String(n.title || '')) return false;
+    if (String(o.text || '') !== String(n.text || '')) return false;
+  }
+  return true;
+}
 function canDeleteContent(){
   if(!currentUser)return true;
   if(currentUser.role==='OWNER')return true;
@@ -1278,6 +1305,7 @@ async function api_local_vault(rawPath,options={}){
       displayName:u.displayName||u.login,
       role:u.role,
       managerId:u.managerId||null,
+      departmentScripts:Array.isArray(u.departmentScripts)?u.departmentScripts:[],
       blocked:isO?false:Boolean(u.blocked),
       permissions:isO?[...VAULT_ROLE_DEFAULTS.OWNER]:(Array.isArray(u.permissions)?u.permissions:[]),
       createdAt:u.createdAt||0,
@@ -1485,7 +1513,7 @@ async function api_local_vault(rawPath,options={}){
         :users;
       return {
         users:visible.map(u=>({...sanitize(u),activeSessionsCount:sessions.filter(s=>s.userId===u.id).length})),
-        heads:users.filter(u=>u.role==='HEAD').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login})),
+        heads:users.filter(u=>u.role==='HEAD'||u.role==='OWNER').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,isOwner:u.role==='OWNER',departmentScriptsCount:Array.isArray(u.departmentScripts)?u.departmentScripts.length:0})),
         availablePermissions:VAULT_PERMISSIONS,
         roleDefaults:VAULT_ROLE_DEFAULTS
       };
@@ -1508,10 +1536,14 @@ async function api_local_vault(rawPath,options={}){
         role='OPERATOR';
         perms=[...VAULT_ROLE_DEFAULTS.OPERATOR];
         managerId=authUser.id;
-      }else if(role==='OPERATOR'&&body.managerId){
-        const hu=users.find(u=>u.id===body.managerId&&u.role==='HEAD');
-        if(!hu)throw fail('Выбранный руководитель отдела не найден.',400);
-        managerId=hu.id;
+      }else if(role==='OPERATOR'){
+        if(body.managerId){
+          const hu=users.find(u=>u.id===body.managerId&&(u.role==='HEAD'||u.role==='OWNER'));
+          if(!hu)throw fail('Выбранный руководитель отдела не найден.',400);
+          managerId=hu.id;
+        }else if(authUser.role==='OWNER'){
+          managerId=authUser.id;
+        }
       }
       if(role==='HEAD')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
       const nu={
@@ -1568,10 +1600,14 @@ async function api_local_vault(rawPath,options={}){
       if(body.managerId!==undefined&&tu.role==='OPERATOR'&&isFullUserMgr){
         if(!body.managerId){tu.managerId=null;changes.managerId=null;}
         else{
-          const hu=users.find(u=>u.id===body.managerId&&u.role==='HEAD');
+          const hu=users.find(u=>u.id===body.managerId&&(u.role==='HEAD'||u.role==='OWNER'));
           if(!hu)throw fail('Выбранный руководитель отдела не найден.',400);
           tu.managerId=hu.id;changes.managerId=hu.id;
         }
+      }
+      if(body.departmentScripts!==undefined&&(tu.role==='HEAD'||tu.role==='OWNER')){
+        tu.departmentScripts=Array.isArray(body.departmentScripts)?body.departmentScripts.map(String):[];
+        changes.departmentScripts=tu.departmentScripts;
       }
       if(body.permissions!==undefined&&tu.role!=='OWNER'){
         let np=[...new Set((body.permissions||[]).filter(p=>VAULT_PERMISSIONS.includes(p)))];
@@ -1681,11 +1717,63 @@ async function api_local_vault(rawPath,options={}){
     }
     if(method==='PUT'){
       if(!authUser)throw fail('Требуется авторизация.',401);
-      if(!hasPerm(authUser,'content.edit'))throw fail('Недостаточно прав для публикации изменений скрипта (content.edit).',403);
+      const hasContentEdit=hasPerm(authUser,'content.edit');
+      const hasSettingsManage=hasPerm(authUser,'settings.manage');
+      if(!hasContentEdit&&!hasSettingsManage)throw fail('Недостаточно прав для публикации изменений скрипта.',403);
+      if(!hasContentEdit){
+        const curContent=await VaultDB.get('content',null);
+        if(!isScriptTextUnchanged(curContent?.data||seed,body.data)){
+          throw fail('Менеджер обзвона не имеет права менять текст скрипта. Доступно только изменение оформления, цветов и шрифтов.',403);
+        }
+      }
       const updatedAt=Date.now();
       await VaultDB.set('content',{data:{...body.data,gifts:[]},updatedAt});
-      await logEvent({action:'content.publish',actor:authUser});
+      await logEvent({action:'content.publish',actor:authUser,details:{stylingOnly:!hasContentEdit}});
       return {updatedAt};
+    }
+  }
+
+  if(pathname==='/api/department/scripts'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    const allLayouts=await getStoredLayouts();
+    const isOwner=authUser.role==='OWNER';
+    const isHead=authUser.role==='HEAD';
+    const isAdmin=authUser.role==='ADMIN';
+    if(method==='GET'){
+      let targetHead=null;
+      const reqHeadId=uObj.searchParams.get('headId');
+      if(reqHeadId&&(isOwner||isAdmin)){
+        targetHead=users.find(u=>u.id===reqHeadId&&(u.role==='HEAD'||u.role==='OWNER'));
+      }else if(isHead||isOwner){
+        targetHead=authUser;
+      }else if(authUser.role==='OPERATOR'&&authUser.managerId){
+        targetHead=users.find(u=>u.id===authUser.managerId&&(u.role==='HEAD'||u.role==='OWNER'));
+      }
+      const scriptIds=Array.isArray(targetHead?.departmentScripts)?targetHead.departmentScripts:[];
+      return {
+        headId:targetHead?.id||null,
+        headLogin:targetHead?.login||null,
+        headDisplayName:targetHead?.displayName||targetHead?.login||null,
+        scriptIds,
+        layouts:allLayouts.map(l=>({id:l.id,name:l.name,savedAt:l.savedAt,stagesCount:l.data?.stages?.length||0}))
+      };
+    }
+    if(method==='PUT'){
+      if(!isOwner&&!isHead&&!isAdmin)throw fail('Настройка скриптов отдела доступна только руководителю отдела и руководству.',403);
+      if(!Array.isArray(body.scriptIds))throw fail('Параметр scriptIds должен быть массивом.',400);
+      let targetHead=null;
+      if(body.headId&&(isOwner||isAdmin)){
+        targetHead=users.find(u=>u.id===body.headId&&(u.role==='HEAD'||u.role==='OWNER'));
+        if(!targetHead)throw fail('Указанный руководитель отдела не найден.',404);
+      }else if(isHead||isOwner){
+        targetHead=authUser;
+      }
+      if(!targetHead)throw fail('Не указан руководитель отдела.',400);
+      targetHead.departmentScripts=body.scriptIds.map(String).filter(Boolean);
+      targetHead.updatedAt=Date.now();
+      await saveUsers();
+      await logEvent({action:'department.scripts.update',actor:authUser,target:targetHead.login,details:{scriptIds:targetHead.departmentScripts}});
+      return {ok:true,headId:targetHead.id,scriptIds:targetHead.departmentScripts};
     }
   }
 
@@ -1730,7 +1818,25 @@ async function api_local_vault(rawPath,options={}){
   };
 
   if(pathname==='/api/scripts'&&method==='GET'){
-    return {layouts:await getStoredLayouts()};
+    const allLayouts=await getStoredLayouts();
+    let resultLayouts=allLayouts;
+    let deptScripts=[];
+    if(authUser){
+      let mgr=null;
+      if(authUser.role==='OPERATOR'){
+        if(authUser.managerId)mgr=users.find(u=>u.id===authUser.managerId&&(u.role==='HEAD'||u.role==='OWNER'));
+      }else if(authUser.role==='HEAD'||authUser.role==='OWNER'){
+        mgr=authUser;
+      }
+      if(mgr&&Array.isArray(mgr.departmentScripts)&&mgr.departmentScripts.length>0){
+        deptScripts=mgr.departmentScripts;
+        if(authUser.role==='OPERATOR'){
+          const filtered=allLayouts.filter(l=>deptScripts.includes(l.id));
+          if(filtered.length>0)resultLayouts=filtered;
+        }
+      }
+    }
+    return {layouts:resultLayouts,allLayouts,departmentScripts:deptScripts};
   }
 
   if(pathname==='/api/layouts-order'&&method==='PUT'){
@@ -2232,7 +2338,8 @@ function renderPickerOptions(i,curGiftId,queryStr){
 
 function lineBlock(s,i){
   const rawKind=s.lineKinds[i]||'speech',isGift=['gift','gift-plus-one','gift-plus-two'].includes(rawKind),kind=isGift?'gift':(rawKind==='address'?'address':'speech');
-  const on=!isGift&&edit&&edit.t==='line'&&edit.i===i;
+  const isOp=currentUser&&currentUser.role==='OPERATOR';
+  const on=!isGift&&!isOp&&edit&&edit.t==='line'&&edit.i===i;
   const lineFmt=s.lineFormats?.[i]||LayoutModel.cleanFormat(null,0);
   if(isGift){
     const curGiftId=s.lineGifts?.[i]||lineGiftId(rawKind)||(rawKind==='gift'?'surprise':'');
@@ -2263,9 +2370,11 @@ function editBox(text,f){
   return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" title="Жирный"><b>Ж</b></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Текст:</span>${TXT.map(v=>sw('color',v)).join('')}<span class="v4-sep"></span><span class="v4-tlbl">Маркер:</span>${BG.map(v=>sw('background',v)).join('')}${edit?.t==='tip'?'':`<span class="v4-sep"></span><span class="v4-tlbl">Блок:</span>${BLOCK_BG.map(bsw).join('')}`}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><textarea data-v4-ta rows="${Math.max(3,Math.ceil(text.length/75))}">${E(text)}</textarea>${isAddr?`<div class="v4-ins">Вставить в текст: ${['город','зал','адрес','ориентиры'].map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="line" id="v4-live"${bs?` style="${bs}"`:''}>${isAddr?fillVenueHtml(LayoutModel.renderText(text,f)):LayoutModel.renderText(text,f)}</p><p class="v4-hint">Выделите слова и нажмите кнопку — оформится выделенное. «Блок» меняет заливку всей карточки реплики.</p></div>`;
 }
 function stageTab(s){
+  const isOperator=currentUser&&currentUser.role==='OPERATOR';
   const d=editorDraft,ix=d.stages.findIndex(x=>x.id===s.id),ob=obSel!=null?d.objections[obSel]:null;
   const others=d.objections.map((o,i)=>[o,i]).filter(([,i])=>!s.objectionIds.includes(i));
   return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">ЭТАП ${String(ix+1).padStart(2,'0')} · РЕДАКТИРОВАНИЕ</div><input class="v4-title" data-v4-title maxlength="190" value="${E(s.title)}" aria-label="Название этапа"></div><div class="v4-stage-tools"><button data-v4="mvl" ${ix===0?'disabled':''} title="Сдвинуть влево">←</button><button data-v4="mvr" ${ix===d.stages.length-1?'disabled':''} title="Сдвинуть вправо">→</button><button data-v4="dup">Дублировать</button><button data-v4="hide">${s.hidden?'Показать на сайте':'Скрыть с сайта'}</button>${canDeleteContent()?'<button data-v4="rm">Удалить блок</button>':''}</div></div>
+${isOperator?'<div class="v4-operator-banner">🎨 <b>Режим оформления для Менеджера обзвона:</b> вы можете настраивать размер шрифта, тему и цветовую заливку блоков. Текст реплик защищён от изменений.</div>':''}
 <div class="v4-body"><div class="v4-script"><div class="pane-label">Реплики оператора</div>${s.lines.map((_,i)=>lineBlock(s,i)).join('')}<div class="v4-add-row"><button data-v4="addline" data-i="${s.lines.length-1}">+ Добавить реплику</button><button class="v4-add-gift-btn" data-v4="addgiftline" data-i="${s.lines.length-1}">+ 🎁 Добавить подарок из базы</button><button class="v4-add-gift-btn" data-v4="addaddrline" data-i="${s.lines.length-1}">+ 📍 Добавить адрес</button></div>
 <div class="v4-tipbox"><label class="v4-switch"><input type="checkbox" data-v4-tipshow ${s.showTip?'checked':''}> Показывать подсказку оператору</label><div class="tip"><strong>ПОДСКАЗКА ОПЕРАТОРУ</strong>${edit&&edit.t==='tip'?editBox(s.tip,s.tipFormat):view('tip',0,s.tip,s.tipFormat)}</div></div></div>
 <aside class="objections-pane v4-obj"><h3>Частые возражения</h3><p class="sub">Нажмите на возражение, чтобы изменить ответ</p><div class="objection-list">${s.objectionIds.map(id=>d.objections[id]?`<button class="objection-button ${obSel===id?'on':''}" data-v4="obsel" data-id="${id}"><span>${E(d.objections[id].title)}</span><span aria-hidden="true">✎</span></button>`:'').join('')||'<p class="empty">Пока нет возражений.</p>'}</div>
@@ -2563,6 +2672,37 @@ body.auth-locked #auth-close{display:none!important}
 .header-logout-btn{min-height:32px;padding:0 10px;border-radius:8px;background:#ffffff14;border:1px solid #ffffff24;color:#fff;font-size:12px;font-weight:600;cursor:pointer}
 .header-logout-btn:hover{background:#ffffff28}
 #edit,#all-objections{display:none!important}
+.emp-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.emp-table{width:100%;border-collapse:collapse;font-size:13px;text-align:left}
+.emp-table th,.emp-table td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.emp-table th{background:var(--surface-alt);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:800}
+.emp-table tr:last-child td{border-bottom:0}
+.emp-table tr:hover td{background:color-mix(in srgb,var(--ui-soft) 40%,transparent)}
+.emp-user-cell{display:flex;flex-direction:column;gap:3px}
+.emp-user-name{font-weight:800;font-size:14px;color:var(--ink)}
+.emp-user-login{font-size:12px;color:var(--muted)}
+.emp-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.emp-actions button{min-height:32px;padding:0 10px;font-size:11px;border-radius:8px}
+.emp-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.emp-filter-btn{border:1px solid var(--line);background:var(--surface-alt);padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink)}
+.emp-filter-btn.active{background:var(--bar);color:#fff;border-color:var(--bar)}
+:root[data-theme=dark] .emp-filter-btn.active{background:var(--ui);color:#052521;border-color:var(--ui)}
+.dept-script-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin:16px 0}
+.dept-script-item{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface-alt);cursor:pointer;transition:border-color .15s}
+.dept-script-item:hover{border-color:var(--ui)}
+.dept-script-item.selected{border-color:var(--ui);background:var(--ui-soft)}
+.dept-script-item input[type=checkbox]{margin-top:3px;width:18px;height:18px;accent-color:var(--ui);cursor:pointer}
+.dept-script-info{flex:1;min-width:0}
+.dept-script-info strong{display:block;font-size:14px;font-weight:800;margin-bottom:4px}
+.dept-script-info small{display:block;font-size:12px;color:var(--muted)}
+.style-dialog{width:min(660px,calc(100% - 28px));max-height:92dvh;overflow-y:auto;padding:26px;background:var(--surface);color:var(--ink);border-radius:22px;border:1px solid var(--line)}
+.style-section{margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.style-section:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+.style-section h3{margin:0 0 10px;font-size:15px;font-weight:800}
+.style-stage-lines{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.style-stage-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface-alt)}
+.style-stage-preview{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.v4-operator-banner{padding:12px 16px;border-radius:12px;background:var(--amber-soft);border:1px solid var(--amber-line);color:var(--ink);font-size:13px;margin-bottom:14px}
 @media(max-width:900px){.user-row,.session-row{grid-template-columns:1fr}.user-actions{justify-content:flex-start}.perm-grid,.recovery-grid{grid-template-columns:1fr}}
 }</style>
 <script id="owner-module">
@@ -2623,7 +2763,7 @@ if(navTabs&&!document.getElementById('owner-tab')){
   navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">Владелец · Управление</span></button>');
 }
 if(!document.getElementById('owner-view')){
-  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog>');
+  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog>');
 }
 
 const authFoot=document.querySelector('#auth-dialog .auth-foot');
@@ -2634,7 +2774,7 @@ if(authFoot&&!document.getElementById('open-owner-recovery')){
 document.body.classList.add('auth-locked');
 const toolsBar=document.querySelector('.app-header .tools');
 if(toolsBar&&!document.getElementById('header-user-btn')){
-  toolsBar.insertAdjacentHTML('afterbegin','<button type="button" id="header-user-btn" class="header-user-badge" hidden></button><button type="button" id="header-logout-btn" class="header-logout-btn" hidden title="Выйти из учётной записи">Выйти</button>');
+  toolsBar.insertAdjacentHTML('afterbegin','<button type="button" id="header-style-btn" class="header-user-badge" title="Настройка оформления, шрифтов и цветов блоков">🎨 Оформление</button><button type="button" id="header-user-btn" class="header-user-badge" hidden></button><button type="button" id="header-logout-btn" class="header-logout-btn" hidden title="Выйти из учётной записи">Выйти</button>');
 }
 
 const origSetTab=setTab;
@@ -2650,7 +2790,7 @@ showScript=function(index=current,tab='script'){
   origShowScript(index,tab);
 };
 
-let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditFilterUser='',auditFilterAction='',roleDefaults={};
+let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],allLayoutsList=[],deptScriptsIds=[],empFilter='all',auditFilterUser='',auditFilterAction='',roleDefaults={};
 
 function fmtTime(ts){
   if(!ts)return '—';
@@ -2766,8 +2906,16 @@ async function loadOwnerData(){
     if(canUsers){
       const uRes=await api('/api/users');
       usersList=uRes.users||[];
-      headsList=uRes.heads||usersList.filter(u=>u.role==='HEAD').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login}));
+      headsList=uRes.heads||usersList.filter(u=>u.role==='HEAD'||u.role==='OWNER').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,isOwner:u.role==='OWNER'}));
       roleDefaults=uRes.roleDefaults||roleDefaults;
+    }
+    const canDeptScripts=currentUser.role==='OWNER'||currentUser.role==='HEAD'||currentUser.role==='ADMIN';
+    if(canDeptScripts){
+      try{
+        const dsRes=await api('/api/department/scripts');
+        deptScriptsIds=dsRes.scriptIds||[];
+        allLayoutsList=dsRes.layouts||[];
+      }catch{}
     }
     if(canSessions){
       const sRes=await api('/api/sessions');
@@ -2791,60 +2939,163 @@ function renderUsersSection(){
   const canManageAll=isOwner||(currentUser?.permissions||[]).includes('users.manage');
   const canCreate=canManageAll||isHead;
   const headMap=new Map(headsList.map(h=>[h.id,h]));
-  usersList.forEach(u=>{if(u.role==='HEAD'&&!headMap.has(u.id))headMap.set(u.id,{id:u.id,login:u.login,displayName:u.displayName||u.login});});
+  usersList.forEach(u=>{if((u.role==='HEAD'||u.role==='OWNER')&&!headMap.has(u.id))headMap.set(u.id,{id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,isOwner:u.role==='OWNER'});});
+
+  const ownerUserObj=usersList.find(u=>u.role==='OWNER');
+  const ownerId=ownerUserObj?.id;
+  const ownerDeptCount=usersList.filter(u=>u.role==='OPERATOR'&&u.managerId===ownerId).length;
+  const otherHeads=headsList.filter(h=>!h.isOwner&&h.role==='HEAD').map(h=>({
+    ...h,
+    count:usersList.filter(u=>u.role==='OPERATOR'&&u.managerId===h.id).length
+  }));
+
+  let displayedUsers=usersList;
+  if(isHead&&!canManageAll){
+    displayedUsers=usersList.filter(u=>u.id===currentUser.id||(u.role==='OPERATOR'&&u.managerId===currentUser.id));
+  }else if(empFilter!=='all'){
+    if(empFilter===ownerId){
+      displayedUsers=usersList.filter(u=>u.id===ownerId||(u.role==='OPERATOR'&&u.managerId===ownerId));
+    }else{
+      displayedUsers=usersList.filter(u=>u.id===empFilter||(u.role==='OPERATOR'&&u.managerId===empFilter));
+    }
+  }
+
   return `<div class="owner-card">
     <div class="owner-card-head">
       <div>
-        <h2>${isHead&&!canManageAll?'Мой отдел · Менеджеры обзвона':'Учётные записи и полномочия'} (${usersList.length})</h2>
+        <h2>${isHead&&!canManageAll?'Таблица сотрудников моего отдела':'Таблица сотрудников и отделов'} (${displayedUsers.length})</h2>
         <p>${isHead&&!canManageAll
-          ?'Вы можете добавлять своих Менеджеров обзвона и контролировать их вход, пароль и активные сессии.'
-          :'Иерархия ролей: <b>Владелец</b> → <b>Администратор</b> (полный доступ) → <b>Редактор</b> (гипер-скрипт, подарки) → <b>Руководитель отдела</b> (свои скрипты без удаления + контроль своих менеджеров) → <b>Менеджер обзвона</b>.'}</p>
+          ?'Сотрудники вашего отдела: просмотр статуса, управление паролем и сессиями, добавление менеджеров обзвона.'
+          :'Иерархия отделов: <b>Владелец (отдел Мелентьев Е.А.)</b>, <b>Администраторы</b>, <b>Редакторы</b>, <b>Руководители отделов</b> и <b>Менеджеры обзвона</b>.'}</p>
       </div>
       ${canCreate?`<button type="button" class="primary" data-owner-act="create-user">${isHead&&!canManageAll?'+ Добавить менеджера обзвона':'+ Добавить сотрудника'}</button>`:''}
     </div>
-    <div class="user-list">
-      ${usersList.map(u=>{
-        const uIsOwner=u.role==='OWNER';
-        const roleClass=u.role.toLowerCase();
-        const assignedHead=u.role==='OPERATOR'&&u.managerId?headMap.get(u.managerId):null;
-        const deptCount=u.role==='HEAD'?usersList.filter(x=>x.role==='OPERATOR'&&x.managerId===u.id).length:0;
-        const canEditRow=!uIsOwner&&(canManageAll||(isHead&&u.role==='OPERATOR'&&u.managerId===currentUser.id));
-        const canDeleteRow=!uIsOwner&&canManageAll&&!isHead;
-        return `<article class="user-row ${uIsOwner?'is-owner':''} ${u.blocked?'is-blocked':''}">
-          <div class="user-main">
-            <div class="user-title">
-              <span>${E(u.displayName||u.login)}</span>
-              <span style="color:var(--muted);font-weight:500;font-size:13px">@${E(u.login)}</span>
-              <span class="role-pill ${E(roleClass)}">${E(ROLE_NAMES[u.role]||u.role)}</span>
-              <span class="status-pill ${u.blocked?'blocked':'active'}">${u.blocked?'Заблокирован':'Активен'}</span>
-            </div>
-            <div class="user-meta">
-              Создан: ${fmtTime(u.createdAt)} · Последний вход: ${fmtTime(u.lastLoginAt)} · Активных сессий: <b>${u.activeSessionsCount||0}</b>
-              ${u.role==='OPERATOR'?`<br>Руководитель отдела: <b>${assignedHead?E(assignedHead.displayName+' (@'+assignedHead.login+')'):'не назначен'}</b>`:''}
-              ${u.role==='HEAD'?`<br>Менеджеров обзвона в отделе: <b>${deptCount}</b>`:''}
-            </div>
+
+    ${isOwner||canManageAll?`
+      <div class="emp-filters">
+        <button type="button" class="emp-filter-btn ${empFilter==='all'?'active':''}" data-emp-filter="all">Все сотрудники (${usersList.length})</button>
+        ${ownerId?`<button type="button" class="emp-filter-btn ${empFilter===ownerId?'active':''}" data-emp-filter="${ownerId}">★ Отдел Мелентьев Е.А. (${ownerDeptCount})</button>`:''}
+        ${otherHeads.map(h=>`<button type="button" class="emp-filter-btn ${empFilter===h.id?'active':''}" data-emp-filter="${h.id}">Отдел ${E(h.displayName||h.login)} (${h.count})</button>`).join('')}
+      </div>
+    `:`
+      <div class="emp-filters"><span class="perm-chip all">Руководитель отдела: @${E(currentUser.login)} (${E(currentUser.displayName||currentUser.login)})</span></div>
+    `}
+
+    <div class="emp-table-wrap">
+      <table class="emp-table">
+        <thead>
+          <tr>
+            <th>Сотрудник</th>
+            <th>Роль</th>
+            <th>Отдел / Руководитель</th>
+            <th>Статус</th>
+            <th>Активные сессии</th>
+            <th>Последний вход</th>
+            <th style="text-align:right">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${displayedUsers.map(u=>{
+            const uIsOwner=u.role==='OWNER';
+            const roleClass=u.role.toLowerCase();
+            const assignedHead=u.role==='OPERATOR'&&u.managerId?headMap.get(u.managerId):null;
+            const deptCount=(u.role==='HEAD'||u.role==='OWNER')?usersList.filter(x=>x.role==='OPERATOR'&&x.managerId===u.id).length:0;
+            const canEditRow=!uIsOwner&&(canManageAll||(isHead&&u.role==='OPERATOR'&&u.managerId===currentUser.id));
+            const canDeleteRow=!uIsOwner&&canManageAll&&!isHead;
+
+            let deptLabel='—';
+            if(u.role==='OPERATOR'){
+              deptLabel=assignedHead
+                ?(assignedHead.isOwner?E('★ '+assignedHead.displayName+' (Отдел Владельца)'):E(assignedHead.displayName+' (@'+assignedHead.login+')'))
+                :'<span style="color:var(--muted)">Не назначен</span>';
+            }else if(u.role==='OWNER'){
+              deptLabel='Владелец · Отдел Мелентьев Е.А. (<b>'+deptCount+'</b> менеджеров)';
+            }else if(u.role==='HEAD'){
+              deptLabel='Руководитель отдела (<b>'+deptCount+'</b> менеджеров)';
+            }else if(u.role==='ADMIN'){
+              deptLabel='Администрация компании';
+            }else if(u.role==='EDITOR'){
+              deptLabel='Редактор гипер-скрипта';
+            }
+
+            return `<tr>
+              <td>
+                <div class="emp-user-cell">
+                  <span class="emp-user-name">${E(u.displayName||u.login)}</span>
+                  <span class="emp-user-login">@${E(u.login)}</span>
+                </div>
+              </td>
+              <td><span class="role-pill ${E(roleClass)}">${E(ROLE_NAMES[u.role]||u.role)}</span></td>
+              <td><small>${deptLabel}</small></td>
+              <td><span class="status-pill ${u.blocked?'blocked':'active'}">${u.blocked?'Заблокирован':'Активен'}</span></td>
+              <td>
+                ${u.activeSessionsCount?'<span class="status-pill active" title="Пользователь онлайн">🟢 '+u.activeSessionsCount+' сессий</span>':'<span style="color:var(--muted);font-size:12px">Офлайн</span>'}
+              </td>
+              <td><small style="color:var(--muted)">${fmtTime(u.lastLoginAt)}</small></td>
+              <td>
+                <div class="emp-actions">
+                  ${uIsOwner
+                    ?(isOwner?`<button type="button" data-owner-act="edit-owner-profile">Профиль и пароль</button><button type="button" data-owner-act="regen-codes">Коды (${u.recoveryCodesRemaining??0})</button>`:`<span style="color:var(--muted);font-size:11px">Защищено</span>`)
+                    :(canEditRow?`
+                      <button type="button" data-owner-act="edit-user" data-id="${E(u.id)}">${isHead&&!canManageAll?'Пароль / Доступ':'Права и роль'}</button>
+                      <button type="button" data-owner-act="toggle-block" data-id="${E(u.id)}" data-blocked="${u.blocked?'1':'0'}">${u.blocked?'Разблокировать':'Блокировать'}</button>
+                      ${u.activeSessionsCount?`<button type="button" data-owner-act="revoke-user-sessions" data-id="${E(u.id)}">Сессии (${u.activeSessionsCount})</button>`:''}
+                      ${canDeleteRow?`<button type="button" class="danger-text" data-owner-act="delete-user" data-id="${E(u.id)}" data-login="${E(u.login)}">Удалить</button>`:''}
+                    `:'')}
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderDepartmentScriptsSection(){
+  const isOwner=currentUser?.role==='OWNER';
+  const isHead=currentUser?.role==='HEAD';
+  const canManageAll=isOwner||(currentUser?.permissions||[]).includes('users.manage');
+
+  let activeHead=currentUser;
+  const availHeads=headsList.filter(h=>h.isOwner||h.role==='HEAD');
+
+  return `<div class="owner-card">
+    <div class="owner-card-head">
+      <div>
+        <h2>Скрипты для сотрудников отдела</h2>
+        <p>Каждый руководитель отдела может выбрать скрипты, с которыми работают менеджеры обзвона в его отделе.<br><b>Если ничего не выбрано — сотрудникам отдела отображаются все доступные скрипты.</b></p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" id="dept-scripts-select-all">✓ Выбрать все</button>
+        <button type="button" id="dept-scripts-clear">✕ Сбросить (показывать все)</button>
+        <button type="button" class="primary" id="dept-scripts-save">💾 Сохранить скрипты отдела</button>
+      </div>
+    </div>
+
+    ${availHeads.length>1&&(isOwner||canManageAll)?`
+      <div style="margin-bottom:14px">
+        <label for="dept-scripts-head-select" style="font-size:12px;font-weight:700">Выбор отдела руководителя:</label>
+        <select id="dept-scripts-head-select" style="max-width:320px;height:38px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);font:inherit">
+          ${availHeads.map(h=>`<option value="${E(h.id)}" ${h.id===activeHead.id?'selected':''}>${h.isOwner?'★ Отдел Мелентьев Е.А. (Владелец)':E('Отдел '+h.displayName+' (@'+h.login+')')}</option>`).join('')}
+        </select>
+      </div>
+    `:`
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent-ink)">Отдел: ${isOwner?'★ Мелентьев Е.А. (Владелец)':E(currentUser.displayName+' (@'+currentUser.login+')')}</div>
+    `}
+
+    <div class="dept-script-grid" id="dept-script-grid">
+      ${allLayoutsList.map(l=>{
+        const isChecked=deptScriptsIds.includes(l.id);
+        return `<label class="dept-script-item ${isChecked?'selected':''}">
+          <input type="checkbox" name="dept_script" value="${E(l.id)}" ${isChecked?'checked':''}>
+          <div class="dept-script-info">
+            <strong>${E(l.name)}</strong>
+            <small>Блоков: ${l.stagesCount||'—'} · Сохранён: ${dateLabel(l.savedAt)}</small>
+            <span class="status-pill ${isChecked?'active':''}" style="margin-top:6px">${isChecked?'✓ В отделе':'Не выбран (скрыт, если есть выбор)'}</span>
           </div>
-          <div class="perm-chips">
-            ${uIsOwner
-              ?'<span class="perm-chip all">★ Полный доступ ко всем функциям, настройкам и пользователям (Владелец)</span>'
-              :u.role==='ADMIN'
-                ?'<span class="perm-chip all">★ Полный доступ ко всем функциям и пользователям (Администратор)</span>'
-                :(u.permissions&&u.permissions.length
-                  ?u.permissions.map(p=>`<span class="perm-chip">${E(PERM_LABELS[p]||p)}</span>`).join('')+(u.role==='HEAD'?'<span class="perm-chip">Без права удаления · Контроль своих менеджеров</span>':'')
-                  :'<span class="user-meta">Работа со скриптом при обзвоне (Менеджер обзвона)</span>')}
-          </div>
-          <div class="user-actions">
-            ${uIsOwner
-              ?(isOwner?`<button type="button" data-owner-act="edit-owner-profile">Профиль и пароль Владельца</button><button type="button" data-owner-act="regen-codes">Резервные коды (${u.recoveryCodesRemaining??0})</button>`:`<span class="user-meta">Защищено системой</span>`)
-              :(canEditRow?`
-                <button type="button" data-owner-act="edit-user" data-id="${E(u.id)}">${isHead&&!canManageAll?'Изменить / пароль':'Права и роль'}</button>
-                <button type="button" data-owner-act="toggle-block" data-id="${E(u.id)}" data-blocked="${u.blocked?'1':'0'}">${u.blocked?'Разблокировать':'Блокировать'}</button>
-                ${u.activeSessionsCount?`<button type="button" data-owner-act="revoke-user-sessions" data-id="${E(u.id)}">Сбросить сессии (${u.activeSessionsCount})</button>`:''}
-                ${canDeleteRow?`<button type="button" class="danger-text" data-owner-act="delete-user" data-id="${E(u.id)}" data-login="${E(u.login)}">Удалить</button>`:''}
-              `:'')}
-          </div>
-        </article>`;
-      }).join('')}
+        </label>`;
+      }).join('')||'<p class="v4-empty" style="grid-column:1/-1">Макеты не найдены. Сохраните хотя бы один макет.</p>'}
     </div>
   </div>`;
 }
@@ -2983,8 +3234,10 @@ function renderOwnerView(){
   if(ownerTab==='sessions'&&!canViewSessions)ownerTab='security';
   if(ownerTab==='audit'&&!canViewAudit)ownerTab='security';
 
+  const canDeptScripts=isOwner||isHead||currentUser.role==='ADMIN';
   const navItems=[];
-  if(canViewUsers)navItems.push(['users',`👥 ${isHead&&!perms.includes('users.manage')?'Мой отдел':'Пользователи и роли'} (${usersList.length})`]);
+  if(canViewUsers)navItems.push(['users',`👥 ${isHead&&!perms.includes('users.manage')?'Мой отдел (сотрудники)':'Сотрудники компании'} (${usersList.length})`]);
+  if(canDeptScripts)navItems.push(['dept-scripts',`📋 Скрипты отдела ${deptScriptsIds.length?'('+deptScriptsIds.length+')':''}`]);
   if(canViewSessions)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
   if(canViewAudit)navItems.push(['audit',`📋 Журнал действий`]);
   navItems.push(['security',`🔐 Безопасность и профиль`]);
@@ -3004,7 +3257,7 @@ function renderOwnerView(){
   <nav class="owner-nav" role="tablist">
     ${navItems.map(([id,lbl])=>`<button type="button" role="tab" class="${ownerTab===id?'on':''}" data-owner-tab="${id}">${lbl}</button>`).join('')}
   </nav>
-  ${ownerTab==='users'?renderUsersSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():renderSecuritySection()}`;
+  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():renderSecuritySection()}`;
 }
 
 function openUserModal(editUser=null){
@@ -3014,8 +3267,11 @@ function openUserModal(editUser=null){
   const role=isHeadOnly?'OPERATOR':(editUser?editUser.role:'OPERATOR');
   const perms=editUser?editUser.permissions:(roleDefaults[role]||[]);
   const curManagerId=isHeadOnly?currentUser.id:(editUser?.managerId||'');
-  const availHeads=[...headsList];
-  usersList.forEach(u=>{if(u.role==='HEAD'&&!availHeads.some(h=>h.id===u.id))availHeads.push({id:u.id,login:u.login,displayName:u.displayName||u.login});});
+  const availHeads=[];
+  const ownerUserObj=usersList.find(u=>u.role==='OWNER');
+  if(ownerUserObj)availHeads.push({id:ownerUserObj.id,login:ownerUserObj.login,displayName:ownerUserObj.displayName||ownerUserObj.login,isOwner:true});
+  headsList.forEach(h=>{if(!availHeads.some(x=>x.id===h.id))availHeads.push(h);});
+  usersList.forEach(u=>{if((u.role==='HEAD'||u.role==='OWNER')&&!availHeads.some(h=>h.id===u.id))availHeads.push({id:u.id,login:u.login,displayName:u.displayName||u.login,isOwner:u.role==='OWNER'});});
 
   dlg.innerHTML=`<button type="button" class="dialog-x" data-close-modal="user-modal" aria-label="Закрыть">✕</button>
     <div class="kicker">${isEdit?'НАСТРОЙКА ПОЛНОМОЧИЙ':(isHeadOnly?'НОВЫЙ МЕНЕДЖЕР ОБЗВОНА':'НОВЫЙ ПОЛЬЗОВАТЕЛЬ')}</div>
@@ -3051,7 +3307,7 @@ function openUserModal(editUser=null){
           <label for="um-manager">Руководитель отдела (за кем закреплён Менеджер обзвона)</label>
           <select id="um-manager" name="managerId">
             <option value="">— Без руководителя отдела —</option>
-            ${availHeads.map(h=>`<option value="${E(h.id)}" ${curManagerId===h.id?'selected':''}>${E(h.displayName||h.login)} (@${E(h.login)})</option>`).join('')}
+            ${availHeads.map(h=>`<option value="${E(h.id)}" ${(curManagerId===h.id||(!curManagerId&&h.isOwner&&currentUser.role==='OWNER'))?'selected':''}>${h.isOwner?'★ '+E(h.displayName)+' (Отдел Владельца)':E(h.displayName||h.login)+' (@'+E(h.login)+')'}</option>`).join('')}
           </select>
         </div>
         <div id="um-perm-wrap">
@@ -3170,6 +3426,228 @@ document.addEventListener('click',async e=>{
     ownerTab=tabBtn.dataset.ownerTab;
     await loadOwnerData();
     renderOwnerView();
+    return;
+  }
+
+
+function openStyleModal(){
+  const dlg=document.getElementById('style-modal');
+  if(!dlg)return;
+  const s=data.settings||{};
+  const curStage=data.stages[current]||data.stages[0];
+  const dark=document.documentElement.dataset.theme==='dark';
+  const blockColors=[
+    ['#e2f3ef','Мятный'],
+    ['#daf5e4','Зелёный'],
+    ['#fff6de','Жёлтый'],
+    ['#fdeee8','Персиковый'],
+    ['#e6f0fa','Голубой'],
+    ['#f1edff','Лавандовый'],
+    ['#ffffff','Белый'],
+    ['none','Стандарт']
+  ];
+
+  dlg.innerHTML=`<button type="button" class="dialog-x" data-close-modal="style-modal" aria-label="Закрыть">✕</button>
+    <div class="kicker">ОФОРМЛЕНИЕ И ЦВЕТА</div>
+    <h2 id="style-modal-title">Настройки оформления сайта</h2>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 16px;line-height:1.5">
+      ${currentUser?.role==='OPERATOR'?'Вы можете менять тему, размер и жирность шрифта, а также цветовую заливку блоков. Текст скрипта зафиксирован и защищён от изменений.':'Настройте тему, размер и жирность шрифта текста скрипта и цвета блоков.'}
+    </p>
+
+    <div class="style-section">
+      <h3>Тема оформления</h3>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button type="button" id="modal-theme-toggle" style="min-height:40px;padding:0 16px;border-radius:10px;font-weight:700">
+          ${dark?'☀ Включить светлую тему':'☾ Включить тёмную тему'}
+        </button>
+        <span style="font-size:13px;color:var(--muted)">Текущая: <b>${dark?'Тёмная тема':'Светлая тема'}</b></span>
+      </div>
+    </div>
+
+    <div class="style-section">
+      <h3>Шрифт текста скрипта</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label for="sm-font-size" style="font-size:12px;font-weight:700;display:block;margin-bottom:6px">Размер шрифта</label>
+          <select id="sm-font-size" style="width:100%;height:40px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+            ${[14,16,18,20,22,24,26,28,30,32].map(n=>`<option value="${n}" ${(s.fontSize||18)===n?'selected':''}>${n} px</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label for="sm-font-weight" style="font-size:12px;font-weight:700;display:block;margin-bottom:6px">Жирность шрифта</label>
+          <select id="sm-font-weight" style="width:100%;height:40px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink)">
+            ${[[400,'Обычный'],[500,'Средний'],[600,'Полужирный'],[700,'Жирный'],[800,'Очень жирный']].map(([n,lbl])=>`<option value="${n}" ${(s.fontWeight||400)===n?'selected':''}>${lbl}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="settings-sample" id="sm-sample" style="margin-top:12px;font-size:${s.fontSize||18}px;font-weight:${s.fontWeight||400};border-color:${s.accent||'#008578'}">
+        Пример: Добрый день! Меня зовут Анна, компания BAUER. Звоню по поводу вашего участия в программе.
+      </div>
+    </div>
+
+    <div class="style-section">
+      <h3>Цветовая гамма темы</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label for="sm-accent" style="font-size:12px;font-weight:700;display:block;margin-bottom:6px">Основной акцент</label>
+          <input type="color" id="sm-accent" value="${/^#[0-9a-f]{6}$/i.test(s.accent)?s.accent:'#008578'}" style="width:100%;height:40px;border-radius:10px;border:1px solid var(--line);cursor:pointer">
+        </div>
+        <div>
+          <label for="sm-header" style="font-size:12px;font-weight:700;display:block;margin-bottom:6px">Цвет шапки</label>
+          <input type="color" id="sm-header" value="${/^#[0-9a-f]{6}$/i.test(s.headerColor)?s.headerColor:'#002f2a'}" style="width:100%;height:40px;border-radius:10px;border:1px solid var(--line);cursor:pointer">
+        </div>
+      </div>
+      <div class="preset-colors" style="margin-top:10px">
+        ${[['#008578','Бирюза'],['#2166cc','Синий'],['#7644c4','Фиолетовый'],['#bd4b29','Терракота']].map(([c,lbl])=>`<button type="button" class="sm-preset-btn" data-color="${c}"><span class="preset-dot" style="--preset:${c}"></span>${lbl}</button>`).join('')}
+      </div>
+    </div>
+
+    ${curStage?`
+      <div class="style-section">
+        <h3>Цвета блоков текущего этапа («${E(curStage.title)}»)</h3>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Выберите цвет карточки для каждого абзаца реплики:</p>
+        <div class="style-stage-lines">
+          ${curStage.lines.map((line,idx)=>{
+            const curBg=curStage.lineFormats?.[idx]?.style?.blockBg||'';
+            const snip=line.replace(/\s+/g,' ').trim().slice(0,60);
+            return `<div class="style-stage-row">
+              <span class="style-stage-preview" title="${E(line)}">${idx+1}. ${E(snip||'Реплика')}</span>
+              <div class="v4-bbar">
+                ${blockColors.map(([c,lbl])=>{
+                  const isAct=(c==='none'&&(!curBg||curBg==='none'))||(c!=='none'&&curBg.toLowerCase()===c);
+                  const swCss=c==='none'?'background:var(--surface-alt)':LayoutModel.blockCSS({style:{blockBg:c}});
+                  return `<button type="button" class="v4-bsw ${isAct?'active on':''}" data-sm-blockbg="${idx}" data-color="${c}" title="${lbl}" style="${swCss}">${c==='none'?'✕':''}</button>`;
+                }).join('')}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    `:''}
+
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button type="button" class="primary" id="save-style-modal-btn" style="flex:1">💾 Применить и сохранить оформление</button>
+      <button type="button" data-close-modal="style-modal">Закрыть</button>
+    </div>`;
+
+  dlg.querySelector('#modal-theme-toggle')?.addEventListener('click',()=>{
+    document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';
+    try{localStorage.setItem('bauer-color-theme',document.documentElement.dataset.theme);}catch{}
+    updateThemeButton();
+    openStyleModal();
+  });
+
+  const sample=dlg.querySelector('#sm-sample');
+  const sizeSel=dlg.querySelector('#sm-font-size');
+  const weightSel=dlg.querySelector('#sm-font-weight');
+  const accentInp=dlg.querySelector('#sm-accent');
+
+  const updateSmSample=()=>{
+    if(!sample)return;
+    sample.style.fontSize=(sizeSel?.value||18)+'px';
+    sample.style.fontWeight=weightSel?.value||400;
+    sample.style.borderColor=accentInp?.value||'#008578';
+  };
+  sizeSel?.addEventListener('change',updateSmSample);
+  weightSel?.addEventListener('change',updateSmSample);
+  accentInp?.addEventListener('input',updateSmSample);
+
+  dlg.querySelectorAll('.sm-preset-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      if(accentInp){accentInp.value=btn.dataset.color;updateSmSample();}
+    });
+  });
+
+  dlg.querySelectorAll('[data-sm-blockbg]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const idx=+btn.dataset.smBlockbg,c=btn.dataset.color;
+      if(!curStage)return;
+      curStage.lineFormats=curStage.lineFormats||curStage.lines.map(()=>LayoutModel.cleanFormat(null,0));
+      curStage.lineFormats[idx]=LayoutModel.applyFormat(curStage.lineFormats[idx],(curStage.lines[idx]||'').length,0,0,{blockBg:c},false);
+      btn.closest('.v4-bbar').querySelectorAll('.v4-bsw').forEach(b=>b.classList.remove('active','on'));
+      btn.classList.add('active','on');
+    });
+  });
+
+  dlg.querySelector('#save-style-modal-btn')?.addEventListener('click',async()=>{
+    const saveBtn=dlg.querySelector('#save-style-modal-btn');
+    saveBtn.disabled=true;
+    try{
+      data.settings.fontSize=Number(sizeSel.value)||18;
+      data.settings.fontWeight=Number(weightSel.value)||400;
+      data.settings.accent=accentInp.value||data.settings.accent;
+      const hdrInp=dlg.querySelector('#sm-header');
+      if(hdrInp)data.settings.headerColor=hdrInp.value||data.settings.headerColor;
+      applySiteSettings();
+      await publishCurrent();
+      renderCards();
+      toast('Оформление успешно применено и сохранено');
+      dlg.close();
+    }catch(err){
+      toast(err.message);
+    }finally{
+      saveBtn.disabled=false;
+    }
+  });
+
+  dlg.showModal();
+}
+document.getElementById('header-style-btn')?.addEventListener('click',openStyleModal);
+
+
+  const empFBtn=e.target.closest('[data-emp-filter]');
+  if(empFBtn){
+    empFilter=empFBtn.dataset.empFilter;
+    renderOwnerView();
+    return;
+  }
+
+  const deptHeadSel=e.target.closest('#dept-scripts-head-select');
+  if(deptHeadSel){
+    // handled on change
+  }
+
+  if(e.target.id==='dept-scripts-select-all'){
+    document.querySelectorAll('#dept-script-grid input[type=checkbox]').forEach(cb=>{
+      cb.checked=true;
+      cb.closest('.dept-script-item')?.classList.add('selected');
+    });
+    return;
+  }
+
+  if(e.target.id==='dept-scripts-clear'){
+    document.querySelectorAll('#dept-script-grid input[type=checkbox]').forEach(cb=>{
+      cb.checked=false;
+      cb.closest('.dept-script-item')?.classList.remove('selected');
+    });
+    return;
+  }
+
+  if(e.target.closest('#dept-script-grid .dept-script-item')){
+    const item=e.target.closest('.dept-script-item');
+    const cb=item.querySelector('input[type=checkbox]');
+    if(e.target!==cb){cb.checked=!cb.checked;}
+    item.classList.toggle('selected',cb.checked);
+    return;
+  }
+
+  if(e.target.id==='dept-scripts-save'){
+    const btn=e.target;
+    btn.disabled=true;
+    const selectedIds=[...document.querySelectorAll('#dept-script-grid input[type=checkbox]:checked')].map(cb=>cb.value);
+    const headId=document.getElementById('dept-scripts-head-select')?.value||currentUser.id;
+    try{
+      await api('/api/department/scripts',{
+        method:'PUT',
+        body:JSON.stringify({scriptIds:selectedIds,headId})
+      });
+      deptScriptsIds=selectedIds;
+      if(currentUser.id===headId)currentUser.departmentScripts=selectedIds;
+      toast(selectedIds.length?'Скрипты отдела сохранены (выбрано: '+selectedIds.length+')':'Скрипты отдела сброшены (сотрудникам доступны все скрипты)');
+      dispatchEvent(new Event('layouts-changed'));
+      renderOwnerView();
+    }catch(err){toast(err.message);}
+    finally{btn.disabled=false;}
     return;
   }
 

@@ -39,7 +39,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
   ADMIN: [...ALL_PERMISSIONS],
   EDITOR: ['content.edit', 'layouts.manage', 'layouts.delete', 'gifts.manage', 'addresses.manage', 'settings.manage'],
   HEAD: ['content.edit', 'layouts.manage', 'users.view', 'users.manage', 'sessions.manage'],
-  OPERATOR: []
+  OPERATOR: ['settings.manage']
 };
 
 const DEFAULT_OWNER_USER = {
@@ -288,6 +288,12 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
           u.permissions.push('layouts.delete');
         }
         u.permissionsMigratedV2 = true;
+        migrated = true;
+      } else if (u.role === 'OPERATOR' && !u.permissionsMigratedV3) {
+        if (!Array.isArray(u.permissions) || !u.permissions.includes('settings.manage')) {
+          u.permissions = [...new Set([...(u.permissions || []), 'settings.manage'])];
+        }
+        u.permissionsMigratedV3 = true;
         migrated = true;
       }
     });
@@ -577,6 +583,7 @@ function sanitizeUser(u) {
     displayName: u.displayName || u.login,
     role: u.role,
     managerId: u.managerId || null,
+    departmentScripts: Array.isArray(u.departmentScripts) ? u.departmentScripts : [],
     blocked: isOwner ? false : Boolean(u.blocked),
     permissions: isOwner ? [...DEFAULT_ROLE_PERMISSIONS.OWNER] : (Array.isArray(u.permissions) ? u.permissions : []),
     createdAt: u.createdAt || 0,
@@ -584,6 +591,34 @@ function sanitizeUser(u) {
     lastLoginAt: u.lastLoginAt || null,
     recoveryCodesRemaining: isOwner && Array.isArray(u.recoveryCodes) ? u.recoveryCodes.filter(c => !c.used).length : undefined
   };
+}
+
+function isScriptTextUnchanged(originalData, nextData) {
+  if (!originalData || !nextData) return false;
+  const origStages = Array.isArray(originalData.stages) ? originalData.stages : [];
+  const nextStages = Array.isArray(nextData.stages) ? nextData.stages : [];
+  if (origStages.length !== nextStages.length) return false;
+  for (let i = 0; i < origStages.length; i++) {
+    const o = origStages[i], n = nextStages[i];
+    if (o.id !== n.id) return false;
+    if (String(o.title || '') !== String(n.title || '')) return false;
+    if (String(o.tip || '') !== String(n.tip || '')) return false;
+    const oLines = Array.isArray(o.lines) ? o.lines : [];
+    const nLines = Array.isArray(n.lines) ? n.lines : [];
+    if (oLines.length !== nLines.length) return false;
+    for (let j = 0; j < oLines.length; j++) {
+      if (String(oLines[j] || '') !== String(nLines[j] || '')) return false;
+    }
+  }
+  const origObs = Array.isArray(originalData.objections) ? originalData.objections : [];
+  const nextObs = Array.isArray(nextData.objections) ? nextData.objections : [];
+  if (origObs.length !== nextObs.length) return false;
+  for (let i = 0; i < origObs.length; i++) {
+    const o = origObs[i], n = nextObs[i];
+    if (String(o.title || '') !== String(n.title || '')) return false;
+    if (String(o.text || '') !== String(n.text || '')) return false;
+  }
+  return true;
 }
 
 function readBody(req) {
@@ -1034,7 +1069,9 @@ function createAppServer(options = {}) {
         }
         if (method === 'PUT') {
           if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
-          if (!hasPermission(auth.user, 'content.edit')) {
+          const hasContentEdit = hasPermission(auth.user, 'content.edit');
+          const hasSettingsManage = hasPermission(auth.user, 'settings.manage');
+          if (!hasContentEdit && !hasSettingsManage) {
             store.logEvent({ action: 'content.update.denied', actor: auth.user, ip, userAgent, status: 'denied' });
             return sendJson(res, 403, { error: 'Недостаточно прав для публикации изменений скрипта.' });
           }
@@ -1042,12 +1079,19 @@ function createAppServer(options = {}) {
           if (!body.data || typeof body.data !== 'object') {
             return sendJson(res, 400, { error: 'Некорректные данные скрипта.' });
           }
+          // Strict text immutability check for operators (users without content.edit)
+          if (!hasContentEdit) {
+            if (!isScriptTextUnchanged(appData.content?.data, body.data)) {
+              store.logEvent({ action: 'content.text_change_blocked', actor: auth.user, ip, userAgent, status: 'denied' });
+              return sendJson(res, 403, { error: 'Менеджер обзвона не имеет права менять текст скрипта. Доступно только изменение оформления, цветов и шрифтов.' });
+            }
+          }
           const currentSettings = appData.content?.data?.settings;
           if (
             currentSettings &&
             body.data.settings &&
             JSON.stringify(body.data.settings) !== JSON.stringify(currentSettings) &&
-            !hasPermission(auth.user, 'settings.manage')
+            !hasSettingsManage
           ) {
             store.logEvent({ action: 'settings.update.denied', actor: auth.user, ip, userAgent, status: 'denied' });
             return sendJson(res, 403, { error: 'Недостаточно прав для изменения настроек оформления (settings.manage).' });
@@ -1060,14 +1104,106 @@ function createAppServer(options = {}) {
             actor: auth.user,
             ip,
             userAgent,
-            details: { stagesCount: Array.isArray(body.data.stages) ? body.data.stages.length : 0 }
+            details: { stagesCount: Array.isArray(body.data.stages) ? body.data.stages.length : 0, stylingOnly: !hasContentEdit }
           });
           return sendJson(res, 200, { updatedAt });
         }
       }
 
       if (pathname === '/api/scripts' && method === 'GET') {
-        return sendJson(res, 200, { layouts: appData.layouts || [] });
+        const allLayouts = appData.layouts || [];
+        let resultLayouts = allLayouts;
+        let deptScripts = [];
+        if (auth && auth.user) {
+          let mgr = null;
+          const allUsers = store.getUsers();
+          if (auth.user.role === 'OPERATOR') {
+            if (auth.user.managerId) {
+              mgr = allUsers.find(u => u.id === auth.user.managerId);
+            }
+          } else if (auth.user.role === 'HEAD' || auth.user.role === 'OWNER') {
+            mgr = auth.user;
+          }
+          if (mgr && Array.isArray(mgr.departmentScripts) && mgr.departmentScripts.length > 0) {
+            deptScripts = mgr.departmentScripts;
+            if (auth.user.role === 'OPERATOR') {
+              const filtered = allLayouts.filter(l => deptScripts.includes(l.id));
+              if (filtered.length > 0) {
+                resultLayouts = filtered;
+              }
+            }
+          }
+        }
+        return sendJson(res, 200, {
+          layouts: resultLayouts,
+          allLayouts,
+          departmentScripts: deptScripts
+        });
+      }
+
+      // Department scripts: GET /api/department/scripts, PUT /api/department/scripts
+      if (pathname === '/api/department/scripts') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        const allUsers = store.getUsers();
+        const allLayouts = appData.layouts || [];
+        const isOwner = auth.user.role === 'OWNER';
+        const isHead = auth.user.role === 'HEAD';
+        const isAdmin = auth.user.role === 'ADMIN';
+
+        if (method === 'GET') {
+          let targetHead = null;
+          const requestedHeadId = url.searchParams.get('headId');
+          if (requestedHeadId && (isOwner || isAdmin)) {
+            targetHead = allUsers.find(u => u.id === requestedHeadId && (u.role === 'HEAD' || u.role === 'OWNER'));
+          } else if (isHead || isOwner) {
+            targetHead = auth.user;
+          } else if (auth.user.role === 'OPERATOR' && auth.user.managerId) {
+            targetHead = allUsers.find(u => u.id === auth.user.managerId && (u.role === 'HEAD' || u.role === 'OWNER'));
+          }
+          const scriptIds = Array.isArray(targetHead?.departmentScripts) ? targetHead.departmentScripts : [];
+          return sendJson(res, 200, {
+            headId: targetHead?.id || null,
+            headLogin: targetHead?.login || null,
+            headDisplayName: targetHead?.displayName || targetHead?.login || null,
+            scriptIds,
+            layouts: allLayouts.map(l => ({ id: l.id, name: l.name, savedAt: l.savedAt, stagesCount: l.data?.stages?.length || 0 }))
+          });
+        }
+
+        if (method === 'PUT') {
+          if (!isOwner && !isHead && !isAdmin) {
+            return sendJson(res, 403, { error: 'Настройка скриптов отдела доступна только руководителю отдела и руководству.' });
+          }
+          const body = await readBody(req);
+          if (!Array.isArray(body.scriptIds)) {
+            return sendJson(res, 400, { error: 'Параметр scriptIds должен быть массивом идентификаторов макетов.' });
+          }
+          let targetHead = null;
+          if (body.headId && (isOwner || isAdmin)) {
+            targetHead = allUsers.find(u => u.id === body.headId && (u.role === 'HEAD' || u.role === 'OWNER'));
+            if (!targetHead) {
+              return sendJson(res, 404, { error: 'Указанный руководитель отдела не найден.' });
+            }
+          } else if (isHead || isOwner) {
+            targetHead = auth.user;
+          }
+          if (!targetHead) {
+            return sendJson(res, 400, { error: 'Не указан руководитель отдела.' });
+          }
+          const cleanIds = body.scriptIds.map(String).filter(Boolean);
+          targetHead.departmentScripts = cleanIds;
+          targetHead.updatedAt = Date.now();
+          store.saveUsers();
+          store.logEvent({
+            action: 'department.scripts.update',
+            actor: auth.user,
+            target: targetHead.login,
+            ip,
+            userAgent,
+            details: { headId: targetHead.id, scriptIds: cleanIds, count: cleanIds.length }
+          });
+          return sendJson(res, 200, { ok: true, headId: targetHead.id, scriptIds: cleanIds });
+        }
       }
 
       if (pathname === '/api/giftbase') {
@@ -1326,8 +1462,15 @@ function createAppServer(options = {}) {
             activeSessionsCount: activeSessions.filter(s => s.userId === u.id).length
           }));
           const heads = allUsers
-            .filter(u => u.role === 'HEAD')
-            .map(u => ({ id: u.id, login: u.login, displayName: u.displayName || u.login }));
+            .filter(u => u.role === 'HEAD' || u.role === 'OWNER')
+            .map(u => ({
+              id: u.id,
+              login: u.login,
+              displayName: u.displayName || u.login,
+              role: u.role,
+              isOwner: u.role === 'OWNER',
+              departmentScriptsCount: Array.isArray(u.departmentScripts) ? u.departmentScripts.length : 0
+            }));
           return sendJson(res, 200, { users: list, heads, availablePermissions: ALL_PERMISSIONS, roleDefaults: DEFAULT_ROLE_PERMISSIONS });
         }
 
@@ -1374,7 +1517,7 @@ function createAppServer(options = {}) {
             ? 'OPERATOR'
             : (['ADMIN', 'EDITOR', 'HEAD', 'OPERATOR'].includes(body.role) ? body.role : 'OPERATOR');
           const permissions = isHead
-            ? []
+            ? [...(DEFAULT_ROLE_PERMISSIONS.OPERATOR || [])]
             : (Array.isArray(body.permissions)
                 ? body.permissions.filter(p => ALL_PERMISSIONS.includes(p))
                 : [...(DEFAULT_ROLE_PERMISSIONS[role] || [])]);
@@ -1384,7 +1527,9 @@ function createAppServer(options = {}) {
               managerId = auth.user.id;
             } else if (body.managerId) {
               const mgr = store.findUserById(String(body.managerId));
-              if (mgr && mgr.role === 'HEAD') managerId = mgr.id;
+              if (mgr && (mgr.role === 'HEAD' || mgr.role === 'OWNER')) managerId = mgr.id;
+            } else if (isOwner) {
+              managerId = auth.user.id;
             }
           }
           const now = Date.now();
@@ -1494,12 +1639,17 @@ function createAppServer(options = {}) {
             let nextMgr = null;
             if (body.managerId) {
               const mgr = store.findUserById(String(body.managerId));
-              if (mgr && mgr.role === 'HEAD') nextMgr = mgr.id;
+              if (mgr && (mgr.role === 'HEAD' || mgr.role === 'OWNER')) nextMgr = mgr.id;
             }
             if ((targetUser.managerId || null) !== nextMgr) {
               changes.managerId = { from: targetUser.managerId || null, to: nextMgr };
               targetUser.managerId = nextMgr;
             }
+          }
+
+          if (body.departmentScripts !== undefined && (targetUser.role === 'HEAD' || targetUser.role === 'OWNER')) {
+            targetUser.departmentScripts = Array.isArray(body.departmentScripts) ? body.departmentScripts.map(String) : [];
+            changes.departmentScripts = targetUser.departmentScripts;
           }
 
           if (!isHead && body.permissions !== undefined && targetUser.role !== 'OWNER') {
