@@ -2,7 +2,24 @@
 <html lang="ru" data-theme="light" style="--teal: #008578; --navy: #102f44; --script-font-size: 18px; --script-font-weight: 400;"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script>try{const savedTheme=localStorage.getItem("bauer-color-theme");document.documentElement.dataset.theme=savedTheme==="light"||savedTheme==="dark"?savedTheme:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");}catch{document.documentElement.dataset.theme="light";}</script>
+<script>
+try{
+  const savedTheme=localStorage.getItem("bauer-color-theme");
+  document.documentElement.dataset.theme=savedTheme==="light"||savedTheme==="dark"?savedTheme:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+  const utRaw=localStorage.getItem("bauer-user-theme");
+  if(utRaw){
+    const ut=JSON.parse(utRaw);
+    if(ut.preset)document.documentElement.dataset.themePreset=ut.preset;
+    if(ut.cardStyle)document.documentElement.dataset.cardStyle=ut.cardStyle;
+    if(ut.headerPattern)document.documentElement.dataset.headerPattern=ut.headerPattern;
+    if(ut.bodyPattern)document.documentElement.dataset.bodyPattern=ut.bodyPattern;
+    if(ut.headerBg)document.documentElement.style.setProperty('--custom-header-bg',ut.headerBg);
+    if(ut.accent)document.documentElement.style.setProperty('--custom-accent',ut.accent);
+    if(ut.bodyBg)document.documentElement.style.setProperty('--custom-body-bg',ut.bodyBg);
+    if(ut.bgImage)document.documentElement.style.setProperty('--custom-bg-image','url("'+ut.bgImage+'")');
+  }
+}catch(e){document.documentElement.dataset.theme="light";}
+</script>
 <meta name="description" content="Рабочий скрипт BAUER: этапы разговора слева направо и отработки возражений для каждого этапа.">
 <title>BAUER · От звонка до встречи</title>
 <style>
@@ -470,9 +487,321 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 }
 @media screen and (max-width:800px){.addr-hall{grid-template-columns:1fr}}
 </style>
+
+<style id="custom-design-styles">
+/* Custom Design & Themes by Operator */
+:root {
+  --pat-leopard: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill='%23c98d28' fill-opacity='0.22'%3E%3Cpath d='M18 20c3-5 9-7 14-5s7 9 5 14-9 7-14 5-7-9-5-14zm3 2c-2 4 0 9 4 10s9 0 10-4-1-9-4-10-8 1-10 4z'/%3E%3Ccircle cx='27' cy='27' r='4' fill='%23543204' fill-opacity='0.35'/%3E%3Cpath d='M68 32c4-4 10-5 14-1s5 10 1 14-10 5-14 1-5-10-1-14zm3 2c-2 3 0 7 4 9s8 0 9-4-1-7-4-9-7 1-9 4z'/%3E%3Ccircle cx='76' cy='39' r='3.5' fill='%23543204' fill-opacity='0.35'/%3E%3Cpath d='M38 70c5-3 11-2 14 3s2 11-3 14-11 2-14-3-2-11 3-14zm3 3c-3 2-2 7 2 10s8 1 10-2 1-7-2-10-8-1-10 2z'/%3E%3Ccircle cx='46' cy='77' r='4' fill='%23543204' fill-opacity='0.35'/%3E%3Cpath d='M85 78c3-4 8-5 12-2s4 8 2 12-8 5-12 2-4-8-2-12z'/%3E%3Ccircle cx='90' cy='82' r='3' fill='%23543204' fill-opacity='0.35'/%3E%3C/g%3E%3C/svg%3E");
+  --pat-cyber: linear-gradient(rgba(0,245,212,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(0,245,212,0.12) 1px, transparent 1px);
+  --pat-stars: radial-gradient(1.5px 1.5px at 20px 30px, #ffffff, rgba(0,0,0,0)), radial-gradient(1px 1px at 60px 80px, rgba(255,255,255,0.85), rgba(0,0,0,0)), radial-gradient(1.5px 1.5px at 110px 45px, #ffd166, rgba(0,0,0,0)), radial-gradient(2px 2px at 170px 130px, rgba(255,255,255,0.9), rgba(0,0,0,0));
+  --pat-carbon: radial-gradient(rgba(0,0,0,0.6) 15%, transparent 16%) 0 0, radial-gradient(rgba(0,0,0,0.6) 15%, transparent 16%) 8px 8px, radial-gradient(rgba(255,255,255,.08) 15%, transparent 20%) 0 1px, radial-gradient(rgba(255,255,255,.08) 15%, transparent 20%) 8px 9px;
+  --pat-stripes: repeating-linear-gradient(45deg, rgba(255,255,255,0.04), rgba(255,255,255,0.04) 10px, transparent 10px, transparent 20px);
+}
+
+/* Custom Header Background & Pattern */
+:root[style*="--custom-header-bg"] .app-header {
+  background: var(--custom-header-bg) !important;
+}
+:root[data-header-pattern="leopard"] .app-header {
+  background-image: var(--pat-leopard) !important;
+  background-size: 80px 80px !important;
+}
+:root[data-header-pattern="cyber"] .app-header {
+  background-image: var(--pat-cyber) !important;
+  background-size: 24px 24px !important;
+  border-bottom: 2px solid #00f5d4 !important;
+  box-shadow: 0 4px 20px rgba(0,245,212,0.25) !important;
+}
+:root[data-header-pattern="stars"] .app-header {
+  background-image: var(--pat-stars) !important;
+  background-size: 150px 150px !important;
+}
+:root[data-header-pattern="carbon"] .app-header {
+  background-image: var(--pat-carbon) !important;
+  background-size: 16px 16px !important;
+}
+:root[data-header-pattern="stripes"] .app-header {
+  background-image: var(--pat-stripes) !important;
+}
+
+/* Custom Body Background (Color, Image, Pattern) */
+:root[style*="--custom-body-bg"] body {
+  background: var(--custom-body-bg) !important;
+}
+:root[style*="--custom-bg-image"] body {
+  background-image: var(--custom-bg-image) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+:root[data-body-pattern="leopard"] body {
+  background-image: var(--pat-leopard) !important;
+  background-size: 110px 110px !important;
+}
+:root[data-body-pattern="cyber"] body {
+  background-image: var(--pat-cyber) !important;
+  background-size: 32px 32px !important;
+}
+:root[data-body-pattern="stars"] body {
+  background-image: var(--pat-stars) !important;
+  background-size: 200px 200px !important;
+}
+:root[data-body-pattern="carbon"] body {
+  background-image: var(--pat-carbon) !important;
+  background-size: 16px 16px !important;
+}
+
+/* Custom Accent */
+:root[style*="--custom-accent"] {
+  --teal: var(--custom-accent) !important;
+  --orange: var(--custom-accent) !important;
+}
+
+/* --- Block / Card Styles --- */
+
+/* 1. Glassmorphism / Frosted Glass */
+:root[data-card-style="glass"] .deck-viewport,
+:root[data-card-style="glass"] .stage-card,
+:root[data-card-style="glass"] .script-pane,
+:root[data-card-style="glass"] .objections-pane {
+  background: rgba(255, 255, 255, 0.76) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+}
+:root[data-card-style="glass"] .deck-viewport {
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12) !important;
+}
+:root[data-theme="dark"][data-card-style="glass"] .deck-viewport,
+:root[data-theme="dark"][data-card-style="glass"] .stage-card,
+:root[data-theme="dark"][data-card-style="glass"] .script-pane,
+:root[data-theme="dark"][data-card-style="glass"] .objections-pane {
+  background: rgba(14, 28, 32, 0.74) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* 2. Ultra Frosted (Deep translucent) */
+:root[data-card-style="frosted"] .deck-viewport,
+:root[data-card-style="frosted"] .stage-card,
+:root[data-card-style="frosted"] .script-pane,
+:root[data-card-style="frosted"] .objections-pane {
+  background: rgba(255, 255, 255, 0.48) !important;
+  backdrop-filter: blur(22px) !important;
+  -webkit-backdrop-filter: blur(22px) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+:root[data-theme="dark"][data-card-style="frosted"] .deck-viewport,
+:root[data-theme="dark"][data-card-style="frosted"] .stage-card,
+:root[data-theme="dark"][data-card-style="frosted"] .script-pane,
+:root[data-theme="dark"][data-card-style="frosted"] .objections-pane {
+  background: rgba(10, 22, 26, 0.52) !important;
+  backdrop-filter: blur(22px) !important;
+  -webkit-backdrop-filter: blur(22px) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+/* 3. Neon Cyber Glow */
+:root[data-card-style="neon"] .deck-viewport {
+  background: rgba(10, 16, 26, 0.88) !important;
+  border: 2px solid #00f5d4 !important;
+  box-shadow: 0 0 25px rgba(0, 245, 212, 0.35), 0 0 10px rgba(0, 245, 212, 0.2) inset !important;
+  backdrop-filter: blur(10px) !important;
+}
+:root[data-card-style="neon"] .step[aria-current=step] {
+  border: 1.5px solid #00f5d4 !important;
+  box-shadow: 0 0 15px rgba(0, 245, 212, 0.4) !important;
+}
+:root[data-card-style="neon"] .stage-heading {
+  border-bottom: 1.5px solid rgba(0, 245, 212, 0.35) !important;
+}
+:root[data-card-style="neon"] .stage-heading h2 {
+  text-shadow: 0 0 10px rgba(0, 245, 212, 0.4) !important;
+}
+:root[data-card-style="neon"] .objections-pane {
+  background: rgba(12, 20, 32, 0.92) !important;
+  border-left: 1.5px solid rgba(0, 245, 212, 0.35) !important;
+}
+
+/* Theme Customizer Dialog Styling */
+.theme-customizer-dialog {
+  padding: 26px 30px;
+  width: min(840px, calc(100% - 24px));
+  max-height: calc(100dvh - 36px);
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface, #ffffff);
+  color: var(--ink);
+  box-shadow: 0 25px 80px rgba(0,0,0,0.35);
+  overflow-y: auto;
+}
+.theme-customizer-dialog .dialog-x {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  border: 0;
+  background: transparent;
+  font-size: 20px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.theme-nav-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 16px 0 20px;
+  padding: 4px;
+  background: var(--surface-alt, #f3f6f5);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.theme-nav-tabs button {
+  border: 0;
+  background: transparent;
+  padding: 8px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.theme-nav-tabs button.active {
+  background: var(--surface, #ffffff);
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+:root[data-theme=dark] .theme-nav-tabs button.active {
+  background: #143530;
+  color: #fff;
+}
+
+/* Preset Cards Grid */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.preset-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 2px solid var(--line);
+  background: var(--surface-alt, #f8faf9);
+  cursor: pointer;
+  transition: all .18s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preset-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--teal);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+}
+.preset-card.active {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px var(--teal);
+}
+.preset-swatch {
+  height: 48px;
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+}
+.preset-swatch-header {
+  height: 18px;
+  width: 100%;
+}
+.preset-card strong {
+  font-size: 14px;
+}
+.preset-card p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Control Rows and Swatches */
+.tcd-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tcd-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tcd-label {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.tcd-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+.tcd-option-btn {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--surface-alt, #fafbfb);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.tcd-option-btn:hover {
+  border-color: var(--teal);
+  background: var(--surface);
+}
+.tcd-option-btn.selected {
+  border-color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 15%, transparent);
+  color: var(--teal);
+  box-shadow: 0 0 0 1px var(--teal);
+}
+.tcd-color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tcd-color-swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+.tcd-color-swatch.selected {
+  outline: 2.5px solid var(--teal);
+  outline-offset: 2px;
+}
+.tcd-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+</style>
+
 </head>
 <body>
-<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet theme-toggle" id="theme-toggle" aria-label="Включить тёмную тему" title="Переключить тему" aria-pressed="false">☾ <span>Тёмная</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
+<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet theme-toggle" id="theme-toggle" aria-label="Включить тёмную тему" title="Переключить тему" aria-pressed="false">☾ <span>Тёмная</span></button><button class="quiet theme-customizer-btn" id="theme-customizer-btn" title="Настроить свой дизайн: готовые темы, фон, шапка, леопард, неон, прозрачность блоков" aria-label="Настроить дизайн">🎨 <span>Дизайн</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
 <nav class="app-switcher" aria-label="Разделы сайта"><div class="switcher-tabs"><button id="script-tab" class="section-tab active" aria-pressed="true">Скрипт</button><button id="gifts-tab" class="section-tab" aria-pressed="false" hidden="">Подарки</button><button id="sms-tab" class="section-tab" aria-pressed="false">Помощник СМС</button><button id="objections-tab" class="section-tab" aria-pressed="false">Возражения</button><button id="layouts-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M6 9V6a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg>Макеты</button><button id="addresses-tab" class="section-tab" aria-pressed="false">Адреса</button></div><span class="switcher-hint">Рабочее пространство оператора</span></nav>
 <main class="workspace">
   <div class="intro">
@@ -974,7 +1303,7 @@ async function download(){
   const doc=document.documentElement.cloneNode(true);
   doc.querySelectorAll('.venue-picker').forEach(x=>x.remove());
   const lvEl=doc.querySelector('#layouts-view');if(lvEl){lvEl.innerHTML='';lvEl.hidden=true;lvEl.classList.remove('v4-giftmode');}
-  for(const id of ['addresses-view','address-dialog','whole-view','owner-view']){const els=[...doc.querySelectorAll('#'+id)];els.slice(1).forEach(el=>el.remove());if(els[0]){els[0].hidden=true;els[0].innerHTML='';}}for(const sel of ['#user-modal','#recovery-modal','#owner-recover-dialog','#temp-password-dialog','#header-user-btn','#header-logout-btn','#owner-tab','#open-owner-recovery']){doc.querySelectorAll(sel).forEach(el=>el.remove());}
+  for(const id of ['addresses-view','address-dialog','whole-view','owner-view']){const els=[...doc.querySelectorAll('#'+id)];els.slice(1).forEach(el=>el.remove());if(els[0]){els[0].hidden=true;els[0].innerHTML='';}}for(const sel of ['#user-modal','#recovery-modal','#owner-recover-dialog','#temp-password-dialog','#theme-customizer-modal','#header-user-btn','#header-logout-btn','#owner-tab','#open-owner-recovery']){doc.querySelectorAll(sel).forEach(el=>el.remove());}
   doc.querySelector('#sms-data').textContent=JSON.stringify(smsSource).replace(/</g,'\\u003c');
   doc.querySelector('#script-data').textContent=JSON.stringify(snapshot).replace(/</g,'\\u003c');
   let ldEl=doc.querySelector('#layouts-data');
@@ -2792,7 +3121,7 @@ if(navTabs&&!document.getElementById('owner-tab')){
   navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">Владелец · Управление</span></button>');
 }
 if(!document.getElementById('owner-view')){
-  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog><dialog id="temp-password-dialog" class="owner-dialog" aria-labelledby="temp-pw-title"></dialog>');
+  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog><dialog id="temp-password-dialog" class="owner-dialog" aria-labelledby="temp-pw-title"></dialog><dialog id="theme-customizer-modal" class="theme-customizer-dialog" aria-labelledby="tcd-title"></dialog>');
 }
 
 const authFoot=document.querySelector('#auth-dialog .auth-foot');
@@ -3968,6 +4297,368 @@ document.addEventListener('submit',async e=>{
     return;
   }
 });
+})();
+</script>
+
+
+<script id="theme-customizer-module">
+(()=>{
+const THEME_STORAGE_KEY = 'bauer-user-theme';
+
+const PRESETS = [
+  {
+    id: 'classic',
+    name: '🌟 Классика BAUER',
+    desc: 'Фирменный строгий стиль компании BAUER',
+    headerBg: '#102f44',
+    headerPattern: 'none',
+    bodyBg: '',
+    bodyPattern: 'none',
+    cardStyle: 'default',
+    accent: '#008578',
+    theme: 'light'
+  },
+  {
+    id: 'leopard',
+    name: '🐆 Дикий Леопард',
+    desc: 'Премиальный леопардовый принт с янтарным золотом',
+    headerBg: '#2a1a08',
+    headerPattern: 'leopard',
+    bodyBg: 'linear-gradient(135deg, #f7efe4 0%, #ecd7bd 100%)',
+    bodyPattern: 'leopard',
+    cardStyle: 'glass',
+    accent: '#d48806',
+    theme: 'light'
+  },
+  {
+    id: 'cyberpunk',
+    name: '⚡ Неон Киберпанк',
+    desc: 'Неоновые светящиеся контуры блоков и кибер-сетка',
+    headerBg: '#0e0224',
+    headerPattern: 'cyber',
+    bodyBg: 'radial-gradient(ellipse at top, #1a0836 0%, #060112 100%)',
+    bodyPattern: 'cyber',
+    cardStyle: 'neon',
+    accent: '#00f5d4',
+    theme: 'dark'
+  },
+  {
+    id: 'glass',
+    name: '💎 Ледяной Глассморфизм',
+    desc: 'Полупрозрачные матовые блоки с мягким размытием',
+    headerBg: 'rgba(16, 47, 68, 0.9)',
+    headerPattern: 'none',
+    bodyBg: 'linear-gradient(135deg, #d8ece8 0%, #cde1ec 50%, #e5dcf4 100%)',
+    bodyPattern: 'none',
+    cardStyle: 'glass',
+    accent: '#0077b6',
+    theme: 'light'
+  },
+  {
+    id: 'stars',
+    name: '🌌 Космос и Звёзды',
+    desc: 'Глубокий ночной космос, мерцающие звёзды и лазурь',
+    headerBg: '#070b18',
+    headerPattern: 'stars',
+    bodyBg: 'radial-gradient(ellipse at bottom, #0f1c3f 0%, #03050c 100%)',
+    bodyPattern: 'stars',
+    cardStyle: 'glass',
+    accent: '#38bdf8',
+    theme: 'dark'
+  },
+  {
+    id: 'stealth',
+    name: '🖤 Чёрный Оникс',
+    desc: 'Глубокий матовый минимализм с текстурой карбона',
+    headerBg: '#090a0b',
+    headerPattern: 'carbon',
+    bodyBg: '#111315',
+    bodyPattern: 'carbon',
+    cardStyle: 'default',
+    accent: '#e63946',
+    theme: 'dark'
+  },
+  {
+    id: 'mint',
+    name: '🍃 Мятный Шалфей',
+    desc: 'Нежная светлая палитра для комфортного чтения',
+    headerBg: '#1b3b36',
+    headerPattern: 'none',
+    bodyBg: 'linear-gradient(135deg, #eaf4f1 0%, #d8eae4 100%)',
+    bodyPattern: 'none',
+    cardStyle: 'glass',
+    accent: '#059669',
+    theme: 'light'
+  }
+];
+
+function loadSavedTheme(){
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : { ...PRESETS[0] };
+  } catch {
+    return { ...PRESETS[0] };
+  }
+}
+
+let currentTheme = loadSavedTheme();
+let activeTab = 'presets';
+
+function applyTheme(cfg, save = true){
+  currentTheme = { ...currentTheme, ...cfg };
+  const root = document.documentElement;
+
+  if (currentTheme.theme && (currentTheme.theme === 'light' || currentTheme.theme === 'dark')) {
+    root.dataset.theme = currentTheme.theme;
+    try { localStorage.setItem('bauer-color-theme', currentTheme.theme); } catch {}
+  }
+  if (typeof updateThemeButton === 'function') updateThemeButton();
+
+  root.dataset.cardStyle = currentTheme.cardStyle || 'default';
+  root.dataset.headerPattern = currentTheme.headerPattern || 'none';
+  root.dataset.bodyPattern = currentTheme.bodyPattern || 'none';
+
+  if (currentTheme.headerBg) root.style.setProperty('--custom-header-bg', currentTheme.headerBg);
+  else root.style.removeProperty('--custom-header-bg');
+
+  if (currentTheme.bodyBg) root.style.setProperty('--custom-body-bg', currentTheme.bodyBg);
+  else root.style.removeProperty('--custom-body-bg');
+
+  if (currentTheme.accent) root.style.setProperty('--custom-accent', currentTheme.accent);
+  else root.style.removeProperty('--custom-accent');
+
+  if (currentTheme.bgImage) {
+    root.style.setProperty('--custom-bg-image', 'url("' + currentTheme.bgImage + '")');
+  } else {
+    root.style.removeProperty('--custom-bg-image');
+  }
+
+  if (save) {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(currentTheme));
+    } catch {}
+  }
+}
+
+// Initial application
+applyTheme(currentTheme, false);
+
+function openThemeCustomizer(){
+  const dlg = document.getElementById('theme-customizer-modal');
+  if (!dlg) return;
+  renderCustomizerDialog();
+  if (!dlg.open) dlg.showModal();
+}
+
+function renderCustomizerDialog(){
+  const dlg = document.getElementById('theme-customizer-modal');
+  if (!dlg) return;
+
+  const headerColors = ['#102f44', '#0d3832', '#0d0221', '#2a1a08', '#070b18', '#090a0b', '#1b3b36', '#3b1248', '#881337'];
+  const accents = ['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'];
+
+  dlg.innerHTML = `
+    <button type="button" class="dialog-x" data-close-modal="theme-customizer-modal" aria-label="Закрыть">✕</button>
+    <div class="kicker">ПЕРСОНАЛИЗАЦИЯ РАБОЧЕГО МЕСТА</div>
+    <h2 id="tcd-title" style="margin:6px 0 4px;font-size:24px;font-weight:800;letter-spacing:-.02em">Дизайн и оформление системы</h2>
+    <p style="margin:0 0 16px;font-size:13px;color:var(--muted)">Настройте оформление под себя: готовые темы, узоры шапки (леопард, неон, звёзды), свой фон и полупрозрачность блоков скрипта.</p>
+
+    <div class="theme-nav-tabs">
+      <button type="button" class="${activeTab==='presets'?'active':''}" data-tcd-tab="presets">🌟 Готовые темы</button>
+      <button type="button" class="${activeTab==='header'?'active':''}" data-tcd-tab="header">🎨 Шапка и узоры</button>
+      <button type="button" class="${activeTab==='background'?'active':''}" data-tcd-tab="background">🖼️ Фон страницы</button>
+      <button type="button" class="${activeTab==='blocks'?'active':''}" data-tcd-tab="blocks">🪟 Стиль блоков скрипта</button>
+    </div>
+
+    <div class="tcd-body">
+      ${activeTab === 'presets' ? `
+        <div class="preset-grid">
+          ${PRESETS.map(p => `
+            <div class="preset-card ${currentTheme.id===p.id?'active':''}" data-apply-preset="${p.id}">
+              <div class="preset-swatch" style="background:${p.bodyBg||(p.theme==='dark'?'#0a181a':'#eef2f0')};border:1.5px solid ${p.accent}">
+                <div class="preset-swatch-header" style="background:${p.headerBg}"></div>
+              </div>
+              <div>
+                <strong>${p.name}</strong>
+                <p>${p.desc}</p>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${activeTab === 'header' ? `
+        <div class="tcd-section">
+          <div class="tcd-row">
+            <span class="tcd-label">Цвет фона шапки</span>
+            <div class="tcd-color-row">
+              ${headerColors.map(c => `
+                <button type="button" class="tcd-color-swatch ${(currentTheme.headerBg||'#102f44')===c?'selected':''}" style="background:${c}" data-tcd-prop="headerBg" data-val="${c}" title="${c}"></button>
+              `).join('')}
+              <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
+                <span>Свой цвет:</span>
+                <input type="color" id="tcd-header-picker" value="${currentTheme.headerBg||'#102f44'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
+              </label>
+            </div>
+          </div>
+
+          <div class="tcd-row">
+            <span class="tcd-label">Узор на шапке</span>
+            <div class="tcd-options-grid">
+              <button type="button" class="tcd-option-btn ${(!currentTheme.headerPattern||currentTheme.headerPattern==='none')?'selected':''}" data-tcd-prop="headerPattern" data-val="none">Без узора</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='leopard'?'selected':''}" data-tcd-prop="headerPattern" data-val="leopard">🐆 Леопард</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='cyber'?'selected':''}" data-tcd-prop="headerPattern" data-val="cyber">⚡ Неон Сетка</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stars'?'selected':''}" data-tcd-prop="headerPattern" data-val="stars">✨ Звёзды</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='carbon'?'selected':''}" data-tcd-prop="headerPattern" data-val="carbon">🏎️ Карбон</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.headerPattern==='stripes'?'selected':''}" data-tcd-prop="headerPattern" data-val="stripes">Линии</button>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${activeTab === 'background' ? `
+        <div class="tcd-section">
+          <div class="tcd-row">
+            <span class="tcd-label">Узор страницы</span>
+            <div class="tcd-options-grid">
+              <button type="button" class="tcd-option-btn ${(!currentTheme.bodyPattern||currentTheme.bodyPattern==='none')?'selected':''}" data-tcd-prop="bodyPattern" data-val="none">Без узора</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='leopard'?'selected':''}" data-tcd-prop="bodyPattern" data-val="leopard">🐆 Леопард</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='cyber'?'selected':''}" data-tcd-prop="bodyPattern" data-val="cyber">⚡ Неон Сетка</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='stars'?'selected':''}" data-tcd-prop="bodyPattern" data-val="stars">✨ Звёзды</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='carbon'?'selected':''}" data-tcd-prop="bodyPattern" data-val="carbon">🏎️ Карбон</button>
+            </div>
+          </div>
+
+          <div class="tcd-row">
+            <span class="tcd-label">Своё фоновое изображение</span>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input type="file" id="tcd-bg-file" accept="image/jpeg,image/png,image/webp" hidden>
+              <button type="button" class="primary" id="tcd-bg-upload-btn">📁 Загрузить фоновую картинку</button>
+              ${currentTheme.bgImage ? `<button type="button" class="danger-text" id="tcd-bg-remove-btn">✕ Убрать картинку</button>` : ''}
+              <small style="color:var(--muted)">Изображение масштабируется на весь экран и фиксируется при прокрутке.</small>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${activeTab === 'blocks' ? `
+        <div class="tcd-section">
+          <div class="tcd-row">
+            <span class="tcd-label">Стиль карточек и панелей скрипта</span>
+            <div class="tcd-options-grid">
+              <button type="button" class="tcd-option-btn ${(!currentTheme.cardStyle||currentTheme.cardStyle==='default')?'selected':''}" data-tcd-prop="cardStyle" data-val="default">Классический (Сплошной)</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='glass'?'selected':''}" data-tcd-prop="cardStyle" data-val="glass">💎 Полупрозрачный Glass</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='frosted'?'selected':''}" data-tcd-prop="cardStyle" data-val="frosted">🧊 Глубокое стекло Frosted</button>
+              <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='neon'?'selected':''}" data-tcd-prop="cardStyle" data-val="neon">⚡ Неоновое свечение</button>
+            </div>
+          </div>
+
+          <div class="tcd-row">
+            <span class="tcd-label">Акцентный цвет кнопок и подсветки</span>
+            <div class="tcd-color-row">
+              ${accents.map(c => `
+                <button type="button" class="tcd-color-swatch ${(currentTheme.accent||'#008578')===c?'selected':''}" style="background:${c}" data-tcd-prop="accent" data-val="${c}" title="${c}"></button>
+              `).join('')}
+              <label style="display:flex;align-items:center;gap:6px;margin:0 0 0 10px;font-size:12px;font-weight:700;cursor:pointer">
+                <span>Свой цвет:</span>
+                <input type="color" id="tcd-accent-picker" value="${currentTheme.accent||'#008578'}" style="width:34px;height:34px;border:0;border-radius:6px;cursor:pointer">
+              </label>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+
+    <div class="tcd-foot">
+      <button type="button" id="tcd-reset-btn" style="color:var(--muted)">Сбросить всё к стандарту</button>
+      <div style="display:flex;gap:10px">
+        <button type="button" class="primary" id="tcd-save-btn">✓ Сохранить и применить</button>
+        <button type="button" data-close-modal="theme-customizer-modal">Закрыть</button>
+      </div>
+    </div>
+  `;
+
+  // Attach event handlers inside modal
+  dlg.querySelectorAll('[data-tcd-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeTab = btn.dataset.tcdTab;
+      renderCustomizerDialog();
+    });
+  });
+
+  dlg.querySelectorAll('[data-apply-preset]').forEach(card => {
+    card.addEventListener('click', () => {
+      const p = PRESETS.find(x => x.id === card.dataset.applyPreset);
+      if (p) {
+        applyTheme({ ...p, id: p.id, bgImage: currentTheme.bgImage });
+        renderCustomizerDialog();
+        toast('Применена тема «' + p.name + '»');
+      }
+    });
+  });
+
+  dlg.querySelectorAll('[data-tcd-prop]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prop = btn.dataset.tcdProp;
+      const val = btn.dataset.val;
+      applyTheme({ [prop]: val, id: 'custom' });
+      renderCustomizerDialog();
+    });
+  });
+
+  const headerPicker = dlg.querySelector('#tcd-header-picker');
+  headerPicker?.addEventListener('input', e => {
+    applyTheme({ headerBg: e.target.value, id: 'custom' });
+  });
+
+  const accentPicker = dlg.querySelector('#tcd-accent-picker');
+  accentPicker?.addEventListener('input', e => {
+    applyTheme({ accent: e.target.value, id: 'custom' });
+  });
+
+  const uploadBtn = dlg.querySelector('#tcd-bg-upload-btn');
+  const fileInput = dlg.querySelector('#tcd-bg-file');
+  uploadBtn?.addEventListener('click', () => fileInput?.click());
+
+  fileInput?.addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast('Размер фонового файла не должен превышать 5 МБ');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      applyTheme({ bgImage: dataUrl, id: 'custom' });
+      renderCustomizerDialog();
+      toast('Фоновое изображение успешно установлено!');
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const removeBgBtn = dlg.querySelector('#tcd-bg-remove-btn');
+  removeBgBtn?.addEventListener('click', () => {
+    applyTheme({ bgImage: '', id: 'custom' });
+    renderCustomizerDialog();
+    toast('Фоновое изображение удалено');
+  });
+
+  dlg.querySelector('#tcd-reset-btn')?.addEventListener('click', () => {
+    applyTheme({ ...PRESETS[0], bgImage: '' });
+    renderCustomizerDialog();
+    toast('Оформление сброшено к классическому стандарту');
+  });
+
+  dlg.querySelector('#tcd-save-btn')?.addEventListener('click', () => {
+    dlg.close();
+    toast('✓ Персональный дизайн сохранён!');
+  });
+}
+
+document.getElementById('theme-customizer-btn')?.addEventListener('click', openThemeCustomizer);
+window.openThemeCustomizer = openThemeCustomizer;
+
 })();
 </script>
 
