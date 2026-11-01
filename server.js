@@ -24,17 +24,21 @@ const MAX_BODY_BYTES = 12 * 1024 * 1024; // 12 MB (for base64 gift photos in lay
 const ALL_PERMISSIONS = [
   'content.edit',
   'layouts.manage',
+  'layouts.delete',
   'gifts.manage',
   'addresses.manage',
   'settings.manage',
   'users.view',
+  'users.manage',
+  'sessions.manage',
   'audit.view'
 ];
 
 const DEFAULT_ROLE_PERMISSIONS = {
-  OWNER: [...ALL_PERMISSIONS, 'users.manage', 'admins.manage', 'sessions.manage', 'owner.full'],
-  ADMIN: ['content.edit', 'layouts.manage', 'gifts.manage', 'addresses.manage', 'settings.manage'],
-  EDITOR: ['content.edit', 'layouts.manage', 'gifts.manage', 'addresses.manage'],
+  OWNER: [...ALL_PERMISSIONS, 'admins.manage', 'owner.full'],
+  ADMIN: [...ALL_PERMISSIONS],
+  EDITOR: ['content.edit', 'layouts.manage', 'layouts.delete', 'gifts.manage', 'addresses.manage', 'settings.manage'],
+  HEAD: ['content.edit', 'layouts.manage', 'users.view', 'users.manage', 'sessions.manage'],
   OPERATOR: []
 };
 
@@ -273,6 +277,23 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       owner.blocked = false;
       owner.permissions = [...DEFAULT_ROLE_PERMISSIONS.OWNER];
     }
+    let migrated = false;
+    users.forEach(u => {
+      if (u.role === 'ADMIN' && !u.permissionsMigratedV2) {
+        u.permissions = [...new Set([...(u.permissions || []), ...DEFAULT_ROLE_PERMISSIONS.ADMIN])];
+        u.permissionsMigratedV2 = true;
+        migrated = true;
+      } else if (u.role === 'EDITOR' && !u.permissionsMigratedV2) {
+        if (Array.isArray(u.permissions) && u.permissions.includes('layouts.manage') && !u.permissions.includes('layouts.delete')) {
+          u.permissions.push('layouts.delete');
+        }
+        u.permissionsMigratedV2 = true;
+        migrated = true;
+      }
+    });
+    if (migrated) {
+      writeJsonAtomic(files.users, users);
+    }
   }
   enforceOwnerInvariants();
 
@@ -423,6 +444,9 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
         throw new Error('Невозможно удалить главную учётную запись OWNER.');
       }
       users = users.filter(x => x.id !== id);
+      users.forEach(x => {
+        if (x.managerId === id) x.managerId = null;
+      });
       sessions = sessions.filter(s => s.userId !== id);
       saveUsers();
       saveSessions();
@@ -552,6 +576,7 @@ function sanitizeUser(u) {
     login: u.login,
     displayName: u.displayName || u.login,
     role: u.role,
+    managerId: u.managerId || null,
     blocked: isOwner ? false : Boolean(u.blocked),
     permissions: isOwner ? [...DEFAULT_ROLE_PERMISSIONS.OWNER] : (Array.isArray(u.permissions) ? u.permissions : []),
     createdAt: u.createdAt || 0,
@@ -1137,6 +1162,10 @@ function createAppServer(options = {}) {
           return sendJson(res, 403, { error: 'Недостаточно прав для сохранения или удаления макетов.' });
         }
         if (method === 'DELETE') {
+          if (auth.user.role === 'HEAD' || !hasPermission(auth.user, 'layouts.delete')) {
+            store.logEvent({ action: 'layouts.delete.denied', actor: auth.user, target: id, ip, userAgent, status: 'denied' });
+            return sendJson(res, 403, { error: 'У вашей роли нет прав на удаление макетов.' });
+          }
           const targetLayout = (appData.layouts || []).find(l => l.id === id);
           appData.layouts = (appData.layouts || []).filter(l => l.id !== id);
           store.saveAppData();
@@ -1277,25 +1306,32 @@ function createAppServer(options = {}) {
       if (pathname === '/api/users' || pathname.startsWith('/api/users/')) {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
         const targetId = pathname.split('/')[3] || null;
+        const isOwner = auth.user.role === 'OWNER';
+        const isHead = auth.user.role === 'HEAD';
+        const canManageAllUsers = isOwner || (!isHead && hasPermission(auth.user, 'users.manage'));
+        const canManageOwnTeam = isHead && hasPermission(auth.user, 'users.manage');
 
-        // List users: OWNER or user with users.view permission
+        // List users: OWNER, HEAD, or user with users.view / users.manage permission
         if (method === 'GET' && !targetId) {
-          if (auth.user.role !== 'OWNER' && !hasPermission(auth.user, 'users.view')) {
-            return sendJson(res, 403, { error: 'Доступ к списку пользователей разрешён только OWNER или уполномоченным администраторам.' });
+          if (!isOwner && !isHead && !hasPermission(auth.user, 'users.view') && !hasPermission(auth.user, 'users.manage')) {
+            return sendJson(res, 403, { error: 'Доступ к списку пользователей разрешён только Владельцу, Администраторам и Руководителям отдела.' });
           }
           const activeSessions = store.getSessions();
-          const list = store.getUsers().map(u => ({
+          const allUsers = store.getUsers();
+          const visibleUsers = isHead
+            ? allUsers.filter(u => u.id === auth.user.id || (u.role === 'OPERATOR' && u.managerId === auth.user.id))
+            : allUsers;
+          const list = visibleUsers.map(u => ({
             ...sanitizeUser(u),
             activeSessionsCount: activeSessions.filter(s => s.userId === u.id).length
           }));
-          return sendJson(res, 200, { users: list, availablePermissions: ALL_PERMISSIONS, roleDefaults: DEFAULT_ROLE_PERMISSIONS });
+          const heads = allUsers
+            .filter(u => u.role === 'HEAD')
+            .map(u => ({ id: u.id, login: u.login, displayName: u.displayName || u.login }));
+          return sendJson(res, 200, { users: list, heads, availablePermissions: ALL_PERMISSIONS, roleDefaults: DEFAULT_ROLE_PERMISSIONS });
         }
 
-        // All mutating operations on users require OWNER (or specifically delegated ADMIN for non-admin/non-owner users if allowed,
-        // but per Requirements 1 & 2:
-        // "OWNER может создавать, редактировать, блокировать и удалять пользователей. Назначать роли и права доступа. Управлять администраторами и их полномочиями."
-        // "Ни один другой пользователь, включая администраторов, не может удалить, заблокировать или изменить права OWNER.")
-        if (auth.user.role !== 'OWNER') {
+        if (!canManageAllUsers && !canManageOwnTeam) {
           store.logEvent({
             action: 'users.manage.denied',
             actor: auth.user,
@@ -1305,7 +1341,7 @@ function createAppServer(options = {}) {
             status: 'denied',
             details: { method, pathname }
           });
-          return sendJson(res, 403, { error: 'Управление пользователями, ролями и администраторами доступно только главной учётной записи OWNER.' });
+          return sendJson(res, 403, { error: 'Недостаточно прав для управления учётными записями.' });
         }
 
         // Create user (POST /api/users)
@@ -1321,6 +1357,9 @@ function createAppServer(options = {}) {
             });
             return sendJson(res, 403, { error: 'В системе может быть только один OWNER. Создание второго OWNER запрещено.' });
           }
+          if (isHead && body.role && body.role !== 'OPERATOR') {
+            return sendJson(res, 403, { error: 'Руководитель отдела может добавлять только Менеджеров обзвона.' });
+          }
           const login = validateLogin(body.login);
           if (!login) {
             return sendJson(res, 400, { error: 'Логин должен содержать от 2 до 64 символов (русские/латинские буквы, цифры, пробел, . _ -).' });
@@ -1331,19 +1370,34 @@ function createAppServer(options = {}) {
           if (!validatePassword(body.password)) {
             return sendJson(res, 400, { error: 'Пароль должен содержать от 4 до 128 символов.' });
           }
-          const role = ['ADMIN', 'EDITOR', 'OPERATOR'].includes(body.role) ? body.role : 'OPERATOR';
-          const permissions = Array.isArray(body.permissions)
-            ? body.permissions.filter(p => ALL_PERMISSIONS.includes(p))
-            : [...(DEFAULT_ROLE_PERMISSIONS[role] || [])];
+          const role = isHead
+            ? 'OPERATOR'
+            : (['ADMIN', 'EDITOR', 'HEAD', 'OPERATOR'].includes(body.role) ? body.role : 'OPERATOR');
+          const permissions = isHead
+            ? []
+            : (Array.isArray(body.permissions)
+                ? body.permissions.filter(p => ALL_PERMISSIONS.includes(p))
+                : [...(DEFAULT_ROLE_PERMISSIONS[role] || [])]);
+          let managerId = null;
+          if (role === 'OPERATOR') {
+            if (isHead) {
+              managerId = auth.user.id;
+            } else if (body.managerId) {
+              const mgr = store.findUserById(String(body.managerId));
+              if (mgr && mgr.role === 'HEAD') managerId = mgr.id;
+            }
+          }
           const now = Date.now();
           const newUser = {
             id: 'usr_' + crypto.randomUUID(),
             login,
             displayName: String(body.displayName || login).trim().slice(0, 100) || login,
             role,
+            managerId,
             passwordHash: hashPassword(body.password),
             blocked: Boolean(body.blocked),
             permissions,
+            permissionsMigratedV2: true,
             createdAt: now,
             updatedAt: now,
             lastLoginAt: null
@@ -1355,7 +1409,7 @@ function createAppServer(options = {}) {
             target: newUser.login,
             ip,
             userAgent,
-            details: { userId: newUser.id, role: newUser.role, permissions: newUser.permissions, blocked: newUser.blocked }
+            details: { userId: newUser.id, role: newUser.role, managerId: newUser.managerId, permissions: newUser.permissions, blocked: newUser.blocked }
           });
           return sendJson(res, 201, { user: sanitizeUser(newUser) });
         }
@@ -1369,8 +1423,8 @@ function createAppServer(options = {}) {
           const body = await readBody(req);
 
           if (targetUser.role === 'OWNER') {
-            // Protect OWNER even from accidental self-demotion/self-block via user API
-            if (body.blocked === true || (body.role !== undefined && body.role !== 'OWNER') || body.permissions !== undefined) {
+            // Protect OWNER from any modification by non-OWNER, and from self-demotion/self-block
+            if (!isOwner || body.blocked === true || (body.role !== undefined && body.role !== 'OWNER') || body.permissions !== undefined) {
               store.logEvent({
                 action: 'owner.protection.triggered',
                 actor: auth.user,
@@ -1381,6 +1435,15 @@ function createAppServer(options = {}) {
                 details: { attemptedChanges: Object.keys(body) }
               });
               return sendJson(res, 403, { error: 'Невозможно заблокировать, понизить роль или ограничить права главной учётной записи OWNER.' });
+            }
+          }
+
+          if (isHead) {
+            if (targetUser.role !== 'OPERATOR' || targetUser.managerId !== auth.user.id) {
+              return sendJson(res, 403, { error: 'Руководитель отдела может управлять только своими Менеджерами обзвона.' });
+            }
+            if (body.role !== undefined && body.role !== 'OPERATOR') {
+              return sendJson(res, 403, { error: 'Руководитель отдела не может менять роль сотрудника.' });
             }
           }
 
@@ -1416,15 +1479,30 @@ function createAppServer(options = {}) {
             targetUser.displayName = dn;
           }
 
-          if (body.role !== undefined && targetUser.role !== 'OWNER') {
-            if (!['ADMIN', 'EDITOR', 'OPERATOR'].includes(body.role)) {
+          if (!isHead && body.role !== undefined && targetUser.role !== 'OWNER') {
+            if (!['ADMIN', 'EDITOR', 'HEAD', 'OPERATOR'].includes(body.role)) {
               return sendJson(res, 400, { error: 'Недопустимая роль пользователя.' });
             }
             changes.role = { from: targetUser.role, to: body.role };
             targetUser.role = body.role;
+            if (targetUser.role !== 'OPERATOR') {
+              targetUser.managerId = null;
+            }
           }
 
-          if (body.permissions !== undefined && targetUser.role !== 'OWNER') {
+          if (!isHead && body.managerId !== undefined && targetUser.role === 'OPERATOR') {
+            let nextMgr = null;
+            if (body.managerId) {
+              const mgr = store.findUserById(String(body.managerId));
+              if (mgr && mgr.role === 'HEAD') nextMgr = mgr.id;
+            }
+            if ((targetUser.managerId || null) !== nextMgr) {
+              changes.managerId = { from: targetUser.managerId || null, to: nextMgr };
+              targetUser.managerId = nextMgr;
+            }
+          }
+
+          if (!isHead && body.permissions !== undefined && targetUser.role !== 'OWNER') {
             if (!Array.isArray(body.permissions)) {
               return sendJson(res, 400, { error: 'Список прав должен быть массивом.' });
             }
@@ -1470,6 +1548,17 @@ function createAppServer(options = {}) {
 
         // Delete user (DELETE /api/users/:id)
         if (method === 'DELETE' && targetId) {
+          if (isHead) {
+            store.logEvent({
+              action: 'users.delete.denied',
+              actor: auth.user,
+              target: targetId,
+              ip,
+              userAgent,
+              status: 'denied'
+            });
+            return sendJson(res, 403, { error: 'Руководитель отдела не может удалять учётные записи (доступна блокировка).' });
+          }
           const targetUser = store.findUserById(targetId);
           if (!targetUser) {
             return sendJson(res, 404, { error: 'Пользователь не найден.' });
@@ -1501,29 +1590,42 @@ function createAppServer(options = {}) {
       // Sessions management: GET /api/sessions, DELETE /api/sessions/:id, POST /api/sessions/revoke-user
       if (pathname === '/api/sessions' || pathname.startsWith('/api/sessions/')) {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
-        if (auth.user.role !== 'OWNER') {
+        const isOwner = auth.user.role === 'OWNER';
+        const isHead = auth.user.role === 'HEAD';
+        if (!isOwner && !isHead && !hasPermission(auth.user, 'sessions.manage')) {
           store.logEvent({ action: 'sessions.access.denied', actor: auth.user, ip, userAgent, status: 'denied' });
-          return sendJson(res, 403, { error: 'Управление сессиями доступно только главной учётной записи OWNER.' });
+          return sendJson(res, 403, { error: 'Недостаточно прав для управления сессиями.' });
         }
+        const canAccessUserSession = (u) => {
+          if (!u) return !isHead;
+          if (isOwner) return true;
+          if (isHead) return u.id === auth.user.id || (u.role === 'OPERATOR' && u.managerId === auth.user.id);
+          return u.role !== 'OWNER';
+        };
 
         const sub = pathname.split('/')[3] || null;
         if (method === 'GET' && !sub) {
-          const list = store.getSessions().map(s => {
-            const u = store.findUserById(s.userId);
-            return {
-              id: s.id,
-              userId: s.userId,
-              userLogin: u?.login || s.userLogin,
-              displayName: u?.displayName || s.userLogin,
-              userRole: u?.role || s.userRole,
-              ip: s.ip,
-              userAgent: s.userAgent,
-              createdAt: s.createdAt,
-              lastActiveAt: s.lastActiveAt,
-              expiresAt: s.expiresAt,
-              current: s.id === auth.session.id
-            };
-          }).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+          const list = store.getSessions()
+            .filter(s => {
+              const u = store.findUserById(s.userId);
+              return isOwner || canAccessUserSession(u);
+            })
+            .map(s => {
+              const u = store.findUserById(s.userId);
+              return {
+                id: s.id,
+                userId: s.userId,
+                userLogin: u?.login || s.userLogin,
+                displayName: u?.displayName || s.userLogin,
+                userRole: u?.role || s.userRole,
+                ip: s.ip,
+                userAgent: s.userAgent,
+                createdAt: s.createdAt,
+                lastActiveAt: s.lastActiveAt,
+                expiresAt: s.expiresAt,
+                current: s.id === auth.session.id
+              };
+            }).sort((a, b) => b.lastActiveAt - a.lastActiveAt);
           return sendJson(res, 200, { sessions: list });
         }
 
@@ -1532,6 +1634,9 @@ function createAppServer(options = {}) {
           const userId = body.userId;
           const targetUser = store.findUserById(userId);
           if (!targetUser) return sendJson(res, 404, { error: 'Пользователь не найден.' });
+          if (!canAccessUserSession(targetUser)) {
+            return sendJson(res, 403, { error: 'Недостаточно прав для сброса сессий этого пользователя.' });
+          }
           const exceptId = userId === auth.user.id ? auth.session.id : null;
           const count = store.revokeUserSessions(userId, exceptId);
           store.logEvent({
@@ -1546,8 +1651,13 @@ function createAppServer(options = {}) {
         }
 
         if (method === 'DELETE' && sub) {
+          const targetSes = store.getSessions().find(s => s.id === sub);
+          if (!targetSes) return sendJson(res, 404, { error: 'Сессия не найдена или уже завершена.' });
+          const targetUser = store.findUserById(targetSes.userId);
+          if (!canAccessUserSession(targetUser)) {
+            return sendJson(res, 403, { error: 'Недостаточно прав для завершения этой сессии.' });
+          }
           const removed = store.revokeSessionById(sub);
-          if (!removed) return sendJson(res, 404, { error: 'Сессия не найдена или уже завершена.' });
           store.logEvent({
             action: 'sessions.revoke',
             actor: auth.user,
@@ -1563,15 +1673,29 @@ function createAppServer(options = {}) {
       // Audit log: GET /api/audit
       if (pathname === '/api/audit' && method === 'GET') {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
-        if (auth.user.role !== 'OWNER' && !hasPermission(auth.user, 'audit.view')) {
+        const isOwner = auth.user.role === 'OWNER';
+        const isHead = auth.user.role === 'HEAD';
+        if (!isOwner && !isHead && !hasPermission(auth.user, 'audit.view')) {
           store.logEvent({ action: 'audit.access.denied', actor: auth.user, ip, userAgent, status: 'denied' });
-          return sendJson(res, 403, { error: 'Журнал действий доступен только главной учётной записи OWNER.' });
+          return sendJson(res, 403, { error: 'Журнал действий доступен только Владельцу, Администраторам и Руководителям отдела.' });
         }
         const limit = Math.min(500, Math.max(10, Number(url.searchParams.get('limit')) || 200));
         const filterUser = (url.searchParams.get('user') || '').trim().toLowerCase();
         const filterAction = (url.searchParams.get('action') || '').trim().toLowerCase();
 
         let entries = [...store.getAudit()].reverse();
+        if (isHead && !hasPermission(auth.user, 'audit.view')) {
+          const teamLogins = new Set(
+            store.getUsers()
+              .filter(u => u.id === auth.user.id || (u.role === 'OPERATOR' && u.managerId === auth.user.id))
+              .map(u => normalizeLogin(u.login))
+          );
+          entries = entries.filter(e =>
+            e.actorId === auth.user.id ||
+            teamLogins.has(normalizeLogin(e.actorLogin)) ||
+            teamLogins.has(normalizeLogin(e.target))
+          );
+        }
         if (filterUser) {
           entries = entries.filter(e =>
             (e.actorLogin || '').toLowerCase().includes(filterUser) ||

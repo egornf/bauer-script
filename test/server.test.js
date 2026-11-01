@@ -448,4 +448,127 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.ok(actions.has('owner.recovery.failed'), 'Audit log must contain owner.recovery.failed');
     assert.ok(actions.has('content.publish'), 'Audit log must contain content.publish');
   });
+
+  await t.test('10. ADMIN full access, HEAD (Руководитель отдела) script creation without deletion, and OPERATOR (Менеджер обзвона) department hierarchy', async () => {
+    const fullAdminClient = createTestClient(baseUrl);
+    const headClient = createTestClient(baseUrl);
+    const mgrClient = createTestClient(baseUrl);
+
+    // 1. OWNER creates a full ADMIN with default permissions (all permissions)
+    const createFullAdmin = await ownerClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'admin_full',
+        displayName: 'Главный Администратор',
+        password: 'AdminPass123',
+        role: 'ADMIN'
+      }
+    });
+    assert.equal(createFullAdmin.status, 201);
+    assert.ok(createFullAdmin.data.user.permissions.includes('users.manage'));
+    assert.ok(createFullAdmin.data.user.permissions.includes('layouts.delete'));
+
+    await fullAdminClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'admin_full', password: 'AdminPass123' }
+    });
+
+    // 2. ADMIN creates a HEAD (Руководитель отдела)
+    const createHead = await fullAdminClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'head_sergey',
+        displayName: 'Сергей Руководитель',
+        password: 'HeadPass123',
+        role: 'HEAD'
+      }
+    });
+    assert.equal(createHead.status, 201);
+    const headUser = createHead.data.user;
+    assert.equal(headUser.role, 'HEAD');
+    assert.ok(headUser.permissions.includes('content.edit'));
+    assert.ok(headUser.permissions.includes('layouts.manage'));
+    assert.ok(!headUser.permissions.includes('layouts.delete'));
+
+    // 3. ADMIN creates a Менеджер обзвона (OPERATOR) assigned to head_sergey
+    const createAssignedOp = await fullAdminClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'mgr_anna',
+        displayName: 'Анна Менеджер обзвона',
+        password: 'MgrPass123',
+        role: 'OPERATOR',
+        managerId: headUser.id
+      }
+    });
+    assert.equal(createAssignedOp.status, 201);
+    assert.equal(createAssignedOp.data.user.managerId, headUser.id);
+
+    // 4. HEAD logs in and adds their own Менеджер обзвона
+    await headClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'head_sergey', password: 'HeadPass123' }
+    });
+
+    const headCreateOp = await headClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'mgr_dmitry',
+        displayName: 'Дмитрий Менеджер',
+        password: 'MgrPass456',
+        role: 'OPERATOR'
+      }
+    });
+    assert.equal(headCreateOp.status, 201);
+    const dmitryUser = headCreateOp.data.user;
+    assert.equal(dmitryUser.role, 'OPERATOR');
+    assert.equal(dmitryUser.managerId, headUser.id);
+
+    // HEAD cannot create an ADMIN or EDITOR
+    const headCreateAdmin = await headClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'illegal_admin',
+        password: 'Password123',
+        role: 'ADMIN'
+      }
+    });
+    assert.equal(headCreateAdmin.status, 403);
+
+    // HEAD can block/unblock their own manager, but CANNOT delete them
+    const headBlockMgr = await headClient.request(`/api/users/${dmitryUser.id}`, {
+      method: 'PATCH',
+      body: { blocked: true }
+    });
+    assert.equal(headBlockMgr.status, 200);
+    assert.equal(headBlockMgr.data.user.blocked, true);
+
+    const headDeleteMgr = await headClient.request(`/api/users/${dmitryUser.id}`, {
+      method: 'DELETE'
+    });
+    assert.equal(headDeleteMgr.status, 403);
+
+    // 5. HEAD can create/save a script layout, but CANNOT delete any layout
+    const contentRes = await headClient.request('/api/content');
+    const createLayoutRes = await headClient.request('/api/layouts', {
+      method: 'POST',
+      body: {
+        name: 'Скрипт отдела Сергея',
+        data: contentRes.data.data
+      }
+    });
+    assert.equal(createLayoutRes.status, 200);
+    const newLayoutId = createLayoutRes.data.layout.id;
+
+    const headDeleteLayout = await headClient.request(`/api/layouts/${newLayoutId}`, {
+      method: 'DELETE'
+    });
+    assert.equal(headDeleteLayout.status, 403);
+
+    // Full ADMIN CAN delete the layout
+    const adminDeleteLayout = await fullAdminClient.request(`/api/layouts/${newLayoutId}`, {
+      method: 'DELETE'
+    });
+    assert.equal(adminDeleteLayout.status, 200);
+  });
 });

@@ -1035,13 +1035,20 @@ let localMode=location.protocol==='file:'||/\.github\.io$/i.test(location.hostna
 const fail=(m,st=400)=>{const e=new Error(m);e.status=st;return e};
 const seedLayouts=(()=>{try{return JSON.parse(document.getElementById('layouts-data')?.textContent||'[]');}catch{return [];}})();
 
-const VAULT_PERMISSIONS=['content.edit','layouts.manage','gifts.manage','addresses.manage','settings.manage','users.view','audit.view'];
+const VAULT_PERMISSIONS=['content.edit','layouts.manage','layouts.delete','gifts.manage','addresses.manage','settings.manage','users.view','users.manage','sessions.manage','audit.view'];
 const VAULT_ROLE_DEFAULTS={
-  OWNER:[...VAULT_PERMISSIONS,'users.manage','admins.manage','sessions.manage','owner.full'],
-  ADMIN:['content.edit','layouts.manage','gifts.manage','addresses.manage','settings.manage'],
-  EDITOR:['content.edit','layouts.manage','gifts.manage','addresses.manage'],
+  OWNER:[...VAULT_PERMISSIONS,'admins.manage','owner.full'],
+  ADMIN:[...VAULT_PERMISSIONS],
+  EDITOR:['content.edit','layouts.manage','layouts.delete','gifts.manage','addresses.manage','settings.manage'],
+  HEAD:['content.edit','layouts.manage','users.view','audit.view'],
   OPERATOR:[]
 };
+function canDeleteContent(){
+  if(!currentUser)return true;
+  if(currentUser.role==='OWNER')return true;
+  if(currentUser.role==='HEAD')return false;
+  return (currentUser.permissions||[]).includes('layouts.delete');
+}
 
 const VaultDB=(()=>{
   let dbP=null;
@@ -1270,6 +1277,7 @@ async function api_local_vault(rawPath,options={}){
       login:u.login,
       displayName:u.displayName||u.login,
       role:u.role,
+      managerId:u.managerId||null,
       blocked:isO?false:Boolean(u.blocked),
       permissions:isO?[...VAULT_ROLE_DEFAULTS.OWNER]:(Array.isArray(u.permissions)?u.permissions:[]),
       createdAt:u.createdAt||0,
@@ -1468,17 +1476,23 @@ async function api_local_vault(rawPath,options={}){
   if(pathname==='/api/users'||pathname.startsWith('/api/users/')){
     if(!authUser)throw fail('Требуется авторизация.',401);
     const tid=pathname.split('/')[3]||null;
+    const isFullUserMgr=authUser.role==='OWNER'||hasPerm(authUser,'users.manage');
+    const isHead=authUser.role==='HEAD';
     if(method==='GET'&&!tid){
-      if(authUser.role!=='OWNER'&&!hasPerm(authUser,'users.view'))throw fail('Доступ к списку пользователей разрешён только OWNER.',403);
+      if(!isFullUserMgr&&!isHead&&!hasPerm(authUser,'users.view'))throw fail('Недостаточно прав для просмотра пользователей.',403);
+      const visible=(isHead&&!isFullUserMgr)
+        ?users.filter(u=>u.id===authUser.id||(u.role==='OPERATOR'&&u.managerId===authUser.id))
+        :users;
       return {
-        users:users.map(u=>({...sanitize(u),activeSessionsCount:sessions.filter(s=>s.userId===u.id).length})),
+        users:visible.map(u=>({...sanitize(u),activeSessionsCount:sessions.filter(s=>s.userId===u.id).length})),
+        heads:users.filter(u=>u.role==='HEAD').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login})),
         availablePermissions:VAULT_PERMISSIONS,
         roleDefaults:VAULT_ROLE_DEFAULTS
       };
     }
-    if(authUser.role!=='OWNER'){
+    if(!isFullUserMgr&&!isHead){
       await logEvent({action:'users.manage.denied',actor:authUser,target:tid,status:'denied'});
-      throw fail('Управление пользователями, ролями и администраторами доступно только главной учётной записи OWNER.',403);
+      throw fail('Недостаточно прав для управления пользователями.',403);
     }
     if(method==='POST'&&!tid){
       if(body.role==='OWNER')throw fail('В системе может быть только один OWNER.',403);
@@ -1486,13 +1500,26 @@ async function api_local_vault(rawPath,options={}){
       if(!login)throw fail('Логин должен содержать от 2 до 64 символов (например: МелентьевЕА, ИвановАА).',400);
       if(users.some(u=>normLogin(u.login)===normLogin(login)))throw fail('Пользователь с таким логином уже существует.',400);
       if(!validPass(body.password))throw fail('Пароль должен содержать от 4 до 128 символов.',400);
-      const role=['ADMIN','EDITOR','OPERATOR'].includes(body.role)?body.role:'OPERATOR';
-      const perms=Array.isArray(body.permissions)?body.permissions.filter(p=>VAULT_PERMISSIONS.includes(p)):[...(VAULT_ROLE_DEFAULTS[role]||[])];
+      let role=['ADMIN','EDITOR','HEAD','OPERATOR'].includes(body.role)?body.role:'OPERATOR';
+      let perms=Array.isArray(body.permissions)?body.permissions.filter(p=>VAULT_PERMISSIONS.includes(p)):[...(VAULT_ROLE_DEFAULTS[role]||[])];
+      let managerId=null;
+      if(isHead&&!isFullUserMgr){
+        if(body.role&&body.role!=='OPERATOR')throw fail('Руководитель отдела может добавлять только Менеджеров обзвона.',403);
+        role='OPERATOR';
+        perms=[...VAULT_ROLE_DEFAULTS.OPERATOR];
+        managerId=authUser.id;
+      }else if(role==='OPERATOR'&&body.managerId){
+        const hu=users.find(u=>u.id===body.managerId&&u.role==='HEAD');
+        if(!hu)throw fail('Выбранный руководитель отдела не найден.',400);
+        managerId=hu.id;
+      }
+      if(role==='HEAD')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
       const nu={
         id:'usr_'+VaultCrypto.randomHex(8),
         login,
         displayName:String(body.displayName||login).trim().slice(0,100)||login,
         role,
+        managerId,
         passwordHash:await VaultCrypto.hashPassword(body.password),
         blocked:Boolean(body.blocked),
         permissions:perms,
@@ -1502,17 +1529,25 @@ async function api_local_vault(rawPath,options={}){
       };
       users.push(nu);
       await saveUsers();
-      await logEvent({action:'users.create',actor:authUser,target:nu.login,details:{role:nu.role,permissions:nu.permissions}});
+      await logEvent({action:'users.create',actor:authUser,target:nu.login,details:{role:nu.role,managerId:nu.managerId,permissions:nu.permissions}});
       return {user:sanitize(nu)};
     }
     if(method==='PATCH'&&tid){
       const tu=users.find(u=>u.id===tid);
       if(!tu)throw fail('Пользователь не найден.',404);
       if(tu.role==='OWNER'){
-        if(body.blocked===true||(body.role!==undefined&&body.role!=='OWNER')||body.permissions!==undefined){
+        if(authUser.role!=='OWNER'||body.blocked===true||(body.role!==undefined&&body.role!=='OWNER')||body.permissions!==undefined){
           await logEvent({action:'owner.protection.triggered',actor:authUser,target:tu.login,status:'denied'});
           throw fail('Невозможно заблокировать, понизить роль или ограничить права главной учётной записи OWNER.',403);
         }
+      }
+      if(isHead&&!isFullUserMgr){
+        if(tu.role!=='OPERATOR'||tu.managerId!==authUser.id){
+          throw fail('Руководитель отдела может управлять только своими Менеджерами обзвона.',403);
+        }
+        if(body.role!==undefined&&body.role!=='OPERATOR')throw fail('Руководитель отдела не может менять роль сотрудника.',403);
+        delete body.permissions;
+        delete body.managerId;
       }
       if(body.role==='OWNER'&&tu.role!=='OWNER')throw fail('В системе может быть только один OWNER.',403);
       const changes={};
@@ -1524,11 +1559,24 @@ async function api_local_vault(rawPath,options={}){
       }
       if(body.displayName!==undefined){tu.displayName=String(body.displayName||'').trim().slice(0,100)||tu.login;changes.displayName=tu.displayName;}
       if(body.role!==undefined&&tu.role!=='OWNER'){
-        if(!['ADMIN','EDITOR','OPERATOR'].includes(body.role))throw fail('Недопустимая роль.',400);
+        if(!['ADMIN','EDITOR','HEAD','OPERATOR'].includes(body.role))throw fail('Недопустимая роль.',400);
+        const prevRole=tu.role;
         changes.role={from:tu.role,to:body.role};tu.role=body.role;
+        if(prevRole==='HEAD'&&tu.role!=='HEAD')users.forEach(u=>{if(u.managerId===tu.id)u.managerId=null;});
+        if(tu.role!=='OPERATOR')tu.managerId=null;
+      }
+      if(body.managerId!==undefined&&tu.role==='OPERATOR'&&isFullUserMgr){
+        if(!body.managerId){tu.managerId=null;changes.managerId=null;}
+        else{
+          const hu=users.find(u=>u.id===body.managerId&&u.role==='HEAD');
+          if(!hu)throw fail('Выбранный руководитель отдела не найден.',400);
+          tu.managerId=hu.id;changes.managerId=hu.id;
+        }
       }
       if(body.permissions!==undefined&&tu.role!=='OWNER'){
-        tu.permissions=[...new Set((body.permissions||[]).filter(p=>VAULT_PERMISSIONS.includes(p)))];
+        let np=[...new Set((body.permissions||[]).filter(p=>VAULT_PERMISSIONS.includes(p)))];
+        if(tu.role==='HEAD')np=np.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
+        tu.permissions=np;
         changes.permissions=tu.permissions;
       }
       if(body.blocked!==undefined&&tu.role!=='OWNER'){
@@ -1547,12 +1595,17 @@ async function api_local_vault(rawPath,options={}){
       return {user:sanitize(tu)};
     }
     if(method==='DELETE'&&tid){
+      if(!isFullUserMgr||authUser.role==='HEAD'){
+        await logEvent({action:'users.delete.denied',actor:authUser,target:tid,status:'denied'});
+        throw fail('Руководитель отдела не может удалять учётные записи.',403);
+      }
       const tu=users.find(u=>u.id===tid);
       if(!tu)throw fail('Пользователь не найден.',404);
       if(tu.role==='OWNER'){
         await logEvent({action:'owner.delete.denied',actor:authUser,target:tu.login,status:'denied'});
         throw fail('Невозможно удалить главную учётную запись OWNER.',403);
       }
+      users.forEach(u=>{if(u.managerId===tid)u.managerId=null;});
       users=users.filter(u=>u.id!==tid);
       sessions=sessions.filter(s=>s.userId!==tid);
       await saveUsers();await saveSessions();
@@ -1563,11 +1616,14 @@ async function api_local_vault(rawPath,options={}){
 
   if(pathname==='/api/sessions'||pathname.startsWith('/api/sessions/')){
     if(!authUser)throw fail('Требуется авторизация.',401);
-    if(authUser.role!=='OWNER')throw fail('Управление сессиями доступно только главной учётной записи OWNER.',403);
+    const isFullSes=authUser.role==='OWNER'||hasPerm(authUser,'sessions.manage');
+    const isHead=authUser.role==='HEAD';
+    if(!isFullSes&&!isHead)throw fail('Недостаточно прав для управления сессиями.',403);
+    const allowedIds=isFullSes?null:new Set(users.filter(u=>u.id===authUser.id||(u.role==='OPERATOR'&&u.managerId===authUser.id)).map(u=>u.id));
     const sub=pathname.split('/')[3]||null;
     if(method==='GET'&&!sub){
       return {
-        sessions:sessions.map(s=>{
+        sessions:sessions.filter(s=>!allowedIds||allowedIds.has(s.userId)).map(s=>{
           const u=users.find(x=>x.id===s.userId);
           return {
             id:s.id,userId:s.userId,userLogin:u?.login||s.userLogin,displayName:u?.displayName||s.userLogin,
@@ -1581,6 +1637,7 @@ async function api_local_vault(rawPath,options={}){
       const uid=body.userId;
       const tu=users.find(u=>u.id===uid);
       if(!tu)throw fail('Пользователь не найден.',404);
+      if(allowedIds&&!allowedIds.has(tu.id))throw fail('Вы можете завершать сессии только своих Менеджеров обзвона.',403);
       const before=sessions.length;
       sessions=sessions.filter(s=>s.userId!==uid||(uid===authUser.id&&s.id===curSession?.id));
       const cnt=before-sessions.length;
@@ -1591,6 +1648,7 @@ async function api_local_vault(rawPath,options={}){
     if(method==='DELETE'&&sub){
       const targetSes=sessions.find(s=>s.id===sub);
       if(!targetSes)throw fail('Сессия не найдена.',404);
+      if(allowedIds&&!allowedIds.has(targetSes.userId))throw fail('Недостаточно прав для завершения этой сессии.',403);
       sessions=sessions.filter(s=>s.id!==sub);
       await saveSessions();
       await logEvent({action:'sessions.revoke',actor:authUser,target:targetSes.userLogin,details:{sessionId:sub}});
@@ -1601,11 +1659,16 @@ async function api_local_vault(rawPath,options={}){
 
   if(pathname==='/api/audit'&&method==='GET'){
     if(!authUser)throw fail('Требуется авторизация.',401);
-    if(authUser.role!=='OWNER'&&!hasPerm(authUser,'audit.view'))throw fail('Журнал действий доступен только OWNER.',403);
+    const isFullAudit=authUser.role==='OWNER'||authUser.role==='ADMIN';
+    if(!isFullAudit&&authUser.role!=='HEAD'&&!hasPerm(authUser,'audit.view'))throw fail('Недостаточно прав для просмотра журнала действий.',403);
     const limit=Math.min(500,Math.max(10,Number(uObj.searchParams.get('limit'))||200));
     const fu=(uObj.searchParams.get('user')||'').trim().toLowerCase();
     const fa=(uObj.searchParams.get('action')||'').trim().toLowerCase();
     let list=[...audit].reverse();
+    if(authUser.role==='HEAD'&&!isFullAudit){
+      const deptLogins=new Set(users.filter(u=>u.id===authUser.id||(u.role==='OPERATOR'&&u.managerId===authUser.id)).map(u=>normLogin(u.login)));
+      list=list.filter(e=>deptLogins.has(normLogin(e.actorLogin))||deptLogins.has(normLogin(e.target)));
+    }
     if(fu)list=list.filter(e=>(e.actorLogin||'').toLowerCase().includes(fu)||(e.target||'').toLowerCase().includes(fu));
     if(fa)list=list.filter(e=>(e.action||'').toLowerCase().includes(fa));
     return {events:list.slice(0,limit),total:list.length};
@@ -1690,6 +1753,7 @@ async function api_local_vault(rawPath,options={}){
     if(!hasPerm(authUser,'layouts.manage'))throw fail('Недостаточно прав для сохранения или удаления макетов (layouts.manage).',403);
     let list=await getStoredLayouts();
     if(method==='DELETE'){
+      if(authUser.role==='HEAD'||!hasPerm(authUser,'layouts.delete'))throw fail('Руководитель отдела не может удалять скрипты и макеты.',403);
       list=list.filter(l=>l.id!==id);
       await VaultDB.set('layouts',list);
       await logEvent({action:'layouts.delete',actor:authUser,target:id});
@@ -1957,7 +2021,7 @@ $('#layouts-view').addEventListener('click',async event=>{
   if(action==='save-copy'){await saveEditorLayout(true);return;}
   if(action==='gift-upload'){uploadGiftId=id;uploadContext='draft';$('#gift-upload').value='';$('#gift-upload').click();return;}
   if(action==='lock'){try{await api('/api/admin/logout',{method:'POST',body:'{}'});adminUnlocked=false;savedLayouts=[];editorDraft=null;undoStack=[];redoStack=[];$('#layouts-view').innerHTML='';showScript();toast('Редактор закрыт на пароль');}catch(error){toast(error.message);}return;}
-  if(action==='delete-layout'){const mine=savedLayouts.filter(s=>!/^Перед изменением/.test(s.name));if(mine.some(s=>s.id===id)&&mine.length<=1){toast('Оставьте хотя бы один скрипт.');return;}if(deletingLayout!==id){deletingLayout=id;button.textContent='Удалить?';return;}try{await api('/api/layouts/'+id,{method:'DELETE'});savedLayouts=savedLayouts.filter(s=>s.id!==id);if(editorLayoutId===id){const next=savedLayouts.find(s=>!/^Перед изменением/.test(s.name));editorLayoutId=next?.id||null;editorLayoutName=next?.name||'';if(next){editorDraft=migrateWorking(next.data);editorStageId=editorDraft.stages[0]?.id||null;localStorage.setItem('bauer-script-choice',next.id);data=clone(editorDraft);renderCards();}}deletingLayout=null;renderLayouts();}catch(error){layoutError(error.message);}return;}
+  if(action==='delete-layout'){if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление скриптов и макетов.');return;}const mine=savedLayouts.filter(s=>!/^Перед изменением/.test(s.name));if(mine.some(s=>s.id===id)&&mine.length<=1){toast('Оставьте хотя бы один скрипт.');return;}if(deletingLayout!==id){deletingLayout=id;button.textContent='Удалить?';return;}try{await api('/api/layouts/'+id,{method:'DELETE'});savedLayouts=savedLayouts.filter(s=>s.id!==id);if(editorLayoutId===id){const next=savedLayouts.find(s=>!/^Перед изменением/.test(s.name));editorLayoutId=next?.id||null;editorLayoutName=next?.name||'';if(next){editorDraft=migrateWorking(next.data);editorStageId=editorDraft.stages[0]?.id||null;localStorage.setItem('bauer-script-choice',next.id);data=clone(editorDraft);renderCards();}}deletingLayout=null;renderLayouts();}catch(error){layoutError(error.message);}return;}
   mutateDraft(()=>{
     const stageIndex=editorDraft.stages.findIndex(s=>s.id===id);
     if(action==='add-stage'){const added=LayoutModel.addStage(editorDraft,editorStageId);editorStageId=added.id;editorSection='stage';}
@@ -2110,7 +2174,7 @@ function renderAddresses(){
   const body=cities.map(city=>{
     const all=groups.get(city),shown=all.filter(match);if(!shown.length)return '';
     const on=all.filter(v=>!v.unavailable).length,open=q?true:openCities.has(city);
-    return `<details class="addr-city ${on===0?'off':''}" data-city="${E(city)}" ${open?'open':''}><summary><span class="addr-cname">${E(city)}</span><span class="addr-count ${on===all.length?'all':on?'part':'none'}">${on===all.length?`все ${all.length} работают`:on?`работают ${on} из ${all.length}`:'не работает'}</span></summary><div class="addr-body"><div class="addr-tools"><button data-city-all="on" data-city="${E(city)}">Включить все</button><button data-city-all="off" data-city="${E(city)}">Выключить все</button><button data-address-add-city="${E(city)}">+ Зал в этом городе</button></div>${shown.map(v=>`<div class="addr-hall ${v.unavailable?'off':''}"><label class="addr-switch" title="Галочка: зал работает"><input type="checkbox" data-address-toggle="${E(v.id)}" ${v.unavailable?'':'checked'}><span>${v.unavailable?'Не работает':'Работает'}</span></label><div class="addr-info"><h3>${E(v.hall)}</h3><p><strong>Адрес:</strong> ${E(v.address)}</p><p class="address-route"><strong>Ориентиры:</strong> ${E(v.route)}</p>${v.conflict?`<p class="editor-help">Требуется уточнение: ${E(v.note||'маршрут')}</p>`:''}</div><div class="addr-act"><button data-address-edit="${E(v.id)}">Редактировать</button><button data-address-delete="${E(v.id)}" class="danger-text">Удалить</button></div></div>`).join('')}</div></details>`;
+    return `<details class="addr-city ${on===0?'off':''}" data-city="${E(city)}" ${open?'open':''}><summary><span class="addr-cname">${E(city)}</span><span class="addr-count ${on===all.length?'all':on?'part':'none'}">${on===all.length?`все ${all.length} работают`:on?`работают ${on} из ${all.length}`:'не работает'}</span></summary><div class="addr-body"><div class="addr-tools"><button data-city-all="on" data-city="${E(city)}">Включить все</button><button data-city-all="off" data-city="${E(city)}">Выключить все</button><button data-address-add-city="${E(city)}">+ Зал в этом городе</button></div>${shown.map(v=>`<div class="addr-hall ${v.unavailable?'off':''}"><label class="addr-switch" title="Галочка: зал работает"><input type="checkbox" data-address-toggle="${E(v.id)}" ${v.unavailable?'':'checked'}><span>${v.unavailable?'Не работает':'Работает'}</span></label><div class="addr-info"><h3>${E(v.hall)}</h3><p><strong>Адрес:</strong> ${E(v.address)}</p><p class="address-route"><strong>Ориентиры:</strong> ${E(v.route)}</p>${v.conflict?`<p class="editor-help">Требуется уточнение: ${E(v.note||'маршрут')}</p>`:''}</div><div class="addr-act"><button data-address-edit="${E(v.id)}">Редактировать</button>${canDeleteContent()?(`<button data-address-delete="${E(v.id)}" class="danger-text">Удалить</button>`):''}</div></div>`).join('')}</div></details>`;
   }).join('');
   $('#addresses-view').innerHTML=`<div class="bank-intro"><div><h1>Адреса площадок</h1><p class="sub">${cities.length} городов · ${total} залов · работают ${work}</p></div><button class="primary" id="address-add">+ Добавить площадку</button></div><p class="editor-help">Галочка слева у зала: зал работает. Без галочки он пропадает из выбора «Город и зал» вверху и из помощника СМС. Изменения сохраняются сразу.</p><div class="bank-search"><input id="address-search" type="search" placeholder="Найти город, зал или адрес…" aria-label="Поиск адресов" value="${E(query)}">${deleted?'<button id="address-undo">Отменить удаление</button>':''}<button id="address-expand">Развернуть все</button><button id="address-collapse">Свернуть все</button></div><div class="address-list addr-accordion">${body||'<p class="empty">Площадки не найдены.</p>'}</div>`;
 }
@@ -2177,11 +2241,11 @@ function lineBlock(s,i){
     const label=gift?(gift.condition?.trim()?`${gift.title} · ${gift.condition}`:(gift.title||'Подарок')):'Подарок не выбран';
     const effFmt=lineFmt?.style?.blockBg?lineFmt:(gift?.scriptFormat||lineFmt);
     const bStyle=LayoutModel.blockCSS(effFmt);
-    return `<div class="v4-line is-gift"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><button type="button" class="v4-gpick-btn ${isOpen?'open':''}" data-v4="toggle-picker" data-i="${i}" title="Выбрать подарок из базы подарков">${gift?`${gift.photo?`<img src="${gift.photo}" alt="">`:'🎁'}<span>${E(gift.title||'Без названия')}</span>${gift.condition?`<small>· ${E(gift.condition)}</small>`:''}`:'<span>🔍 Выбрать подарок из списка…</span>'}<b aria-hidden="true">▾</b></button>${gift?`<button type="button" class="v4-gpick-link" data-v4="goto-gift" data-id="${E(gift.id)}" title="Редактировать скрипт, описание и фото в Базе подарков">✎ В базе подарков</button>`:''}${blockBar(i,effFmt?.style?.blockBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Выше">↑</button><button data-v4="down" data-i="${i}" title="Ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button><button data-v4="delline" data-i="${i}" title="Удалить реплику">✕</button></div>${isOpen?`<div class="v4-gpick-panel"><div class="v4-gpick-top"><input type="search" class="v4-gpick-search" data-v4-picksearch="${i}" placeholder="🔍 Фильтр по подаркам: введите название, условие или слова из описания…" value="${E(pickerQuery)}" autocomplete="off"><button type="button" data-v4="new-gift-for-line" data-i="${i}">+ Создать подарок в базе</button></div><div class="v4-gpick-list" data-v4-picklist="${i}">${renderPickerOptions(i,curGiftId,pickerQuery)}</div></div>`:''}${gift?`<section class="script-gift"${bStyle?` style="${bStyle}"`:''} aria-label="${E(gift.title||'Подарок')}"><div class="script-gift-label">🎁 ${E(label)}</div><div class="script-gift-layout">${inlineGiftPhoto(gift,true)}<div class="script-gift-text"><p class="line">${(gift.script||'').trim()?LayoutModel.renderText(gift.script,gift.scriptFormat):'<span class="v4-empty">Описание подарка пусто. Нажмите «✎ В базе подарков», чтобы заполнить скрипт подарка.</span>'}</p></div></div></section>`:''}</div>`;
+    return `<div class="v4-line is-gift"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><button type="button" class="v4-gpick-btn ${isOpen?'open':''}" data-v4="toggle-picker" data-i="${i}" title="Выбрать подарок из базы подарков">${gift?`${gift.photo?`<img src="${gift.photo}" alt="">`:'🎁'}<span>${E(gift.title||'Без названия')}</span>${gift.condition?`<small>· ${E(gift.condition)}</small>`:''}`:'<span>🔍 Выбрать подарок из списка…</span>'}<b aria-hidden="true">▾</b></button>${gift?`<button type="button" class="v4-gpick-link" data-v4="goto-gift" data-id="${E(gift.id)}" title="Редактировать скрипт, описание и фото в Базе подарков">✎ В базе подарков</button>`:''}${blockBar(i,effFmt?.style?.blockBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Выше">↑</button><button data-v4="down" data-i="${i}" title="Ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить реплику">✕</button>`):''}</div>${isOpen?`<div class="v4-gpick-panel"><div class="v4-gpick-top"><input type="search" class="v4-gpick-search" data-v4-picksearch="${i}" placeholder="🔍 Фильтр по подаркам: введите название, условие или слова из описания…" value="${E(pickerQuery)}" autocomplete="off"><button type="button" data-v4="new-gift-for-line" data-i="${i}">+ Создать подарок в базе</button></div><div class="v4-gpick-list" data-v4-picklist="${i}">${renderPickerOptions(i,curGiftId,pickerQuery)}</div></div>`:''}${gift?`<section class="script-gift"${bStyle?` style="${bStyle}"`:''} aria-label="${E(gift.title||'Подарок')}"><div class="script-gift-label">🎁 ${E(label)}</div><div class="script-gift-layout">${inlineGiftPhoto(gift,true)}<div class="script-gift-text"><p class="line">${(gift.script||'').trim()?LayoutModel.renderText(gift.script,gift.scriptFormat):'<span class="v4-empty">Описание подарка пусто. Нажмите «✎ В базе подарков», чтобы заполнить скрипт подарка.</span>'}</p></div></div></section>`:''}</div>`;
   }
   const curBg=lineFmt?.style?.blockBg||(i===0?'#e2f3ef':'');
   const dispFmt=lineFmt?.style?.blockBg?lineFmt:(i===0?{...lineFmt,style:{...(lineFmt?.style||{}),blockBg:'#e2f3ef'}}:lineFmt);
-  return `<div class="v4-line"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Выше">↑</button><button data-v4="down" data-i="${i}" title="Ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button><button data-v4="delline" data-i="${i}" title="Удалить реплику">✕</button></div>${on?editBox(s.lines[i],dispFmt):rawKind==='address'?addressLineHtml(s.lines[i],dispFmt,LayoutModel.blockCSS(dispFmt),` data-v4="edit" data-t="line" data-i="${i}" tabindex="0" title="Нажмите, чтобы изменить шаблон адреса"`).replace('class="line line-address"','class="line line-address v4-click"'):view('line',i,s.lines[i],dispFmt)}</div>`;
+  return `<div class="v4-line"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Выше">↑</button><button data-v4="down" data-i="${i}" title="Ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить реплику">✕</button>`):''}</div>${on?editBox(s.lines[i],dispFmt):rawKind==='address'?addressLineHtml(s.lines[i],dispFmt,LayoutModel.blockCSS(dispFmt),` data-v4="edit" data-t="line" data-i="${i}" tabindex="0" title="Нажмите, чтобы изменить шаблон адреса"`).replace('class="line line-address"','class="line line-address v4-click"'):view('line',i,s.lines[i],dispFmt)}</div>`;
 }
 const view=(t,i,text,f)=>{const bs=t==='line'?LayoutModel.blockCSS(f):'';return `<p class="line v4-click" data-v4="edit" data-t="${t}" data-i="${i}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы изменить">${text.trim()?LayoutModel.renderText(text,f):'<span class="v4-empty">Пусто. Нажмите, чтобы написать</span>'}</p>`;};
 function editBox(text,f){
@@ -2201,7 +2265,7 @@ function editBox(text,f){
 function stageTab(s){
   const d=editorDraft,ix=d.stages.findIndex(x=>x.id===s.id),ob=obSel!=null?d.objections[obSel]:null;
   const others=d.objections.map((o,i)=>[o,i]).filter(([,i])=>!s.objectionIds.includes(i));
-  return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">ЭТАП ${String(ix+1).padStart(2,'0')} · РЕДАКТИРОВАНИЕ</div><input class="v4-title" data-v4-title maxlength="190" value="${E(s.title)}" aria-label="Название этапа"></div><div class="v4-stage-tools"><button data-v4="mvl" ${ix===0?'disabled':''} title="Сдвинуть влево">←</button><button data-v4="mvr" ${ix===d.stages.length-1?'disabled':''} title="Сдвинуть вправо">→</button><button data-v4="dup">Дублировать</button><button data-v4="hide">${s.hidden?'Показать на сайте':'Скрыть с сайта'}</button><button data-v4="rm">Удалить блок</button></div></div>
+  return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">ЭТАП ${String(ix+1).padStart(2,'0')} · РЕДАКТИРОВАНИЕ</div><input class="v4-title" data-v4-title maxlength="190" value="${E(s.title)}" aria-label="Название этапа"></div><div class="v4-stage-tools"><button data-v4="mvl" ${ix===0?'disabled':''} title="Сдвинуть влево">←</button><button data-v4="mvr" ${ix===d.stages.length-1?'disabled':''} title="Сдвинуть вправо">→</button><button data-v4="dup">Дублировать</button><button data-v4="hide">${s.hidden?'Показать на сайте':'Скрыть с сайта'}</button>${canDeleteContent()?'<button data-v4="rm">Удалить блок</button>':''}</div></div>
 <div class="v4-body"><div class="v4-script"><div class="pane-label">Реплики оператора</div>${s.lines.map((_,i)=>lineBlock(s,i)).join('')}<div class="v4-add-row"><button data-v4="addline" data-i="${s.lines.length-1}">+ Добавить реплику</button><button class="v4-add-gift-btn" data-v4="addgiftline" data-i="${s.lines.length-1}">+ 🎁 Добавить подарок из базы</button><button class="v4-add-gift-btn" data-v4="addaddrline" data-i="${s.lines.length-1}">+ 📍 Добавить адрес</button></div>
 <div class="v4-tipbox"><label class="v4-switch"><input type="checkbox" data-v4-tipshow ${s.showTip?'checked':''}> Показывать подсказку оператору</label><div class="tip"><strong>ПОДСКАЗКА ОПЕРАТОРУ</strong>${edit&&edit.t==='tip'?editBox(s.tip,s.tipFormat):view('tip',0,s.tip,s.tipFormat)}</div></div></div>
 <aside class="objections-pane v4-obj"><h3>Частые возражения</h3><p class="sub">Нажмите на возражение, чтобы изменить ответ</p><div class="objection-list">${s.objectionIds.map(id=>d.objections[id]?`<button class="objection-button ${obSel===id?'on':''}" data-v4="obsel" data-id="${id}"><span>${E(d.objections[id].title)}</span><span aria-hidden="true">✎</span></button>`:'').join('')||'<p class="empty">Пока нет возражений.</p>'}</div>
@@ -2215,7 +2279,7 @@ function renderGiftDbCards(){
   if(!filtered.length)return `<p class="v4-empty" style="grid-column:1/-1">${d.gifts.length?'По вашему фильтру подарки не найдены.':'Подарков пока нет. Нажмите «+ Подарок» или «Загрузить фото».'}</p>`;
   return filtered.map(g=>{
     const u=used(g.id),isEditing=edit&&edit.t==='gift'&&edit.id===g.id,sc=g.script||'',bs=LayoutModel.blockCSS(g.scriptFormat);
-    return `<article class="v4-gift ${highlightGiftId===g.id?'highlight':''}" id="v4-gift-${E(g.id)}"><div class="v4-gift-top"><div><label class="v4-gphoto" for="gf-${g.id}">${g.photo?`<img src="${g.photo}" alt="">`:'<span>+ Загрузить фото</span>'}</label><input type="file" id="gf-${g.id}" data-v4-file="${g.id}" accept="image/jpeg,image/png,image/webp" hidden></div><div><label class="v4-gfield-lbl">Название подарка (для списка и фильтра)</label><input class="v4-gin" data-v4-gift="title" data-id="${g.id}" maxlength="190" placeholder="Например: Термос BAUER" value="${E(g.title)}"><label class="v4-gfield-lbl">Условие / подпись в плашке</label><input class="v4-gin" data-v4-gift="condition" data-id="${g.id}" maxlength="300" placeholder="Например: Подарок Я+1 · За 1 гостя старше 35 лет" value="${E(g.condition)}"></div></div><div class="v4-gscript-box"><div class="v4-gscript-head"><span class="pane-label">Скрипт и описание подарка (читает оператор)</span>${!isEditing?`<button type="button" data-v4="edit-gift-script" data-id="${g.id}">✎ Изменить и оформить текст</button>`:''}</div>${isEditing?editBox(sc,g.scriptFormat):`<div class="line v4-click" data-v4="edit-gift-script" data-id="${g.id}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы редактировать скрипт и описание подарка">${sc.trim()?LayoutModel.renderText(sc,g.scriptFormat):'<span class="v4-empty">Нажмите сюда, чтобы написать скрипт и описание подарка…</span>'}</div>`}</div><div class="v4-gmeta"><small>${u.length?'Используется в блоках: <b>'+E(u.join(', '))+'</b>':'Не выбран ни в одном блоке'}</small><span>${g.photo?`<button data-v4="giftphotodel" data-id="${g.id}">Убрать фото</button>`:''}<button data-v4="giftdup" data-id="${g.id}">Дублировать</button><button data-v4="giftdel" data-id="${g.id}" class="danger-text">${del===g.id?'Точно удалить?':'Удалить'}</button></span></div></article>`;
+    return `<article class="v4-gift ${highlightGiftId===g.id?'highlight':''}" id="v4-gift-${E(g.id)}"><div class="v4-gift-top"><div><label class="v4-gphoto" for="gf-${g.id}">${g.photo?`<img src="${g.photo}" alt="">`:'<span>+ Загрузить фото</span>'}</label><input type="file" id="gf-${g.id}" data-v4-file="${g.id}" accept="image/jpeg,image/png,image/webp" hidden></div><div><label class="v4-gfield-lbl">Название подарка (для списка и фильтра)</label><input class="v4-gin" data-v4-gift="title" data-id="${g.id}" maxlength="190" placeholder="Например: Термос BAUER" value="${E(g.title)}"><label class="v4-gfield-lbl">Условие / подпись в плашке</label><input class="v4-gin" data-v4-gift="condition" data-id="${g.id}" maxlength="300" placeholder="Например: Подарок Я+1 · За 1 гостя старше 35 лет" value="${E(g.condition)}"></div></div><div class="v4-gscript-box"><div class="v4-gscript-head"><span class="pane-label">Скрипт и описание подарка (читает оператор)</span>${!isEditing?`<button type="button" data-v4="edit-gift-script" data-id="${g.id}">✎ Изменить и оформить текст</button>`:''}</div>${isEditing?editBox(sc,g.scriptFormat):`<div class="line v4-click" data-v4="edit-gift-script" data-id="${g.id}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы редактировать скрипт и описание подарка">${sc.trim()?LayoutModel.renderText(sc,g.scriptFormat):'<span class="v4-empty">Нажмите сюда, чтобы написать скрипт и описание подарка…</span>'}</div>`}</div><div class="v4-gmeta"><small>${u.length?'Используется в блоках: <b>'+E(u.join(', '))+'</b>':'Не выбран ни в одном блоке'}</small><span>${g.photo?`<button data-v4="giftphotodel" data-id="${g.id}">Убрать фото</button>`:''}<button data-v4="giftdup" data-id="${g.id}">Дублировать</button>${canDeleteContent()?(`<button data-v4="giftdel" data-id="${g.id}" class="danger-text">${del===g.id?'Точно удалить?':'Удалить'}</button>`):''}</span></div></article>`;
   }).join('');
 }
 function giftsTab(){
@@ -2225,7 +2289,7 @@ function giftsTab(){
 }
 function savedTab(){
   const all=savedLayouts||[],mine=all.filter(l=>!/^Перед изменением/.test(l.name)),bk=all.filter(l=>/^Перед изменением/.test(l.name));
-  const row=(l,i=-1,n=0)=>`<div class="v4-srow ${l.id===editorLayoutId?'on':''}"${i>=0?` draggable="true" data-lid="${l.id}"`:''}><div class="v4-sleft">${i>=0?`<span class="v4-ord"><span class="v4-grip" title="Перетащите, чтобы изменить порядок">⠿</span><b>${i+1}</b></span>`:''}<div class="v4-sname"><strong>${E(l.name)}</strong><small>${dateLabel(l.savedAt)}${l.id===editorLayoutId?' · открыт сейчас':''}</small></div></div><div class="v4-sact">${i>=0?`<button data-v4="lmove" data-id="${l.id}" data-d="top" title="В начало списка" ${i===0?'disabled':''}>⤒</button><button data-v4="lmove" data-id="${l.id}" data-d="-1" title="Выше" ${i===0?'disabled':''}>↑</button><button data-v4="lmove" data-id="${l.id}" data-d="1" title="Ниже" ${i===n-1?'disabled':''}>↓</button>`:''}<button data-action="edit-layout" data-id="${l.id}">Открыть</button><button data-action="delete-layout" data-id="${l.id}">Удалить</button></div></div>`;
+  const row=(l,i=-1,n=0)=>`<div class="v4-srow ${l.id===editorLayoutId?'on':''}"${i>=0?` draggable="true" data-lid="${l.id}"`:''}><div class="v4-sleft">${i>=0?`<span class="v4-ord"><span class="v4-grip" title="Перетащите, чтобы изменить порядок">⠿</span><b>${i+1}</b></span>`:''}<div class="v4-sname"><strong>${E(l.name)}</strong><small>${dateLabel(l.savedAt)}${l.id===editorLayoutId?' · открыт сейчас':''}</small></div></div><div class="v4-sact">${i>=0?`<button data-v4="lmove" data-id="${l.id}" data-d="top" title="В начало списка" ${i===0?'disabled':''}>⤒</button><button data-v4="lmove" data-id="${l.id}" data-d="-1" title="Выше" ${i===0?'disabled':''}>↑</button><button data-v4="lmove" data-id="${l.id}" data-d="1" title="Ниже" ${i===n-1?'disabled':''}>↓</button>`:''}<button data-action="edit-layout" data-id="${l.id}">Открыть</button>${canDeleteContent()?(`<button data-action="delete-layout" data-id="${l.id}">Удалить</button>`):''}</div></div>`;
   return `<section class="v4-card v4-pad"><h2 style="margin:0 0 6px">Мои макеты</h2><p class="v4-sub" style="margin:0 0 14px">Порядок здесь такой же, как в списке «Выбор скрипта» вверху. Перетащите строку за ⠿ или нажмите ↑ ↓ ⤒.</p><div class="v4-newbar" id="new-layout-bar"><input id="new-layout-name" maxlength="100" placeholder="Название нового макета, например: Холодный обзвон" aria-label="Название нового макета"><button data-new-layout="blank">+ Пустой</button><button class="primary" data-new-layout="copy">+ Копия текущего</button></div>${mine.map((l,i)=>row(l,i,mine.length)).join('')||'<p class="v4-empty">Сохранённых макетов пока нет.</p>'}${bk.length?`<details style="margin-top:14px"><summary>Автокопии перед изменениями (${bk.length})</summary>${bk.map(row).join('')}</details>`:''}</section>`;
 }
 const visLayouts=()=>savedLayouts.filter(l=>!/^Перед изменением/.test(l.name)).map(l=>l.id);
@@ -2364,11 +2428,11 @@ lv.addEventListener('click',async e=>{
     case 'lmove':moveLayout(id,b.dataset.d);return;
     case 'addline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'Новая реплика');s.lineKinds.splice(j,0,'speech');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
     case 'addgiftline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'');s.lineKinds.splice(j,0,'gift');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,editorDraft.gifts[0]?.id||'');edit=null;pickerOpen=j;pickerQuery=''});return;
-    case 'delline':lineOp(()=>['lines','lineKinds','lineFormats','lineGifts'].forEach(k=>s[k].splice(i,1)));return;
+    case 'delline':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление.');return;}lineOp(()=>['lines','lineKinds','lineFormats','lineGifts'].forEach(k=>s[k].splice(i,1)));return;
     case 'mvl':case 'mvr':M(()=>{const k=editorDraft.stages.findIndex(x=>x.id===s.id);LayoutModel.moveStage(editorDraft,s.id,k+(a==='mvl'?-1:1))});return;
     case 'dup':M(()=>{const n=LayoutModel.duplicateStage(editorDraft,s.id);if(n)editorStageId=n.id;edit=null;pickerOpen=null});return;
     case 'hide':M(()=>LayoutModel.setHidden(editorDraft,s.id,!s.hidden));return;
-    case 'rm':if(del!==s.id){del=s.id;b.textContent='Точно удалить?';return}del=null;M(()=>{const k=editorDraft.stages.findIndex(x=>x.id===s.id);LayoutModel.removeStage(editorDraft,s.id);editorStageId=editorDraft.stages[Math.max(0,k-1)].id;edit=null;pickerOpen=null});return;
+    case 'rm':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление блоков.');return;}if(del!==s.id){del=s.id;b.textContent='Точно удалить?';return}del=null;M(()=>{const k=editorDraft.stages.findIndex(x=>x.id===s.id);LayoutModel.removeStage(editorDraft,s.id);editorStageId=editorDraft.stages[Math.max(0,k-1)].id;edit=null;pickerOpen=null});return;
     case 'obsel':obSel=obSel===Number(id)?null:Number(id);renderLayouts();return;
     case 'obunlink':M(()=>{s.objectionIds=s.objectionIds.filter(x=>x!==obSel);obSel=null});return;
     case 'obnew':M(()=>{if(editorDraft.objections.length>=200)throw new Error('Достигнут предел: 200 возражений.');const n=editorDraft.objections.push({title:'Новое возражение',text:'Напишите ответ оператора.',textFormat:LayoutModel.cleanFormat(null,0),origin:'suggested',nextStageId:''})-1;s.objectionIds.push(n);obSel=n});return;
@@ -2376,7 +2440,7 @@ lv.addEventListener('click',async e=>{
     case 'giftbulk':q('#v4-bulk').click();return;
     case 'giftadd':{if(editorDraft.gifts.length>=60){toast('В базе уже 60 подарков.');return;}const nid=gid();dbQuery='';M(()=>{editorDraft.gifts.unshift({id:nid,title:'Новый подарок',condition:'',script:'Введите скрипт и описание подарка для оператора.',scriptFormat:LayoutModel.cleanFormat(null,0),photo:''});highlightGiftId=nid;edit={t:'gift',id:nid};sel={s:0,e:1e9}});return;}
     case 'giftdup':{if(editorDraft.gifts.length>=60){toast('В базе уже 60 подарков.');return;}const orig=editorDraft.gifts.find(g=>g.id===id);if(!orig)return;const copyGift=clone(orig);copyGift.id=gid();copyGift.title=(copyGift.title||'Подарок').slice(0,180)+' · копия';M(()=>{const idx=editorDraft.gifts.findIndex(g=>g.id===id);editorDraft.gifts.splice(idx+1,0,copyGift);highlightGiftId=copyGift.id});return;}
-    case 'giftdel':if(del!==id){del=id;renderLayouts();return}del=null;M(()=>{editorDraft.gifts=editorDraft.gifts.filter(g=>g.id!==id);editorDraft.stages.forEach(x=>{x.giftIds=(x.giftIds||[]).filter(g=>g!==id);if(x.lineGifts)x.lineGifts=x.lineGifts.map(gid=>gid===id?(editorDraft.gifts[0]?.id||''):gid);})});return;
+    case 'giftdel':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление подарков.');return;}if(del!==id){del=id;renderLayouts();return}del=null;M(()=>{editorDraft.gifts=editorDraft.gifts.filter(g=>g.id!==id);editorDraft.stages.forEach(x=>{x.giftIds=(x.giftIds||[]).filter(g=>g!==id);if(x.lineGifts)x.lineGifts=x.lineGifts.map(gid=>gid===id?(editorDraft.gifts[0]?.id||''):gid);})});return;
     case 'giftphotodel':M(()=>{editorDraft.gifts.find(g=>g.id===id).photo=''});return;
   }
 });
@@ -2435,6 +2499,7 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .role-pill.owner{background:var(--amber);color:#2a1d00}
 .role-pill.admin{background:var(--ui-soft);color:var(--accent-ink);border:1px solid var(--ui-border)}
 .role-pill.editor{background:var(--surface-alt);color:var(--ink);border:1px solid var(--line)}
+.role-pill.head{background:var(--amber-soft);color:var(--ink);border:1px solid var(--amber-line)}
 .role-pill.operator{background:var(--surface-alt);color:var(--muted);border:1px solid var(--line)}
 .status-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700}
 .status-pill.active{background:var(--ui-soft);color:var(--accent-ink)}
@@ -2505,18 +2570,22 @@ body.auth-locked #auth-close{display:none!important}
 const E=escapeHTML;
 const PERM_LABELS={
   'content.edit':'Редактирование и публикация скрипта',
-  'layouts.manage':'Создание и удаление макетов',
+  'layouts.manage':'Создание и сохранение макетов',
+  'layouts.delete':'Удаление макетов, блоков и элементов',
   'gifts.manage':'Управление базой подарков',
   'addresses.manage':'Управление адресами площадок',
   'settings.manage':'Настройки оформления сайта',
   'users.view':'Просмотр списка пользователей',
+  'users.manage':'Создание и управление пользователями',
+  'sessions.manage':'Управление активными сессиями',
   'audit.view':'Просмотр журнала действий'
 };
 const ROLE_NAMES={
   OWNER:'Владелец',
   ADMIN:'Администратор',
   EDITOR:'Редактор',
-  OPERATOR:'Оператор'
+  HEAD:'Руководитель отдела',
+  OPERATOR:'Менеджер обзвона'
 };
 const ACTION_LABELS={
   'owner.setup':'Первичная регистрация OWNER',
@@ -2581,7 +2650,7 @@ showScript=function(index=current,tab='script'){
   origShowScript(index,tab);
 };
 
-let ownerTab='users',usersList=[],sessionsList=[],auditList=[],auditFilterUser='',auditFilterAction='',roleDefaults={};
+let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditFilterUser='',auditFilterAction='',roleDefaults={};
 
 function fmtTime(ts){
   if(!ts)return '—';
@@ -2603,7 +2672,7 @@ function updateHeaderBadge(){
     if(outBtn)outBtn.hidden=false;
     const isOwner=currentUser.role==='OWNER';
     btn.innerHTML=`${isOwner?'<span class="dot-owner"></span>':''}<span>${E(currentUser.login)} · ${E(ROLE_NAMES[currentUser.role]||currentUser.role)}</span>`;
-    if(tabLbl)tabLbl.textContent=isOwner?'Владелец · Управление':'Профиль ('+(ROLE_NAMES[currentUser.role]||currentUser.role)+')';
+    if(tabLbl)tabLbl.textContent=isOwner?'Владелец · Управление':currentUser.role==='ADMIN'?'Администрирование':currentUser.role==='HEAD'?'Мой отдел · Управление':'Профиль ('+(ROLE_NAMES[currentUser.role]||currentUser.role)+')';
   }else{
     btn.hidden=true;
     if(outBtn)outBtn.hidden=true;
@@ -2690,16 +2759,21 @@ async function loadOwnerData(){
     roleDefaults=st.roleDefaults||roleDefaults;
     updateHeaderBadge();
     if(!currentUser)return;
-    if(currentUser.role==='OWNER'||(currentUser.permissions||[]).includes('users.view')){
+    const perms=currentUser.permissions||[];
+    const canUsers=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('users.view')||perms.includes('users.manage');
+    const canSessions=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('sessions.manage');
+    const canAudit=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('audit.view');
+    if(canUsers){
       const uRes=await api('/api/users');
       usersList=uRes.users||[];
+      headsList=uRes.heads||usersList.filter(u=>u.role==='HEAD').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login}));
       roleDefaults=uRes.roleDefaults||roleDefaults;
     }
-    if(currentUser.role==='OWNER'){
+    if(canSessions){
       const sRes=await api('/api/sessions');
       sessionsList=sRes.sessions||[];
     }
-    if(currentUser.role==='OWNER'||(currentUser.permissions||[]).includes('audit.view')){
+    if(canAudit){
       const params=new URLSearchParams({limit:'200'});
       if(auditFilterUser)params.set('user',auditFilterUser);
       if(auditFilterAction)params.set('action',auditFilterAction);
@@ -2713,18 +2787,29 @@ async function loadOwnerData(){
 
 function renderUsersSection(){
   const isOwner=currentUser?.role==='OWNER';
+  const isHead=currentUser?.role==='HEAD';
+  const canManageAll=isOwner||(currentUser?.permissions||[]).includes('users.manage');
+  const canCreate=canManageAll||isHead;
+  const headMap=new Map(headsList.map(h=>[h.id,h]));
+  usersList.forEach(u=>{if(u.role==='HEAD'&&!headMap.has(u.id))headMap.set(u.id,{id:u.id,login:u.login,displayName:u.displayName||u.login});});
   return `<div class="owner-card">
     <div class="owner-card-head">
       <div>
-        <h2>Учётные записи и полномочия (${usersList.length})</h2>
-        <p>В системе может быть только один <b>Владелец</b>. Ни один пользователь, включая администраторов, не может удалить, заблокировать или изменить права Владельца.</p>
+        <h2>${isHead&&!canManageAll?'Мой отдел · Менеджеры обзвона':'Учётные записи и полномочия'} (${usersList.length})</h2>
+        <p>${isHead&&!canManageAll
+          ?'Вы можете добавлять своих Менеджеров обзвона и контролировать их вход, пароль и активные сессии.'
+          :'Иерархия ролей: <b>Владелец</b> → <b>Администратор</b> (полный доступ) → <b>Редактор</b> (гипер-скрипт, подарки) → <b>Руководитель отдела</b> (свои скрипты без удаления + контроль своих менеджеров) → <b>Менеджер обзвона</b>.'}</p>
       </div>
-      ${isOwner?`<button type="button" class="primary" data-owner-act="create-user">+ Добавить пользователя / администратора</button>`:''}
+      ${canCreate?`<button type="button" class="primary" data-owner-act="create-user">${isHead&&!canManageAll?'+ Добавить менеджера обзвона':'+ Добавить сотрудника'}</button>`:''}
     </div>
     <div class="user-list">
       ${usersList.map(u=>{
         const uIsOwner=u.role==='OWNER';
         const roleClass=u.role.toLowerCase();
+        const assignedHead=u.role==='OPERATOR'&&u.managerId?headMap.get(u.managerId):null;
+        const deptCount=u.role==='HEAD'?usersList.filter(x=>x.role==='OPERATOR'&&x.managerId===u.id).length:0;
+        const canEditRow=!uIsOwner&&(canManageAll||(isHead&&u.role==='OPERATOR'&&u.managerId===currentUser.id));
+        const canDeleteRow=!uIsOwner&&canManageAll&&!isHead;
         return `<article class="user-row ${uIsOwner?'is-owner':''} ${u.blocked?'is-blocked':''}">
           <div class="user-main">
             <div class="user-title">
@@ -2735,23 +2820,27 @@ function renderUsersSection(){
             </div>
             <div class="user-meta">
               Создан: ${fmtTime(u.createdAt)} · Последний вход: ${fmtTime(u.lastLoginAt)} · Активных сессий: <b>${u.activeSessionsCount||0}</b>
+              ${u.role==='OPERATOR'?`<br>Руководитель отдела: <b>${assignedHead?E(assignedHead.displayName+' (@'+assignedHead.login+')'):'не назначен'}</b>`:''}
+              ${u.role==='HEAD'?`<br>Менеджеров обзвона в отделе: <b>${deptCount}</b>`:''}
             </div>
           </div>
           <div class="perm-chips">
             ${uIsOwner
               ?'<span class="perm-chip all">★ Полный доступ ко всем функциям, настройкам и пользователям (Владелец)</span>'
-              :(u.permissions&&u.permissions.length
-                ?u.permissions.map(p=>`<span class="perm-chip">${E(PERM_LABELS[p]||p)}</span>`).join('')
-                :'<span class="user-meta">Только чтение рабочего скрипта (Оператор)</span>')}
+              :u.role==='ADMIN'
+                ?'<span class="perm-chip all">★ Полный доступ ко всем функциям и пользователям (Администратор)</span>'
+                :(u.permissions&&u.permissions.length
+                  ?u.permissions.map(p=>`<span class="perm-chip">${E(PERM_LABELS[p]||p)}</span>`).join('')+(u.role==='HEAD'?'<span class="perm-chip">Без права удаления · Контроль своих менеджеров</span>':'')
+                  :'<span class="user-meta">Работа со скриптом при обзвоне (Менеджер обзвона)</span>')}
           </div>
           <div class="user-actions">
             ${uIsOwner
               ?(isOwner?`<button type="button" data-owner-act="edit-owner-profile">Профиль и пароль Владельца</button><button type="button" data-owner-act="regen-codes">Резервные коды (${u.recoveryCodesRemaining??0})</button>`:`<span class="user-meta">Защищено системой</span>`)
-              :(isOwner?`
-                <button type="button" data-owner-act="edit-user" data-id="${E(u.id)}">Права и роль</button>
+              :(canEditRow?`
+                <button type="button" data-owner-act="edit-user" data-id="${E(u.id)}">${isHead&&!canManageAll?'Изменить / пароль':'Права и роль'}</button>
                 <button type="button" data-owner-act="toggle-block" data-id="${E(u.id)}" data-blocked="${u.blocked?'1':'0'}">${u.blocked?'Разблокировать':'Блокировать'}</button>
                 ${u.activeSessionsCount?`<button type="button" data-owner-act="revoke-user-sessions" data-id="${E(u.id)}">Сбросить сессии (${u.activeSessionsCount})</button>`:''}
-                <button type="button" class="danger-text" data-owner-act="delete-user" data-id="${E(u.id)}" data-login="${E(u.login)}">Удалить</button>
+                ${canDeleteRow?`<button type="button" class="danger-text" data-owner-act="delete-user" data-id="${E(u.id)}" data-login="${E(u.login)}">Удалить</button>`:''}
               `:'')}
           </div>
         </article>`;
@@ -2885,23 +2974,26 @@ function renderOwnerView(){
   const ov=document.getElementById('owner-view');
   if(!ov||!currentUser)return;
   const isOwner=currentUser.role==='OWNER';
-  const canViewUsers=isOwner||(currentUser.permissions||[]).includes('users.view');
-  const canViewAudit=isOwner||(currentUser.permissions||[]).includes('audit.view');
+  const isHead=currentUser.role==='HEAD';
+  const perms=currentUser.permissions||[];
+  const canViewUsers=isOwner||isHead||perms.includes('users.view')||perms.includes('users.manage');
+  const canViewSessions=isOwner||isHead||perms.includes('sessions.manage');
+  const canViewAudit=isOwner||isHead||perms.includes('audit.view');
   if(ownerTab==='users'&&!canViewUsers)ownerTab='security';
-  if(ownerTab==='sessions'&&!isOwner)ownerTab='security';
+  if(ownerTab==='sessions'&&!canViewSessions)ownerTab='security';
   if(ownerTab==='audit'&&!canViewAudit)ownerTab='security';
 
   const navItems=[];
-  if(canViewUsers)navItems.push(['users',`👥 Пользователи и роли (${usersList.length})`]);
-  if(isOwner)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
+  if(canViewUsers)navItems.push(['users',`👥 ${isHead&&!perms.includes('users.manage')?'Мой отдел':'Пользователи и роли'} (${usersList.length})`]);
+  if(canViewSessions)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
   if(canViewAudit)navItems.push(['audit',`📋 Журнал действий`]);
   navItems.push(['security',`🔐 Безопасность и профиль`]);
 
   ov.innerHTML=`<header class="owner-header">
     <div>
-      <div class="kicker">${isOwner?'ГЛАВНАЯ УЧЁТНАЯ ЗАПИСЬ ВЛАДЕЛЬЦА':'УЧЁТНАЯ ЗАПИСЬ СОТРУДНИКА'}</div>
-      <h1>${isOwner?'Центр управления Владельца':'Профиль и доступ'}</h1>
-      <p>Все пароли защищены криптографическим хешированием, права доступа и защита учётной записи Владельца контролируются системой.</p>
+      <div class="kicker">${isOwner?'ГЛАВНАЯ УЧЁТНАЯ ЗАПИСЬ ВЛАДЕЛЬЦА':currentUser.role==='ADMIN'?'ПАНЕЛЬ АДМИНИСТРАТОРА':isHead?'КАБИНЕТ РУКОВОДИТЕЛЯ ОТДЕЛА':'УЧЁТНАЯ ЗАПИСЬ СОТРУДНИКА'}</div>
+      <h1>${isOwner?'Центр управления Владельца':currentUser.role==='ADMIN'?'Управление системой и сотрудниками':isHead?'Управление отделом и менеджерами обзвона':'Профиль и доступ'}</h1>
+      <p>Все пароли защищены криптографическим хешированием, права доступа и иерархия отделов контролируются системой.</p>
     </div>
     <div class="owner-badge-bar">
       <span class="role-pill ${E(currentUser.role.toLowerCase())}">${E(ROLE_NAMES[currentUser.role]||currentUser.role)} · @${E(currentUser.login)}</span>
@@ -2918,16 +3010,21 @@ function renderOwnerView(){
 function openUserModal(editUser=null){
   const dlg=document.getElementById('user-modal');
   const isEdit=Boolean(editUser);
-  const role=editUser?editUser.role:'ADMIN';
+  const isHeadOnly=currentUser?.role==='HEAD'&&!(currentUser?.permissions||[]).includes('users.manage');
+  const role=isHeadOnly?'OPERATOR':(editUser?editUser.role:'OPERATOR');
   const perms=editUser?editUser.permissions:(roleDefaults[role]||[]);
+  const curManagerId=isHeadOnly?currentUser.id:(editUser?.managerId||'');
+  const availHeads=[...headsList];
+  usersList.forEach(u=>{if(u.role==='HEAD'&&!availHeads.some(h=>h.id===u.id))availHeads.push({id:u.id,login:u.login,displayName:u.displayName||u.login});});
+
   dlg.innerHTML=`<button type="button" class="dialog-x" data-close-modal="user-modal" aria-label="Закрыть">✕</button>
-    <div class="kicker">${isEdit?'НАСТРОЙКА ПОЛНОМОЧИЙ':'НОВЫЙ ПОЛЬЗОВАТЕЛЬ'}</div>
-    <h2 id="user-modal-title">${isEdit?`Пользователь @${E(editUser.login)}`:'Создать пользователя'}</h2>
+    <div class="kicker">${isEdit?'НАСТРОЙКА ПОЛНОМОЧИЙ':(isHeadOnly?'НОВЫЙ МЕНЕДЖЕР ОБЗВОНА':'НОВЫЙ ПОЛЬЗОВАТЕЛЬ')}</div>
+    <h2 id="user-modal-title">${isEdit?`Пользователь @${E(editUser.login)}`:(isHeadOnly?'Добавить менеджера обзвона':'Создать пользователя')}</h2>
     <form id="user-modal-form" data-edit-id="${isEdit?E(editUser.id):''}">
       <label for="um-login">Логин (например: ИвановАА, МелентьевЕА)</label>
       <input id="um-login" name="login" required maxlength="64" value="${isEdit?E(editUser.login):''}" autocomplete="off">
       <label for="um-name">Имя / должность</label>
-      <input id="um-name" name="displayName" maxlength="100" value="${isEdit?E(editUser.displayName||''):''}" placeholder="Например: Старший администратор Анна">
+      <input id="um-name" name="displayName" maxlength="100" value="${isEdit?E(editUser.displayName||''):''}" placeholder="Например: Менеджер обзвона Анна">
       <label for="um-password">${isEdit?'Новый пароль (оставьте пустым, чтобы не менять)':'Пароль (от 4 символов)'}</label>
       <div class="um-pw-row">
         <div class="um-pw-wrap">
@@ -2936,31 +3033,65 @@ function openUserModal(editUser=null){
         </div>
         <button type="button" class="um-pw-gen" id="um-pw-gen" title="Сгенерировать надёжный пароль и скопировать">🎲 Сгенерировать</button>
       </div>
-      <label for="um-role">Роль в системе (Владелец может быть только один)</label>
-      <select id="um-role" name="role">
-        <option value="ADMIN" ${role==='ADMIN'?'selected':''}>Администратор (управление контентом, макетами, настройками)</option>
-        <option value="EDITOR" ${role==='EDITOR'?'selected':''}>Редактор (правка скрипта, подарков и адресов)</option>
-        <option value="OPERATOR" ${role==='OPERATOR'?'selected':''}>Оператор (работа со скриптом + выбранные права)</option>
-      </select>
-      <label>Детальные права доступа (проверяются сервером)</label>
-      <div class="perm-grid" id="um-perm-grid">
-        ${Object.entries(PERM_LABELS).map(([k,lbl])=>`<label><input type="checkbox" name="perm" value="${E(k)}" ${perms.includes(k)?'checked':''}><span>${E(lbl)}</span></label>`).join('')}
-      </div>
+      ${isHeadOnly?`
+        <input type="hidden" name="role" value="OPERATOR">
+        <input type="hidden" name="managerId" value="${E(currentUser.id)}">
+        <p style="margin:14px 0 4px;padding:10px 13px;border-radius:10px;background:var(--ui-soft);border:1px solid var(--ui-border);font-size:12px;color:var(--ink)">
+          Роль: <b>Менеджер обзвона</b> · Руководитель отдела: <b>${E(currentUser.displayName||currentUser.login)} (@${E(currentUser.login)})</b>
+        </p>
+      `:`
+        <label for="um-role">Роль в системе (Владелец может быть только один)</label>
+        <select id="um-role" name="role">
+          <option value="ADMIN" ${role==='ADMIN'?'selected':''}>Администратор (может всё: пользователи, скрипты, подарки, настройки)</option>
+          <option value="EDITOR" ${role==='EDITOR'?'selected':''}>Редактор (работа с гипер-скриптом, подарками, адресами и макетами)</option>
+          <option value="HEAD" ${role==='HEAD'?'selected':''}>Руководитель отдела (свои скрипты без удаления + контроль своих менеджеров)</option>
+          <option value="OPERATOR" ${role==='OPERATOR'?'selected':''}>Менеджер обзвона (работа со скриптом при обзвоне)</option>
+        </select>
+        <div id="um-manager-wrap" ${role==='OPERATOR'?'':'hidden'}>
+          <label for="um-manager">Руководитель отдела (за кем закреплён Менеджер обзвона)</label>
+          <select id="um-manager" name="managerId">
+            <option value="">— Без руководителя отдела —</option>
+            ${availHeads.map(h=>`<option value="${E(h.id)}" ${curManagerId===h.id?'selected':''}>${E(h.displayName||h.login)} (@${E(h.login)})</option>`).join('')}
+          </select>
+        </div>
+        <div id="um-perm-wrap">
+          <label>Детальные права доступа (проверяются сервером)</label>
+          <div class="perm-grid" id="um-perm-grid">
+            ${Object.entries(PERM_LABELS).map(([k,lbl])=>`<label><input type="checkbox" name="perm" value="${E(k)}" ${perms.includes(k)?'checked':''}><span>${E(lbl)}</span></label>`).join('')}
+          </div>
+        </div>
+      `}
       <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
         <input type="checkbox" name="blocked" ${editUser?.blocked?'checked':''} style="width:16px;height:16px">
         <span>Заблокировать вход этому пользователю</span>
       </label>
       <p id="um-error" class="form-error" role="alert"></p>
       <div style="display:flex;gap:10px;margin-top:14px">
-        <button type="submit" class="primary" style="flex:1">${isEdit?'Сохранить изменения':'Создать пользователя'}</button>
+        <button type="submit" class="primary" style="flex:1">${isEdit?'Сохранить изменения':(isHeadOnly?'Добавить менеджера обзвона':'Создать пользователя')}</button>
         <button type="button" data-close-modal="user-modal">Отмена</button>
       </div>
     </form>`;
   const roleSelect=dlg.querySelector('#um-role');
-  roleSelect.addEventListener('change',()=>{
+  const mgrWrap=dlg.querySelector('#um-manager-wrap');
+  const syncRoleConstraints=()=>{
+    if(!roleSelect)return;
+    const r=roleSelect.value;
+    if(mgrWrap)mgrWrap.hidden=r!=='OPERATOR';
+    dlg.querySelectorAll('input[name="perm"]').forEach(cb=>{
+      if(r==='HEAD'&&(cb.value==='layouts.delete'||cb.value==='users.manage')){
+        cb.checked=false;
+        cb.disabled=true;
+      }else{
+        cb.disabled=false;
+      }
+    });
+  };
+  roleSelect?.addEventListener('change',()=>{
     const defs=roleDefaults[roleSelect.value]||[];
     dlg.querySelectorAll('input[name="perm"]').forEach(cb=>{cb.checked=defs.includes(cb.value);});
+    syncRoleConstraints();
   });
+  syncRoleConstraints();
   const pwInput=dlg.querySelector('#um-password');
   const pwToggle=dlg.querySelector('#um-pw-toggle');
   const pwGen=dlg.querySelector('#um-pw-gen');
@@ -3119,10 +3250,13 @@ document.addEventListener('submit',async e=>{
     const errEl=document.getElementById('um-error');errEl.textContent='';
     const fd=new FormData(form);
     const permissions=[...form.querySelectorAll('input[name="perm"]:checked')].map(cb=>cb.value);
+    const roleVal=String(fd.get('role')||'OPERATOR');
+    const mgrVal=String(fd.get('managerId')||'').trim();
     const payload={
       login:String(fd.get('login')||'').trim(),
       displayName:String(fd.get('displayName')||'').trim(),
-      role:String(fd.get('role')||'OPERATOR'),
+      role:roleVal,
+      managerId:roleVal==='OPERATOR'?(mgrVal||null):null,
       permissions,
       blocked:form.querySelector('input[name="blocked"]').checked
     };
