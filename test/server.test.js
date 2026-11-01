@@ -176,6 +176,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
         displayName: 'Иванов А.А.',
         password: '4321',
         role: 'ADMIN',
+        mustChangePassword: false,
         permissions: ['content.edit', 'layouts.manage', 'gifts.manage', 'addresses.manage', 'settings.manage', 'users.view']
       }
     });
@@ -192,6 +193,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
         displayName: 'Ольга Редактор',
         password: 'EditorPassword123!',
         role: 'EDITOR',
+        mustChangePassword: false,
         permissions: ['content.edit', 'layouts.manage']
       }
     });
@@ -207,6 +209,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
         displayName: 'Максим Оператор',
         password: 'OperatorPassword123!',
         role: 'OPERATOR',
+        mustChangePassword: false,
         permissions: []
       }
     });
@@ -461,7 +464,8 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
         login: 'admin_full',
         displayName: 'Главный Администратор',
         password: 'AdminPass123',
-        role: 'ADMIN'
+        role: 'ADMIN',
+        mustChangePassword: false
       }
     });
     assert.equal(createFullAdmin.status, 201);
@@ -480,7 +484,8 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
         login: 'head_sergey',
         displayName: 'Сергей Руководитель',
         password: 'HeadPass123',
-        role: 'HEAD'
+        role: 'HEAD',
+        mustChangePassword: false
       }
     });
     assert.equal(createHead.status, 201);
@@ -498,7 +503,8 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
         displayName: 'Анна Менеджер обзвона',
         password: 'MgrPass123',
         role: 'OPERATOR',
-        managerId: headUser.id
+        managerId: headUser.id,
+        mustChangePassword: false
       }
     });
     assert.equal(createAssignedOp.status, 201);
@@ -516,7 +522,8 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
         login: 'mgr_dmitry',
         displayName: 'Дмитрий Менеджер',
         password: 'MgrPass456',
-        role: 'OPERATOR'
+        role: 'OPERATOR',
+        mustChangePassword: false
       }
     });
     assert.equal(headCreateOp.status, 201);
@@ -588,7 +595,8 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
       body: {
         login: 'op_dept_test',
         password: 'Pass1234!',
-        role: 'OPERATOR'
+        role: 'OPERATOR',
+        mustChangePassword: false
       }
     });
     assert.equal(opRes.status, 201);
@@ -627,7 +635,8 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
         login: 'op_owner_dept',
         password: 'PassOwner123!',
         role: 'OPERATOR',
-        managerId: ownerUser.id
+        managerId: ownerUser.id,
+        mustChangePassword: false
       }
     });
     assert.equal(ownerCreateOp.status, 201);
@@ -708,5 +717,77 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
       method: 'DELETE'
     });
     assert.equal(deleteLayoutRes.status, 403);
+  });
+
+  await t.test('13. Temporary passwords: created/reset users receive temporary passwords and MUST change them upon first login', async () => {
+    const adminClient = createTestClient(baseUrl);
+    await adminClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'admin_full', password: 'AdminPass123' }
+    });
+
+    // 1. Admin creates a user with temporary password (default behavior when mustChangePassword is not specified)
+    const createRes = await adminClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'temp_user_test',
+        displayName: 'Сотрудник с временным паролем',
+        role: 'OPERATOR',
+        password: 'InitialTempPass123!'
+      }
+    });
+    assert.equal(createRes.status, 201);
+    assert.equal(createRes.data.user.mustChangePassword, true);
+    const userId = createRes.data.user.id;
+
+    // 2. User logs in with temporary password
+    const userClient = createTestClient(baseUrl);
+    const loginRes = await userClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'temp_user_test', password: 'InitialTempPass123!' }
+    });
+    assert.equal(loginRes.status, 200);
+    assert.equal(loginRes.data.user.mustChangePassword, true);
+
+    // 3. User cannot perform mutating operations before changing password
+    const blockMutatingRes = await userClient.request('/api/content', {
+      method: 'PUT',
+      body: { data: {} }
+    });
+    assert.equal(blockMutatingRes.status, 403);
+    assert.equal(blockMutatingRes.data.mustChangePassword, true);
+
+    // 4. User changes temporary password to their own permanent password
+    const changeRes = await userClient.request('/api/auth/change-password', {
+      method: 'POST',
+      body: { newPassword: 'MyNewPermanentPass123!' }
+    });
+    assert.equal(changeRes.status, 200);
+    assert.equal(changeRes.data.ok, true);
+    assert.equal(changeRes.data.user.mustChangePassword, false);
+
+    // 5. Logout and verify old temporary password no longer works
+    await userClient.request('/api/admin/logout', { method: 'POST', body: {} });
+    const oldLoginRes = await userClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'temp_user_test', password: 'InitialTempPass123!' }
+    });
+    assert.equal(oldLoginRes.status, 401);
+
+    // 6. Login with new permanent password succeeds and mustChangePassword is false
+    const newLoginRes = await userClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'temp_user_test', password: 'MyNewPermanentPass123!' }
+    });
+    assert.equal(newLoginRes.status, 200);
+    assert.equal(newLoginRes.data.user.mustChangePassword, false);
+
+    // 7. Admin resets password for user -> mustChangePassword is reset to true
+    const resetRes = await adminClient.request(`/api/users/${userId}`, {
+      method: 'PATCH',
+      body: { password: 'SecondTempPass123!' }
+    });
+    assert.equal(resetRes.status, 200);
+    assert.equal(resetRes.data.user.mustChangePassword, true);
   });
 });

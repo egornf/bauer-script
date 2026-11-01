@@ -969,7 +969,7 @@ async function download(){
   const doc=document.documentElement.cloneNode(true);
   doc.querySelectorAll('.venue-picker').forEach(x=>x.remove());
   const lvEl=doc.querySelector('#layouts-view');if(lvEl){lvEl.innerHTML='';lvEl.hidden=true;lvEl.classList.remove('v4-giftmode');}
-  for(const id of ['addresses-view','address-dialog','whole-view','owner-view']){const els=[...doc.querySelectorAll('#'+id)];els.slice(1).forEach(el=>el.remove());if(els[0]){els[0].hidden=true;els[0].innerHTML='';}}for(const sel of ['#user-modal','#recovery-modal','#owner-recover-dialog','#header-user-btn','#header-logout-btn','#owner-tab','#open-owner-recovery']){doc.querySelectorAll(sel).forEach(el=>el.remove());}
+  for(const id of ['addresses-view','address-dialog','whole-view','owner-view']){const els=[...doc.querySelectorAll('#'+id)];els.slice(1).forEach(el=>el.remove());if(els[0]){els[0].hidden=true;els[0].innerHTML='';}}for(const sel of ['#user-modal','#recovery-modal','#owner-recover-dialog','#temp-password-dialog','#header-user-btn','#header-logout-btn','#owner-tab','#open-owner-recovery']){doc.querySelectorAll(sel).forEach(el=>el.remove());}
   doc.querySelector('#sms-data').textContent=JSON.stringify(smsSource).replace(/</g,'\\u003c');
   doc.querySelector('#script-data').textContent=JSON.stringify(snapshot).replace(/</g,'\\u003c');
   let ldEl=doc.querySelector('#layouts-data');
@@ -1306,6 +1306,7 @@ async function api_local_vault(rawPath,options={}){
       role:u.role,
       managerId:u.managerId||null,
       departmentScripts:Array.isArray(u.departmentScripts)?u.departmentScripts:[],
+      mustChangePassword:Boolean(u.mustChangePassword),
       blocked:isO?false:Boolean(u.blocked),
       permissions:isO?[...VAULT_ROLE_DEFAULTS.OWNER]:(Array.isArray(u.permissions)?u.permissions:[]),
       createdAt:u.createdAt||0,
@@ -1409,6 +1410,22 @@ async function api_local_vault(rawPath,options={}){
     const s=await startSession(u);
     await logEvent({action:'auth.login.success',actor:u,target:u.login,details:{sessionId:s.id,role:u.role}});
     return {ok:true,user:sanitize(u),sessionId:s.id,csrfToken:s.csrfToken};
+  }
+
+  if(authUser&&authUser.mustChangePassword&&!['/api/admin/status','/api/admin/logout','/api/auth/change-password'].includes(pathname)&&method!=='GET'){
+    throw fail('Вам необходимо сменить временный пароль на собственный перед выполнением действий в системе.',403);
+  }
+
+  if(pathname==='/api/auth/change-password'&&method==='POST'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    if(!validPass(body.newPassword))throw fail('Новый пароль должен содержать от 4 до 128 символов.',400);
+    authUser.passwordHash=await VaultCrypto.hashPassword(body.newPassword);
+    authUser.mustChangePassword=false;
+    authUser.updatedAt=Date.now();
+    await saveUsers();
+    await logEvent({action:'auth.password.change',actor:authUser,target:authUser.login});
+    currentUser=sanitize(authUser);
+    return {ok:true,user:currentUser};
   }
 
   if(pathname==='/api/admin/logout'&&method==='POST'){
@@ -1553,6 +1570,7 @@ async function api_local_vault(rawPath,options={}){
         role,
         managerId,
         passwordHash:await VaultCrypto.hashPassword(body.password),
+        mustChangePassword:body.mustChangePassword!==undefined?Boolean(body.mustChangePassword):true,
         blocked:Boolean(body.blocked),
         permissions:perms,
         createdAt:now,
@@ -1622,7 +1640,9 @@ async function api_local_vault(rawPath,options={}){
       if(body.password){
         if(!validPass(body.password))throw fail('Пароль должен содержать от 4 до 128 символов.',400);
         tu.passwordHash=await VaultCrypto.hashPassword(body.password);
+        tu.mustChangePassword=true;
         changes.passwordReset=true;
+        changes.mustChangePassword=true;
         if(tu.id!==authUser.id)sessions=sessions.filter(s=>s.userId!==tu.id);
       }
       tu.updatedAt=Date.now();
@@ -1939,6 +1959,10 @@ $('#auth-form').addEventListener('submit',async event=>{
     $('#auth-dialog').close();
     if(res.recoveryCodes&&res.recoveryCodes.length&&typeof window.showOwnerRecoveryCodesModal==='function'){
       await window.showOwnerRecoveryCodesModal(res.recoveryCodes,true);
+    }
+    if(currentUser&&currentUser.mustChangePassword){
+      showChangeTempPasswordModal();
+      return;
     }
     const action=afterAuth;afterAuth=null;if(action)await action();
   }
@@ -2763,7 +2787,7 @@ if(navTabs&&!document.getElementById('owner-tab')){
   navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">Владелец · Управление</span></button>');
 }
 if(!document.getElementById('owner-view')){
-  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog>');
+  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog><dialog id="temp-password-dialog" class="owner-dialog" aria-labelledby="temp-pw-title"></dialog>');
 }
 
 const authFoot=document.querySelector('#auth-dialog .auth-foot');
@@ -2871,6 +2895,10 @@ api('/api/admin/status').then(st=>{
   if(st.csrfToken)csrfToken=st.csrfToken;
   if(st.roleDefaults)roleDefaults=st.roleDefaults;
   updateHeaderBadge();
+  if(currentUser&&currentUser.mustChangePassword){
+    showChangeTempPasswordModal();
+    return;
+  }
   if(!adminUnlocked||!currentUser){
     ensureAdmin(()=>{updateHeaderBadge();});
   }
@@ -3027,7 +3055,10 @@ function renderUsersSection(){
               </td>
               <td><span class="role-pill ${E(roleClass)}">${E(ROLE_NAMES[u.role]||u.role)}</span></td>
               <td><small>${deptLabel}</small></td>
-              <td><span class="status-pill ${u.blocked?'blocked':'active'}">${u.blocked?'Заблокирован':'Активен'}</span></td>
+              <td>
+                <span class="status-pill ${u.blocked?'blocked':'active'}">${u.blocked?'Заблокирован':'Активен'}</span>
+                ${u.mustChangePassword ? '<span class="status-pill" style="display:inline-block;margin-top:4px;background:rgba(234,179,8,0.15);color:#b45309;border:1px solid rgba(234,179,8,0.35);font-size:10px" title="Сотруднику выдан временный пароль. При первом входе система потребует задать личный пароль.">⏳ Временный</span>' : '<span class="status-pill" style="display:inline-block;margin-top:4px;background:rgba(34,197,94,0.1);color:#16a34a;border:1px solid rgba(34,197,94,0.25);font-size:10px" title="Сотрудник установил личный постоянный пароль">✓ Личный</span>'}
+              </td>
               <td>
                 ${u.activeSessionsCount?'<span class="status-pill active" title="Пользователь онлайн">🟢 '+u.activeSessionsCount+' сессий</span>':'<span style="color:var(--muted);font-size:12px">Офлайн</span>'}
               </td>
@@ -3260,6 +3291,116 @@ function renderOwnerView(){
   ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():renderSecuritySection()}`;
 }
 
+
+function showChangeTempPasswordModal(){
+  const dlg=document.getElementById('temp-password-dialog');
+  if(!dlg||!currentUser)return;
+  if(!dlg.hasAttribute('data-init')){
+    dlg.setAttribute('data-init','1');
+    dlg.addEventListener('cancel',e=>e.preventDefault());
+  }
+  dlg.innerHTML=`<div class="kicker">БЕЗОПАСНОСТЬ ДОСТУПА · ПЕРВЫЙ ВХОД</div>
+    <h2 id="temp-pw-title" style="margin:6px 0 10px;font-size:22px;font-weight:800;letter-spacing:-.02em">Смена временного пароля</h2>
+    <p style="font-size:13px;line-height:1.6;color:var(--muted);margin:0 0 14px">
+      Администратор или руководитель выдал вам <b>временный пароль</b> для первого входа в систему.
+      Для защиты вашей учётной записи и данных компании <b>придумайте свой личный постоянный пароль</b>.
+    </p>
+    <div style="margin-bottom:16px;padding:10px 14px;border-radius:10px;background:var(--ui-soft);border:1px solid var(--ui-border);font-size:13px;color:var(--ink)">
+      Сотрудник: <b>${E(currentUser.displayName||currentUser.login)}</b> (@${E(currentUser.login)}) · Роль: <b>${E(ROLE_NAMES[currentUser.role]||currentUser.role)}</b>
+    </div>
+    <form id="temp-password-form">
+      <label for="tp-new-pw" style="font-size:11px;font-weight:700;display:block;margin-bottom:6px">Новый постоянный пароль (от 4 символов)</label>
+      <div class="um-pw-row">
+        <div class="um-pw-wrap">
+          <input id="tp-new-pw" name="newPassword" type="password" required minlength="4" maxlength="128" autocomplete="new-password">
+          <button type="button" class="um-pw-toggle" id="tp-pw-toggle" aria-label="Показать пароль">Показать</button>
+        </div>
+        <button type="button" class="um-pw-gen" id="tp-pw-gen" title="Сгенерировать надёжный пароль и скопировать">🎲 Сгенерировать</button>
+      </div>
+      <label for="tp-confirm-pw" style="font-size:11px;font-weight:700;display:block;margin:14px 0 6px">Повторите новый пароль</label>
+      <div class="um-pw-wrap">
+        <input id="tp-confirm-pw" name="confirmPassword" type="password" required minlength="4" maxlength="128" autocomplete="new-password">
+      </div>
+      <p id="tp-error" class="form-error" role="alert" style="margin:10px 0"></p>
+      <button type="submit" class="primary" id="tp-submit-btn" style="width:100%;min-height:44px;margin-top:8px">Сохранить пароль и войти в систему →</button>
+      <div style="text-align:center;margin-top:14px">
+        <button type="button" id="tp-logout-btn" style="background:transparent;border:0;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer">Выйти из аккаунта</button>
+      </div>
+    </form>`;
+  const pwInput=dlg.querySelector('#tp-new-pw');
+  const confInput=dlg.querySelector('#tp-confirm-pw');
+  const pwToggle=dlg.querySelector('#tp-pw-toggle');
+  const pwGen=dlg.querySelector('#tp-pw-gen');
+  const logoutBtn=dlg.querySelector('#tp-logout-btn');
+
+  pwToggle?.addEventListener('click',()=>{
+    const show=pwInput.type==='password';
+    pwInput.type=show?'text':'password';
+    confInput.type=show?'text':'password';
+    pwToggle.textContent=show?'Скрыть':'Показать';
+  });
+
+  pwGen?.addEventListener('click',async()=>{
+    const upper='ABCDEFGHJKLMNPQRSTUVWXYZ',lower='abcdefghijkmnopqrstuvwxyz',digits='23456789';
+    const all=upper+lower+digits;
+    const rnd=new Uint32Array(10);
+    crypto.getRandomValues(rnd);
+    const chars=[upper[rnd[0]%upper.length],lower[rnd[1]%lower.length],digits[rnd[2]%digits.length]];
+    for(let i=3;i<10;i++)chars.push(all[rnd[i]%all.length]);
+    for(let i=chars.length-1;i>0;i--){const j=rnd[i]%(i+1);[chars[i],chars[j]]=[chars[j],chars[i]];}
+    const generated=chars.join('');
+    pwInput.value=generated;
+    confInput.value=generated;
+    pwInput.type='text';
+    confInput.type='text';
+    if(pwToggle)pwToggle.textContent='Скрыть';
+    try{await navigator.clipboard.writeText(generated);toast('Надёжный пароль сгенерирован и скопирован');}
+    catch{toast('Пароль сгенерирован');}
+  });
+
+  logoutBtn?.addEventListener('click',async()=>{
+    dlg.close();
+    await performLogout();
+  });
+
+  const form=dlg.querySelector('#temp-password-form');
+  form?.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const errEl=dlg.querySelector('#tp-error');
+    errEl.textContent='';
+    const newPass=pwInput.value;
+    const confPass=confInput.value;
+    if(!newPass||newPass.length<4){
+      errEl.textContent='Пароль должен содержать от 4 до 128 символов.';
+      return;
+    }
+    if(newPass!==confPass){
+      errEl.textContent='Пароли не совпадают. Пожалуйста, проверьте ввод.';
+      return;
+    }
+    const submitBtn=dlg.querySelector('#tp-submit-btn');
+    submitBtn.disabled=true;
+    try{
+      const res=await api('/api/auth/change-password',{
+        method:'POST',
+        body:JSON.stringify({newPassword:newPass})
+      });
+      if(res.user)currentUser=res.user;
+      currentUser.mustChangePassword=false;
+      dlg.close();
+      toast('✓ Личный пароль успешно установлен! Приятной работы.');
+      updateHeaderBadge();
+      showScript();
+    }catch(err){
+      errEl.textContent=err.message;
+    }finally{
+      submitBtn.disabled=false;
+    }
+  });
+
+  if(!dlg.open)dlg.showModal();
+}
+
 function openUserModal(editUser=null){
   const dlg=document.getElementById('user-modal');
   const isEdit=Boolean(editUser);
@@ -3281,14 +3422,17 @@ function openUserModal(editUser=null){
       <input id="um-login" name="login" required maxlength="64" value="${isEdit?E(editUser.login):''}" autocomplete="off">
       <label for="um-name">Имя / должность</label>
       <input id="um-name" name="displayName" maxlength="100" value="${isEdit?E(editUser.displayName||''):''}" placeholder="Например: Менеджер обзвона Анна">
-      <label for="um-password">${isEdit?'Новый пароль (оставьте пустым, чтобы не менять)':'Пароль (от 4 символов)'}</label>
+      <label for="um-password">${isEdit?'Установить новый временный пароль (от 4 символов)':'Временный пароль (от 4 символов)'}</label>
       <div class="um-pw-row">
         <div class="um-pw-wrap">
-          <input id="um-password" name="password" type="password" ${isEdit?'':'required'} minlength="4" maxlength="128" autocomplete="new-password">
+          <input id="um-password" name="password" type="password" ${isEdit?'':'required'} minlength="4" maxlength="128" autocomplete="new-password" placeholder="${isEdit?'Оставьте пустым, если не нужно менять':''}">
           <button type="button" class="um-pw-toggle" id="um-pw-toggle" aria-label="Показать пароль">Показать</button>
         </div>
         <button type="button" class="um-pw-gen" id="um-pw-gen" title="Сгенерировать надёжный пароль и скопировать">🎲 Сгенерировать</button>
       </div>
+      <p style="margin:4px 0 10px;font-size:11px;color:var(--ink-muted);line-height:1.4">
+        ${isEdit ? '💡 Оставьте пустым, чтобы сохранить текущий пароль. Если указать новый — сотруднику потребуется придумать свой личный пароль при следующем входе.' : '💡 <b>Временный пароль:</b> при первом входе сотруднику потребуется придумать свой собственный постоянный пароль.'}
+      </p>
       ${isHeadOnly?`
         <input type="hidden" name="role" value="OPERATOR">
         <input type="hidden" name="managerId" value="${E(currentUser.id)}">

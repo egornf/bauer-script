@@ -584,6 +584,7 @@ function sanitizeUser(u) {
     role: u.role,
     managerId: u.managerId || null,
     departmentScripts: Array.isArray(u.departmentScripts) ? u.departmentScripts : [],
+    mustChangePassword: Boolean(u.mustChangePassword),
     blocked: isOwner ? false : Boolean(u.blocked),
     permissions: isOwner ? [...DEFAULT_ROLE_PERMISSIONS.OWNER] : (Array.isArray(u.permissions) ? u.permissions : []),
     createdAt: u.createdAt || 0,
@@ -745,6 +746,12 @@ function createAppServer(options = {}) {
         const csrfHeader = req.headers['x-csrf-token'];
         if (!csrfHeader || csrfHeader !== auth.session.csrfToken) {
           return sendJson(res, 403, { error: 'Ошибка проверки безопасности сессии (CSRF). Обновите страницу.' });
+        }
+        if (auth.user.mustChangePassword && pathname !== '/api/auth/change-password' && pathname !== '/api/admin/logout') {
+          return sendJson(res, 403, {
+            error: 'Вам необходимо сменить временный пароль на собственный перед выполнением действий в системе.',
+            mustChangePassword: true
+          });
         }
       }
 
@@ -943,6 +950,35 @@ function createAppServer(options = {}) {
             ]
           }
         );
+      }
+
+      // 4.1. POST /api/auth/change-password (Employee sets their permanent password after first login)
+      if (pathname === '/api/auth/change-password' && method === 'POST') {
+        if (!auth) {
+          return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        }
+        const body = await readBody(req);
+        const newPassword = String(body.newPassword || '');
+        if (!validatePassword(newPassword)) {
+          return sendJson(res, 400, { error: 'Новый пароль должен содержать от 4 до 128 символов.' });
+        }
+        const wasTemp = Boolean(auth.user.mustChangePassword);
+        auth.user.passwordHash = hashPassword(newPassword);
+        auth.user.mustChangePassword = false;
+        auth.user.updatedAt = Date.now();
+        store.saveUsers();
+        store.logEvent({
+          action: wasTemp ? 'auth.password.change_initial' : 'auth.password.change',
+          actor: auth.user,
+          target: auth.user.login,
+          ip,
+          userAgent,
+          details: { wasTemp }
+        });
+        return sendJson(res, 200, {
+          ok: true,
+          user: sanitizeUser(auth.user)
+        });
       }
 
       // 5. POST /api/owner/recover (Secure OWNER recovery using one-time recovery code)
@@ -1540,6 +1576,7 @@ function createAppServer(options = {}) {
             role,
             managerId,
             passwordHash: hashPassword(body.password),
+            mustChangePassword: body.mustChangePassword !== undefined ? Boolean(body.mustChangePassword) : true,
             blocked: Boolean(body.blocked),
             permissions,
             permissionsMigratedV2: true,
@@ -1677,7 +1714,9 @@ function createAppServer(options = {}) {
               return sendJson(res, 400, { error: 'Пароль должен содержать от 4 до 128 символов.' });
             }
             targetUser.passwordHash = hashPassword(body.password);
+            targetUser.mustChangePassword = true;
             changes.passwordReset = true;
+            changes.mustChangePassword = true;
             if (targetUser.id !== auth.user.id) {
               store.revokeUserSessions(targetUser.id);
             }
