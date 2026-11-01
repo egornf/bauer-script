@@ -211,12 +211,19 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .script-pane{padding:24px 32px 12px}
 .pane-label{color:var(--muted);letter-spacing:.1em}
 .pane-label:before{background:var(--amber);border-radius:50%}
-.line{border:0;border-radius:16px;background:var(--surface-alt);box-shadow:inset 4px 0 0 var(--ui-border);padding:18px 24px;line-height:1.65;margin-bottom:12px}
-.script-pane>.line:first-of-type{background:var(--ui-soft);box-shadow:inset 4px 0 0 var(--ui)}
+.line{border:1px solid transparent;border-radius:16px;background:var(--surface-alt);box-shadow:inset 4px 0 0 var(--ui-border);padding:18px 24px;line-height:1.65;margin-bottom:12px;color:var(--ink)}
+.script-pane>.line:first-of-type,.whole-stage>.line:first-of-type{background:var(--ui-soft);border-color:var(--ui-border);box-shadow:inset 4px 0 0 var(--ui)}
 .tip{background:var(--amber-soft);border:1px solid var(--amber-line);border-left:4px solid var(--amber);border-radius:14px;color:var(--ink)}
 .tip strong{color:var(--ink)}
-.script-gift{background:var(--amber-soft);border:1px solid var(--amber-line);border-top:1px solid var(--amber-line);border-radius:18px;box-shadow:none}
-.script-gift .line{background:transparent;box-shadow:none;padding:0}
+.script-gift{background:var(--amber-soft);border:1px solid var(--amber-line);border-top:1px solid var(--amber-line);border-radius:18px;box-shadow:none;color:var(--ink)}
+.script-gift .script-gift-label{color:inherit}
+.script-gift .line{background:transparent;border:0;box-shadow:none;padding:0;color:inherit}
+[style*="--b-bg-l"]{--b-bg:var(--b-bg-l);--b-border:var(--b-border-l);--b-accent:var(--b-accent-l);--b-fg:var(--b-fg-l)}
+:root[data-theme=dark] [style*="--b-bg-d"]{--b-bg:var(--b-bg-d);--b-border:var(--b-border-d);--b-accent:var(--b-accent-d);--b-fg:var(--b-fg-d)}
+[style*="--t-fg-l"]{--t-fg:var(--t-fg-l)}
+:root[data-theme=dark] [style*="--t-fg-d"]{--t-fg:var(--t-fg-d)}
+[style*="--m-bg-l"]{--m-bg:var(--m-bg-l);--m-fg:var(--m-fg-l);--m-border:var(--m-border-l)}
+:root[data-theme=dark] [style*="--m-bg-d"]{--m-bg:var(--m-bg-d);--m-fg:var(--m-fg-d);--m-border:var(--m-border-d)}
 .script-gift-layout>.script-gift-photo{border-radius:14px;background:var(--surface)}
 .gift-card,.sms-form-card,.sms-result-card,.layout-section,.manual-editor,.saved-layout,.bank-sidebar{border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);background:var(--surface)}
 .sms-result-card{border-top:3px solid var(--ui)}
@@ -325,7 +332,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-meta select{height:34px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:600;padding:0 10px}
 .v4-line.is-gift .v4-meta select{border-color:var(--amber);background:var(--amber-soft)}
 .v4-meta button{min-height:32px;min-width:32px;padding:0 9px;font-size:13px}.v4-meta .v4-s{flex:1}
-.v4-line.is-gift .line{box-shadow:inset 4px 0 0 var(--amber);background:var(--amber-soft)}
+.v4-line.is-gift .script-gift .line{box-shadow:none;background:transparent;color:inherit}
 .v4-line.is-gift .script-gift{margin:0}
 .v4-click{cursor:text}.v4-click:hover{outline:2px dashed var(--ui-border);outline-offset:2px}
 .v4-empty{color:var(--muted);font-style:italic}
@@ -521,19 +528,93 @@ function cleanStyle(value={}){
 function cleanFormat(value,length){
   return {style:cleanStyle(value?.style),ranges:(Array.isArray(value?.ranges)?value.ranges:[]).slice(-512).filter(r=>Number.isInteger(r?.start)&&Number.isInteger(r?.end)&&r.start>=0&&r.end>r.start&&r.end<=length).map(r=>{const st=cleanStyle(r.style);delete st.blockBg;return {start:r.start,end:r.end,style:st};})};
 }
+function hexToHsl(hex){
+  const m=hex.slice(1).match(/../g).map(v=>parseInt(v,16)/255);
+  const r=m[0],g=m[1],b=m[2],max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+  let h=0,s=0,l=(max+min)/2;
+  if(d>0){
+    s=l>0.5?d/(2-max-min):d/(max+min);
+    switch(max){
+      case r:h=((g-b)/d+(g<b?6:0))*60;break;
+      case g:h=((b-r)/d+2)*60;break;
+      case b:h=((r-g)/d+4)*60;break;
+    }
+  }
+  return [Math.round(h),Math.round(s*100),Math.round(l*100)];
+}
+function hslToHex(h,s,l){
+  h=((h%360)+360)%360;s=Math.max(0,Math.min(100,s))/100;l=Math.max(0,Math.min(100,l))/100;
+  const c=(1-Math.abs(2*l-1))*s,x=c*(1-Math.abs((h/60)%2-1)),m=l-c/2;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;}else if(h<120){r=x;g=c;}else if(h<180){g=c;b=x;}else if(h<240){g=x;b=c;}else if(h<300){r=x;b=c;}else{r=c;b=x;}
+  const toHex=n=>Math.round((n+m)*255).toString(16).padStart(2,'0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
 function blockCSS(format){
   const bg=format?.style?.blockBg;
   if(!bg)return '';
-  if(bg==='none')return 'background:var(--surface-alt);box-shadow:inset 4px 0 0 var(--ui-border)';
+  if(bg==='none')return 'background:var(--surface-alt);border-color:var(--line);box-shadow:inset 4px 0 0 var(--ui-border);color:var(--ink)';
   if(!colorValue(bg))return '';
+  const [h,s,l]=hexToHsl(bg);
   const rgb=bg.slice(1).match(/../g).map(v=>parseInt(v,16));
-  const dark=(.299*rgb[0]+.587*rgb[1]+.114*rgb[2])<145;
-  return `background:${bg};border-color:color-mix(in srgb,${bg} 70%,#0c2a28);box-shadow:inset 4px 0 0 color-mix(in srgb,${bg} 55%,#0c2a28);color:${dark?'#ffffff':'#11201e'}`;
+  const lum=.299*rgb[0]+.587*rgb[1]+.114*rgb[2];
+  const bgL=bg;
+  const fgL=lum<140?'#ffffff':'#11201e';
+  const borderL=s<8?'#c8d6d2':hslToHex(h,Math.min(75,Math.max(30,s)),Math.max(28,Math.min(76,l-16)));
+  const accentL=s<8?'#0b7a6e':hslToHex(h,Math.min(85,Math.max(55,s)),Math.max(32,Math.min(52,l-38)));
+  const isVivid=s>=50&&l<85;
+  const bgD=s<8?'#162d35':hslToHex(h,Math.min(50,Math.max(28,Math.round(s*(isVivid?0.52:0.42)))),isVivid?19:16);
+  const borderD=s<8?'#2a4f5c':hslToHex(h,Math.min(58,Math.max(34,Math.round(s*0.55))),isVivid?33:28);
+  const accentD=s<8?'#3fc4b0':hslToHex(h,Math.min(90,Math.max(62,s)),62);
+  const fgD='#eef6f5';
+  return `--b-bg-l:${bgL};--b-border-l:${borderL};--b-accent-l:${accentL};--b-fg-l:${fgL};--b-bg-d:${bgD};--b-border-d:${borderD};--b-accent-d:${accentD};--b-fg-d:${fgD};background:var(--b-bg);border-color:var(--b-border);box-shadow:inset 4px 0 0 var(--b-accent);color:var(--b-fg)`;
 }
 function formatCSS(style){
-  const s=cleanStyle(style),rgb=colorValue(s.background)?s.background.slice(1).match(/../g).map(v=>parseInt(v,16)):null;
-  const contrast=rgb&&(.299*rgb[0]+.587*rgb[1]+.114*rgb[2]>150?'#182e36':'#ffffff');
-  return [s.weight?`font-weight:${s.weight}`:'',s.size?`font-size:${s.size}px`:'',s.color?`color:${s.color==='auto'?'var(--ink)':s.color}`:'',s.background?`background-color:${s.background==='none'?'transparent':s.background}`:'',contrast&&(!s.color||s.color==='auto')?`color:${contrast}`:''].filter(Boolean).join(';');
+  const s=cleanStyle(style),parts=[];
+  if(s.weight)parts.push(`font-weight:${s.weight}`);
+  if(s.size)parts.push(`font-size:${s.size}px`);
+  const hasBg=colorValue(s.background);
+  const hasColor=colorValue(s.color);
+  if(hasBg){
+    const [bh,bs,bl]=hexToHsl(s.background);
+    const rgb=s.background.slice(1).match(/../g).map(v=>parseInt(v,16));
+    const lum=.299*rgb[0]+.587*rgb[1]+.114*rgb[2];
+    const mBgL=s.background;
+    const mBorderL=bs<8?'#c8d6d2':hslToHex(bh,Math.min(75,Math.max(30,bs)),Math.max(45,Math.min(78,bl-16)));
+    let mFgL=lum>150?'#142826':'#ffffff';
+    if(hasColor){
+      const [ch,cs,cl]=hexToHsl(s.color);
+      mFgL=lum>150?(cl>48?hslToHex(ch,Math.min(90,cs+10),35):s.color):'#ffffff';
+    }
+    const mBgD=bs<8?'#24424d':hslToHex(bh,Math.min(68,Math.max(42,Math.round(bs*0.72))),24);
+    const mBorderD=bs<8?'#396575':hslToHex(bh,Math.min(76,Math.max(48,Math.round(bs*0.8))),38);
+    let mFgD=bs<8?'#f0f7f6':hslToHex(bh,Math.min(95,Math.max(70,bs)),89);
+    if(hasColor){
+      const [ch,cs]=hexToHsl(s.color);
+      if(cs>=12&&Math.abs(ch-bh)>25){
+        mFgD=hslToHex(ch,Math.min(95,Math.max(78,cs+15)),86);
+      }
+    }
+    parts.push(`--m-bg-l:${mBgL};--m-border-l:${mBorderL};--m-fg-l:${mFgL};--m-bg-d:${mBgD};--m-border-d:${mBorderD};--m-fg-d:${mFgD};background-color:var(--m-bg);color:var(--m-fg);border:1px solid var(--m-border);border-radius:5px;padding:1px 5px;-webkit-box-decoration-break:clone;box-decoration-break:clone`);
+  }else{
+    if(s.background==='none')parts.push('background-color:transparent');
+    if(s.color==='auto'){
+      parts.push('color:var(--b-fg,var(--ink))');
+    }else if(hasColor){
+      const [ch,cs,cl]=hexToHsl(s.color);
+      const tFgL=s.color;
+      let tFgD;
+      if(cs<10){
+        tFgD=cl<55?'#eef6f5':s.color;
+      }else{
+        const minL=(ch>=205&&ch<=310)?79:(ch>=340||ch<=20)?75:68;
+        const targetS=Math.min(95,Math.max(74,Math.round(cs*1.18)));
+        tFgD=hslToHex(ch,targetS,Math.max(cl,minL));
+      }
+      parts.push(`--t-fg-l:${tFgL};--t-fg-d:${tFgD};color:var(--t-fg)`);
+    }
+  }
+  return parts.join(';');
 }
 function renderText(text,format){
   const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2072,7 +2153,7 @@ const txtNow=()=>{if(edit?.t==='gift')return giftNow()?.script||'';const s=st();
 function blockBar(i,curBg){
   const norm=curBg||'';
   const hex=/^#[0-9a-f]{6}$/i.test(norm)?norm:'#e2f3ef';
-  return `<div class="v4-bbar" title="Заливка самого блока"><span class="v4-tlbl">Фон блока:</span>${BLOCK_BG.map(([c,lbl])=>{const isAct=(c==='none'&&(!norm||norm==='none'))||(c!=='none'&&norm.toLowerCase()===c);return `<button type="button" class="v4-bsw ${isAct?'active':''}" data-v4="blockbg" data-i="${i}" data-c="${c}" title="Заливка блока: ${lbl}" style="background:${c==='none'?'var(--surface-alt)':c}">${c==='none'?'✕':''}</button>`;}).join('')}<label class="v4-bcustom" title="Выбрать свой цвет заливки блока">🎨<input type="color" data-v4-blockcolor="${i}" value="${hex}"></label></div>`;
+  return `<div class="v4-bbar" title="Заливка самого блока"><span class="v4-tlbl">Фон блока:</span>${BLOCK_BG.map(([c,lbl])=>{const isAct=(c==='none'&&(!norm||norm==='none'))||(c!=='none'&&norm.toLowerCase()===c);const swCss=c==='none'?'background:var(--surface-alt)':LayoutModel.blockCSS({style:{blockBg:c}});return `<button type="button" class="v4-bsw ${isAct?'active on':''}" data-v4="blockbg" data-i="${i}" data-c="${c}" title="Заливка блока: ${lbl}" style="${swCss}">${c==='none'?'✕':''}</button>`;}).join('')}<label class="v4-bcustom" title="Выбрать свой цвет заливки блока">🎨<input type="color" data-v4-blockcolor="${i}" value="${hex}"></label></div>`;
 }
 
 function renderPickerOptions(i,curGiftId,queryStr){
@@ -2096,7 +2177,7 @@ function lineBlock(s,i){
     const label=gift?(gift.condition?.trim()?`${gift.title} · ${gift.condition}`:(gift.title||'Подарок')):'Подарок не выбран';
     const effFmt=lineFmt?.style?.blockBg?lineFmt:(gift?.scriptFormat||lineFmt);
     const bStyle=LayoutModel.blockCSS(effFmt);
-    return `<div class="v4-line is-gift"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><button type="button" class="v4-gpick-btn ${isOpen?'open':''}" data-v4="toggle-picker" data-i="${i}" title="Выбрать подарок из базы подарков">${gift?`${gift.photo?`<img src="${gift.photo}" alt="">`:'🎁'}<span>${E(gift.title||'Без названия')}</span>${gift.condition?`<small>· ${E(gift.condition)}</small>`:''}`:'<span>🔍 Выбрать подарок из списка…</span>'}<b aria-hidden="true">▾</b></button>${gift?`<button type="button" class="v4-gpick-link" data-v4="goto-gift" data-id="${E(gift.id)}" title="Редактировать скрипт, описание и фото в Базе подарков">✎ В базе подарков</button>`:''}${blockBar(i,effFmt?.style?.blockBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Выше">↑</button><button data-v4="down" data-i="${i}" title="Ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button><button data-v4="delline" data-i="${i}" title="Удалить реплику">✕</button></div>${isOpen?`<div class="v4-gpick-panel"><div class="v4-gpick-top"><input type="search" class="v4-gpick-search" data-v4-picksearch="${i}" placeholder="🔍 Фильтр по подаркам: введите название, условие или слова из описания…" value="${E(pickerQuery)}" autocomplete="off"><button type="button" data-v4="new-gift-for-line" data-i="${i}">+ Создать подарок в базе</button></div><div class="v4-gpick-list" data-v4-picklist="${i}">${renderPickerOptions(i,curGiftId,pickerQuery)}</div></div>`:''}${gift?`<section class="script-gift"${bStyle?` style="${bStyle}"`:''} aria-label="${E(gift.title||'Подарок')}"><div class="script-gift-label">🎁 ${E(label)}</div><div class="script-gift-layout">${inlineGiftPhoto(gift,true)}<div class="script-gift-text"><p class="line"${bStyle?` style="${bStyle}"`:''}>${(gift.script||'').trim()?LayoutModel.renderText(gift.script,gift.scriptFormat):'<span class="v4-empty">Описание подарка пусто. Нажмите «✎ В базе подарков», чтобы заполнить скрипт подарка.</span>'}</p></div></div></section>`:''}</div>`;
+    return `<div class="v4-line is-gift"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><button type="button" class="v4-gpick-btn ${isOpen?'open':''}" data-v4="toggle-picker" data-i="${i}" title="Выбрать подарок из базы подарков">${gift?`${gift.photo?`<img src="${gift.photo}" alt="">`:'🎁'}<span>${E(gift.title||'Без названия')}</span>${gift.condition?`<small>· ${E(gift.condition)}</small>`:''}`:'<span>🔍 Выбрать подарок из списка…</span>'}<b aria-hidden="true">▾</b></button>${gift?`<button type="button" class="v4-gpick-link" data-v4="goto-gift" data-id="${E(gift.id)}" title="Редактировать скрипт, описание и фото в Базе подарков">✎ В базе подарков</button>`:''}${blockBar(i,effFmt?.style?.blockBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Выше">↑</button><button data-v4="down" data-i="${i}" title="Ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button><button data-v4="delline" data-i="${i}" title="Удалить реплику">✕</button></div>${isOpen?`<div class="v4-gpick-panel"><div class="v4-gpick-top"><input type="search" class="v4-gpick-search" data-v4-picksearch="${i}" placeholder="🔍 Фильтр по подаркам: введите название, условие или слова из описания…" value="${E(pickerQuery)}" autocomplete="off"><button type="button" data-v4="new-gift-for-line" data-i="${i}">+ Создать подарок в базе</button></div><div class="v4-gpick-list" data-v4-picklist="${i}">${renderPickerOptions(i,curGiftId,pickerQuery)}</div></div>`:''}${gift?`<section class="script-gift"${bStyle?` style="${bStyle}"`:''} aria-label="${E(gift.title||'Подарок')}"><div class="script-gift-label">🎁 ${E(label)}</div><div class="script-gift-layout">${inlineGiftPhoto(gift,true)}<div class="script-gift-text"><p class="line">${(gift.script||'').trim()?LayoutModel.renderText(gift.script,gift.scriptFormat):'<span class="v4-empty">Описание подарка пусто. Нажмите «✎ В базе подарков», чтобы заполнить скрипт подарка.</span>'}</p></div></div></section>`:''}</div>`;
   }
   const curBg=lineFmt?.style?.blockBg||(i===0?'#e2f3ef':'');
   const dispFmt=lineFmt?.style?.blockBg?lineFmt:(i===0?{...lineFmt,style:{...(lineFmt?.style||{}),blockBg:'#e2f3ef'}}:lineFmt);
@@ -2105,8 +2186,15 @@ function lineBlock(s,i){
 const view=(t,i,text,f)=>{const bs=t==='line'?LayoutModel.blockCSS(f):'';return `<p class="line v4-click" data-v4="edit" data-t="${t}" data-i="${i}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы изменить">${text.trim()?LayoutModel.renderText(text,f):'<span class="v4-empty">Пусто. Нажмите, чтобы написать</span>'}</p>`;};
 function editBox(text,f){
   const isAddr=edit?.t==='line'&&st()?.lineKinds?.[edit.i]==='address';
-  const sw=(k,v)=>`<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({[k]:v})}' title="${k==='color'?'Цвет текста':'Выделение текста маркером'}" style="${k==='color'?`color:${v==='auto'?'inherit':v};border-color:${v==='auto'?'var(--line)':v}`:`background:${v==='none'?'transparent':v}`}">${k==='color'?'A':(v==='none'?'✕':'')}</button>`;
-  const bsw=([v,lbl])=>`<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({blockBg:v})}' title="Заливка самого блока: ${lbl}" style="background:${v==='none'?'var(--surface-alt)':v}">${v==='none'?'✕':''}</button>`;
+  const sw=(k,v)=>{
+    if(k==='color'){
+      const cCss=v==='auto'?'color:inherit;border-color:var(--line)':`${LayoutModel.formatCSS({color:v})};border-color:var(--t-fg)`;
+      return `<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({[k]:v})}' title="Цвет текста" style="${cCss}">A</button>`;
+    }
+    const mCss=v==='none'?'background:transparent':LayoutModel.formatCSS({background:v});
+    return `<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({[k]:v})}' title="Выделение текста маркером" style="${mCss}">${v==='none'?'✕':''}</button>`;
+  };
+  const bsw=([v,lbl])=>`<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({blockBg:v})}' title="Заливка самого блока: ${lbl}" style="${v==='none'?'background:var(--surface-alt)':LayoutModel.blockCSS({style:{blockBg:v}})}">${v==='none'?'✕':''}</button>`;
   const bs=edit?.t==='tip'?'':LayoutModel.blockCSS(f);
   return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" title="Жирный"><b>Ж</b></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Текст:</span>${TXT.map(v=>sw('color',v)).join('')}<span class="v4-sep"></span><span class="v4-tlbl">Маркер:</span>${BG.map(v=>sw('background',v)).join('')}${edit?.t==='tip'?'':`<span class="v4-sep"></span><span class="v4-tlbl">Блок:</span>${BLOCK_BG.map(bsw).join('')}`}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><textarea data-v4-ta rows="${Math.max(3,Math.ceil(text.length/75))}">${E(text)}</textarea>${isAddr?`<div class="v4-ins">Вставить в текст: ${['город','зал','адрес','ориентиры'].map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="line" id="v4-live"${bs?` style="${bs}"`:''}>${isAddr?fillVenueHtml(LayoutModel.renderText(text,f)):LayoutModel.renderText(text,f)}</p><p class="v4-hint">Выделите слова и нажмите кнопку — оформится выделенное. «Блок» меняет заливку всей карточки реплики.</p></div>`;
 }
