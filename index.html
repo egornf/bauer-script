@@ -4369,10 +4369,30 @@ body.auth-locked #auth-close{display:none!important}
     return [];
   }
 
-  function storeCustomThemes(list) {
+  let _prefSyncTimer = null;
+  function syncUserPreferencesToServer(theme, customThemes) {
+    if (typeof api !== 'function' || typeof currentUser === 'undefined' || !currentUser) return;
+    clearTimeout(_prefSyncTimer);
+    _prefSyncTimer = setTimeout(async () => {
+      try {
+        const payload = {};
+        if (theme) payload.theme = theme;
+        if (customThemes) payload.customThemes = customThemes;
+        await api('/api/user/preferences', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      } catch (e) {}
+    }, 800);
+  }
+
+  function storeCustomThemes(list, syncServer = true) {
     try {
       const s = JSON.stringify(list);
       localStorage.setItem(getCustomThemesKey(), s);
+      if (syncServer && typeof currentUser !== 'undefined' && currentUser) {
+        syncUserPreferencesToServer(null, list);
+      }
       return true;
     } catch (e) {
       return false;
@@ -4766,6 +4786,9 @@ body.auth-locked #auth-close{display:none!important}
           localStorage.setItem('bauer-user-theme:' + user, JSON.stringify(currentTheme));
         }
         localStorage.setItem('bauer-color-theme', currentTheme.theme || 'light');
+        if (typeof currentUser !== 'undefined' && currentUser) {
+          syncUserPreferencesToServer(currentTheme, null);
+        }
       } catch (e) {}
     }
   }
@@ -4773,7 +4796,36 @@ body.auth-locked #auth-close{display:none!important}
   // Initial application
   applyTheme(currentTheme, false);
 
+  function syncServerThemesForUser(userObj) {
+    if (!userObj) return;
+    try {
+      if (Array.isArray(userObj.customThemes) && userObj.customThemes.length > 0) {
+        const local = loadCustomThemes();
+        const map = new Map();
+        userObj.customThemes.forEach(t => { if (t && t.id) map.set(t.id, t); });
+        local.forEach(t => { if (t && t.id && !map.has(t.id)) map.set(t.id, t); });
+        const merged = Array.from(map.values());
+        storeCustomThemes(merged, false);
+      } else {
+        const local = loadCustomThemes();
+        if (local.length > 0) {
+          syncUserPreferencesToServer(null, local);
+        }
+      }
+      if (userObj.theme && typeof userObj.theme === 'object' && userObj.login) {
+        const localRaw = localStorage.getItem('bauer-user-theme:' + userObj.login);
+        if (!localRaw) {
+          currentTheme = { ...userObj.theme };
+          applyTheme(currentTheme, true);
+        }
+      }
+    } catch (e) {}
+  }
+
   function refreshUserTheme() {
+    if (typeof currentUser !== 'undefined' && currentUser) {
+      syncServerThemesForUser(currentUser);
+    }
     currentTheme = loadSavedTheme();
     applyTheme(currentTheme, false);
     fetchSharedThemes();

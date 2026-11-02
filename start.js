@@ -37,7 +37,26 @@ function resolveWritableDataDir(preferredDir) {
   return fallback;
 }
 
+function copySeedFilesIfMissing(targetDir) {
+  const seedDir = path.join(__dirname, 'data');
+  if (path.resolve(targetDir) === path.resolve(seedDir) || !fs.existsSync(seedDir)) return;
+  const filesToSeed = ['users.json', 'app-data.json', 'shared-themes.json'];
+  for (const file of filesToSeed) {
+    const src = path.join(seedDir, file);
+    const dest = path.join(targetDir, file);
+    try {
+      if (fs.existsSync(src) && !fs.existsSync(dest)) {
+        fs.copyFileSync(src, dest);
+        console.log(`[start.js] Seed file initialized: ${file} -> ${targetDir}`);
+      }
+    } catch (e) {
+      console.warn(`[start.js] Could not seed ${file}:`, e.message);
+    }
+  }
+}
+
 const safeDataDir = resolveWritableDataDir(process.env.BAUER_DATA_DIR || '/data');
+copySeedFilesIfMissing(safeDataDir);
 process.env.BAUER_DATA_DIR = safeDataDir;
 process.env.HOST = process.env.HOST || '0.0.0.0';
 process.env.PORT = process.env.PORT || '3000';

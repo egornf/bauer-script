@@ -361,8 +361,12 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     dirtyAppData = true;
   }
 
-  async function syncFromBlob({ needAppData = false } = {}) {
+  let lastBlobSyncAt = 0;
+  async function syncFromBlob({ needAppData = false, force = false } = {}) {
     if (!process.env.BLOB_READ_WRITE_TOKEN || !vercelBlob) return;
+    const now = Date.now();
+    if (!force && (now - lastBlobSyncAt < 30000)) return;
+    lastBlobSyncAt = now;
     try {
       const authRes = await vercelBlob.get('bauer-state/auth.json', {
         access: 'private',
@@ -661,6 +665,8 @@ function sanitizeUser(u) {
     mustChangePassword: Boolean(u.mustChangePassword),
     blocked: isOwner ? false : Boolean(u.blocked),
     permissions: isOwner ? [...DEFAULT_ROLE_PERMISSIONS.OWNER] : (Array.isArray(u.permissions) ? u.permissions : []),
+    theme: u.theme || null,
+    customThemes: Array.isArray(u.customThemes) ? u.customThemes : [],
     createdAt: u.createdAt || 0,
     updatedAt: u.updatedAt || 0,
     lastLoginAt: u.lastLoginAt || null,
@@ -752,21 +758,26 @@ function createAppServer(options = {}) {
     res.end(body);
   }
 
-  // Brute-force rate limiter in memory
+  // Brute-force rate limiter in memory (tracks failed attempts)
   const loginAttempts = new Map(); // key -> { count, resetAt }
 
-  function checkRateLimit(key, maxAttempts = 10, windowMs = 10 * 60 * 1000) {
+  function checkRateLimit(key, maxAttempts = 30, windowMs = 5 * 60 * 1000) {
+    const now = Date.now();
+    const rec = loginAttempts.get(key);
+    if (!rec || now > rec.resetAt) {
+      return true;
+    }
+    return rec.count < maxAttempts;
+  }
+
+  function recordFailedLogin(key, windowMs = 5 * 60 * 1000) {
     const now = Date.now();
     const rec = loginAttempts.get(key);
     if (!rec || now > rec.resetAt) {
       loginAttempts.set(key, { count: 1, resetAt: now + windowMs });
-      return true;
+    } else {
+      rec.count += 1;
     }
-    rec.count += 1;
-    if (rec.count > maxAttempts) {
-      return false;
-    }
-    return true;
   }
 
   function clearRateLimit(key) {
@@ -931,7 +942,7 @@ function createAppServer(options = {}) {
         const password = String(body.password || '');
         const rateKey = `login:${ip}:${login}`;
 
-        if (!checkRateLimit(rateKey, 10, 10 * 60 * 1000)) {
+        if (!checkRateLimit(rateKey, 30, 5 * 60 * 1000)) {
           store.logEvent({
             action: 'auth.login.rate_limited',
             actor: login || 'anonymous',
@@ -940,7 +951,7 @@ function createAppServer(options = {}) {
             status: 'failed',
             details: { login }
           });
-          return sendJson(res, 429, { error: 'Слишком много попыток входа. Подождите 10 минут и попробуйте снова.' });
+          return sendJson(res, 429, { error: 'Слишком много неверных попыток входа. Подождите 5 минут и попробуйте снова.' });
         }
 
         if (!store.getOwner()) {
@@ -949,6 +960,7 @@ function createAppServer(options = {}) {
 
         const user = store.findUserByLogin(login);
         if (!user || !verifyPassword(password, user.passwordHash)) {
+          recordFailedLogin(rateKey, 5 * 60 * 1000);
           store.logEvent({
             action: 'auth.login.failed',
             actor: login || 'anonymous',
@@ -1651,6 +1663,34 @@ function createAppServer(options = {}) {
           userAgent
         });
         return sendJson(res, 200, { ok: true, user: sanitizeUser(auth.user) });
+      }
+
+      // User personal preferences (Theme & Custom themes synced per user account across devices)
+      if (pathname === '/api/user/preferences' && method === 'GET') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        return sendJson(res, 200, {
+          ok: true,
+          theme: auth.user.theme || null,
+          customThemes: Array.isArray(auth.user.customThemes) ? auth.user.customThemes : []
+        });
+      }
+
+      if (pathname === '/api/user/preferences' && method === 'POST') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        const body = await readBody(req);
+        if (body.theme !== undefined && typeof body.theme === 'object') {
+          auth.user.theme = body.theme;
+        }
+        if (Array.isArray(body.customThemes)) {
+          auth.user.customThemes = body.customThemes.slice(0, 50);
+        }
+        auth.user.updatedAt = Date.now();
+        store.saveUsers();
+        return sendJson(res, 200, {
+          ok: true,
+          theme: auth.user.theme || null,
+          customThemes: Array.isArray(auth.user.customThemes) ? auth.user.customThemes : []
+        });
       }
 
       // Users management: GET /api/users, POST /api/users, PATCH /api/users/:id, DELETE /api/users/:id
