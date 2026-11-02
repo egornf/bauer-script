@@ -5330,6 +5330,88 @@ body.auth-locked #auth-close{display:none!important}
       </div>
     </div>`;
   }
+  function renderDesignSection() {
+    const curLogin = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : 'сотрудник';
+    const isOwner = (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'OWNER');
+    const escapeFn = (typeof escapeHTML === 'function') ? escapeHTML : (s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
+    const targetEditingTheme = editingThemeId ? allThemes().find(x => x.id === editingThemeId) : null;
+    const isDark = currentTheme.theme === 'dark';
+
+    return `<div class="owner-card" style="margin-bottom:24px">
+      <div class="owner-card-head" style="align-items:flex-start">
+        <div>
+          <div class="kicker" style="color:var(--amber,#f5b544);font-weight:800;font-size:11px;letter-spacing:.08em;margin-bottom:4px">ПЕРСОНАЛИЗАЦИЯ РАБОЧЕГО МЕСТА</div>
+          <h2 style="margin:0 0 6px;font-size:24px;font-weight:800;letter-spacing:-.02em">🎨 Персональный дизайн интерфейса</h2>
+          <p style="margin:0;font-size:13px;line-height:1.6;color:var(--muted)">
+            Настройки дизайна сохраняются <b>только для вас (@${escapeFn(curLogin)})</b> в вашем браузере. Вы также можете делиться темами с коллегами в отделе.
+          </p>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:14px 0 16px;padding:12px 16px;background:var(--surface-alt,#f8faf8);border-radius:14px;border:1px solid var(--line)">
+        <div>
+          <span style="font-weight:800;font-size:13px;color:var(--ink)">Базовая тема системы:</span>
+          <span style="font-size:12px;color:var(--muted);margin-left:6px">сейчас выбрана <b>${isDark ? 'Тёмная 🌙' : 'Светлая ☀️'}</b> для всего скрипта</span>
+        </div>
+        <div class="tcd-options-grid" style="grid-template-columns:repeat(2,120px);margin:0">
+          <button type="button" class="tcd-option-btn ${!isDark?'selected':''}" data-tcd-prop="theme" data-val="light">☀️ Светлая</button>
+          <button type="button" class="tcd-option-btn ${isDark?'selected':''}" data-tcd-prop="theme" data-val="dark">🌙 Тёмная</button>
+        </div>
+      </div>
+
+      <!-- Exactly Two Top Navigation Tabs: Presets & Constructor -->
+      <div class="theme-nav-tabs" style="margin:16px 0 20px">
+        <button type="button" class="tcd-nav-btn ${activeDesignTab==='presets'?'active':''}" data-tcd-tab="presets" data-section="presets">🌟 Мои темы и пресеты</button>
+        <button type="button" class="tcd-nav-btn ${activeDesignTab==='constructor'?'active':''}" data-tcd-tab="constructor" data-section="constructor">🛠️ Интерактивный конструктор</button>
+      </div>
+
+      <div class="tcd-body">
+        ${activeDesignTab === 'constructor' ? renderConstructorTab() : ''}
+        ${activeDesignTab === 'presets' ? `
+          <div class="preset-grid">
+            ${allThemes().map(p => `
+              <div class="preset-card ${currentTheme.id===p.id?'active':''}" data-apply-preset="${p.id}" style="position:relative;overflow:visible">
+                <button type="button" class="tcd-dots-btn" data-theme-dots="${p.id}" title="Меню действий с темой" aria-label="Меню темы">⋮</button>
+                <div class="tcd-menu-dropdown" id="tcd-menu-${p.id}" hidden>
+                  <button type="button" class="tcd-menu-item" data-theme-act="edit-direct" data-theme-id="${p.id}">✏️ Изменить тему</button>
+                  <button type="button" class="tcd-menu-item" data-theme-act="copy" data-theme-id="${p.id}">📋 Скопировать и настроить</button>
+                  ${(isOwner || p.custom || (p.shared && p.senderId === currentUser?.id)) ? `<button type="button" class="tcd-menu-item" data-theme-act="update" data-theme-id="${p.id}">💾 Сохранить в эту тему</button>` : ''}
+                  <button type="button" class="tcd-menu-item" data-theme-act="rename" data-theme-id="${p.id}">🏷️ Переименовать тему</button>
+                  <button type="button" class="tcd-menu-item" data-theme-act="share-user" data-theme-id="${p.id}">👤 Поделиться с сотрудником отдела</button>
+                  <button type="button" class="tcd-menu-item" data-theme-act="share-all" data-theme-id="${p.id}">🌐 Поделиться со всеми</button>
+                  ${(p.custom || p.shared) ? `<button type="button" class="tcd-menu-item danger" data-theme-act="delete" data-theme-id="${p.id}">🗑️ Удалить тему</button>` : ''}
+                </div>
+                <div class="preset-swatch" style="background:${p.bgImage ? 'url(\''+p.bgImage+'\') center/cover' : (p.bodyBg||'#eef2f0')}">
+                  <div class="preset-swatch-header" style="background:${p.headerBg||'#102f44'}"></div>
+                </div>
+                <div style="flex:1">
+                  <strong>${escapeFn(p.name)}</strong>
+                  <p>${escapeFn(p.desc||'')}</p>
+                </div>
+                <div class="tcd-card-foot-actions">
+                  <button type="button" class="tcd-edit-quick-btn" data-theme-act="edit-direct" data-theme-id="${p.id}" title="Открыть тему в конструкторе">✏️ Изменить</button>
+                  <button type="button" class="tcd-copy-quick-btn" data-theme-act="copy" data-theme-id="${p.id}" title="Создать копию и настроить тему для себя">📋 Скопировать</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="tcd-foot" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <button type="button" class="tcd-reset-btn" id="tcd-reset-btn" style="color:var(--muted)">Сбросить всё к стандарту</button>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          ${targetEditingTheme ? `
+            <button type="button" class="primary tcd-save-direct-btn" id="tcd-save-direct-btn" title="Сохранить внесённые изменения в эту тему">💾 Сохранить в «${escapeFn(targetEditingTheme.name)}»</button>
+            <button type="button" class="tcd-copy-quick-btn" id="tcd-save-as-new-btn" title="Сохранить текущие параметры как отдельную новую тему">➕ Сохранить как новую тему</button>
+          ` : `
+            <button type="button" class="primary tcd-save-btn" id="tcd-save-btn">✓ Сохранить оформление</button>
+          `}
+        </div>
+      </div>
+    </div>`;
+  }
+
   window.renderDesignSection = renderDesignSection;
 
   // Global event delegation
@@ -5562,9 +5644,10 @@ body.auth-locked #auth-close{display:none!important}
     }
 
     // Top design tabs
-    const navBtn = e.target.closest('.tcd-nav-btn');
+    const navBtn = e.target.closest('.tcd-nav-btn, [data-tcd-tab]');
     if (navBtn) {
-      activeDesignTab = navBtn.dataset.section;
+      e.stopPropagation();
+      activeDesignTab = navBtn.dataset.tcdTab || navBtn.dataset.section || 'constructor';
       if (window.__rerenderDesign) window.__rerenderDesign();
       return;
     }
