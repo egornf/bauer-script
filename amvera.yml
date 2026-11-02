@@ -8,6 +8,6 @@ build:
   additionalCommands: npm ci --omit=dev
 
 run:
-  command: node start.js
+  scriptName: start.js
   persistenceMount: /data
   containerPort: 3000
