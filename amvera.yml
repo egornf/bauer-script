@@ -1,0 +1,13 @@
+meta:
+  environment: node
+  toolchain:
+    name: npm
+    version: 20
+
+build:
+  additionalCommands: npm ci --omit=dev
+
+run:
+  command: node start.js
+  persistenceMount: /data
+  containerPort: 3000
