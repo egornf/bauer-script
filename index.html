@@ -126,6 +126,12 @@
 @media(max-height:650px) and (min-width:761px){.workspace{padding-top:12px;gap:10px}.intro .sub{display:none}.intro h1{font-size:20px}.stepper{min-height:53px}.step{padding-top:5px;padding-bottom:5px}.stage-heading{padding:13px 25px}.stage-heading h2{font-size:22px}.stage-count strong{font-size:23px}.script-pane,.objections-pane{padding-top:18px}.app-header{height:58px}.edit-note{max-height:62px;overflow-y:auto}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.deck-track{transition:none}}
 @media print{body{height:auto;display:block;overflow:visible;background:white}.app-header,.intro,.stepper,.edit-note,.pager,.objections-pane,.drawer,.shade,.toast{display:none!important}.workspace{display:block;padding:0;max-width:none}.deck-viewport{overflow:visible;box-shadow:none;border:0}.deck-track{display:block;transform:none!important;height:auto}.stage-card{height:auto;display:block;break-inside:avoid}.stage-card[inert]{display:block}.stage-body{display:block}.script-pane{overflow:visible}.line{font-size:12pt}.stage-heading{padding:15px 20px}}
+.tcd-card-foot-actions{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto;padding-top:8px}
+.tcd-edit-quick-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;font-size:11px;font-weight:700;border-radius:6px;background:var(--teal,#008578);color:#fff;border:0;cursor:pointer;transition:opacity .15s,transform .15s}
+.tcd-edit-quick-btn:hover{opacity:.9;transform:translateY(-1px)}
+.tcd-copy-quick-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;font-size:11px;font-weight:600;border-radius:6px;background:var(--surface-alt,#f0f4f2);color:var(--ink,#1f2937);border:1px solid var(--line,#e2e8f0);cursor:pointer;transition:all .15s}
+.tcd-copy-quick-btn:hover{background:var(--line,#e2e8f0)}
+
 </style>
 <style id="feature-styles">button,input,textarea{font:inherit}textarea{resize:vertical}input,textarea{color:var(--ink)}
 .app-switcher{flex-shrink:0;min-height:45px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--line);background:#fff;gap:16px}.switcher-tabs{display:flex;gap:8px;align-self:stretch;align-items:stretch}.section-tab{display:flex;align-items:center;gap:7px;padding:0 16px;border:0;border-radius:0;background:transparent;font-size:12px;color:#73877f;position:relative;white-space:nowrap}.section-tab:hover{background:#f4f8f5}.section-tab.active{color:var(--teal);font-weight:650}.section-tab.active:after{position:absolute;content:'';bottom:-1px;height:3px;background:var(--teal);left:14px;right:14px;border-radius:4px 4px 0 0}.protected-tab{margin-left:14px}.switcher-hint{font-size:10px;color:#8d9f96;white-space:nowrap}.tiny-dot{width:5px;height:5px;background:#d5a570;border-radius:50%}
@@ -3692,13 +3698,30 @@ body.auth-locked #auth-close{display:none!important}
   setInterval(() => { if (typeof window.fetchSharedThemes === 'function' && currentUser) window.fetchSharedThemes(); }, 25000);
 
 
+  function getPresetOverrides() {
+    try {
+      return JSON.parse(localStorage.getItem('bauer-preset-overrides') || '{}');
+    } catch (e) { return {}; }
+  }
+  function setPresetOverrides(map) {
+    try {
+      localStorage.setItem('bauer-preset-overrides', JSON.stringify(map));
+    } catch (e) {}
+  }
+
   function allThemes() {
+    const overrides = getPresetOverrides();
+    const presetsWithOverrides = PRESETS.map(p => {
+      if (overrides[p.id]) return { ...p, ...overrides[p.id] };
+      return p;
+    });
     const customList = loadCustomThemes().map(t => ({ ...t, custom: true }));
-    return [...PRESETS, ...customList, ...serverSharedThemes];
+    return [...presetsWithOverrides, ...customList, ...serverSharedThemes];
   }
 
   let currentTheme = loadSavedTheme();
   let activeDesignTab = 'presets';
+  let editingThemeId = null;
 
   function hexRgb(hex) {
     if (!hex || typeof hex !== 'string') return null;
@@ -3964,11 +3987,13 @@ body.auth-locked #auth-close{display:none!important}
     const headerColors = ['#102f44', '#0d3832', '#0d0221', '#2a1a08', '#070b18', '#090a0b', '#1b3b36', '#3b1248', '#881337', '#1e293b'];
     const accents = ['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'];
     const curLogin = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : 'сотрудник';
+    const isOwner = (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'OWNER');
     const blockColors = ['#ffffff', '#e2f3ef', '#fff6de', '#e6f0fa', '#f1edff', '#1a1f32', '#0e1c20', '#2a1a08'];
     const cardMode = cardModeOf(currentTheme);
     const transparency = typeof currentTheme.cardTransparency === 'number' ? currentTheme.cardTransparency : 60;
     const lineTransparency = typeof currentTheme.lineTransparency === 'number' ? currentTheme.lineTransparency : 40;
     const escapeFn = (typeof escapeHTML === 'function') ? escapeHTML : (s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'));
+    const targetEditingTheme = editingThemeId ? allThemes().find(x => x.id === editingThemeId) : null;
 
     return `<div class="owner-card" style="margin-bottom:24px">
       <div class="owner-card-head" style="align-items:flex-start">
@@ -4005,7 +4030,9 @@ body.auth-locked #auth-close{display:none!important}
               <div class="preset-card ${currentTheme.id===p.id?'active':''}" data-apply-preset="${p.id}" style="position:relative;overflow:visible">
                 <button type="button" class="tcd-dots-btn" data-theme-dots="${p.id}" title="Меню действий с темой" aria-label="Меню темы">⋮</button>
                 <div class="tcd-menu-dropdown" id="tcd-menu-${p.id}" hidden>
-                  <button type="button" class="tcd-menu-item" data-theme-act="update" data-theme-id="${p.id}">✏️ Обновить текущими настройками</button>
+                  <button type="button" class="tcd-menu-item" data-theme-act="edit-direct" data-theme-id="${p.id}">✏️ Изменить тему</button>
+                  <button type="button" class="tcd-menu-item" data-theme-act="copy" data-theme-id="${p.id}">📋 Скопировать и изменить</button>
+                  ${(isOwner || p.custom || (p.shared && p.senderId === currentUser?.id)) ? `<button type="button" class="tcd-menu-item" data-theme-act="update" data-theme-id="${p.id}">💾 Сохранить в эту тему</button>` : ''}
                   <button type="button" class="tcd-menu-item" data-theme-act="rename" data-theme-id="${p.id}">🏷️ Переименовать тему</button>
                   <button type="button" class="tcd-menu-item" data-theme-act="share-user" data-theme-id="${p.id}">👤 Поделиться с сотрудником отдела</button>
                   <button type="button" class="tcd-menu-item" data-theme-act="share-all" data-theme-id="${p.id}">🌐 Поделиться со всеми</button>
@@ -4014,9 +4041,13 @@ body.auth-locked #auth-close{display:none!important}
                 <div class="preset-swatch" style="background:${p.bgImage ? 'url(&quot;'+p.bgImage+'&quot;) center/cover' : (p.bodyBg||'#eef2f0')}">
                   <div class="preset-swatch-header" style="background:${p.headerBg||'#102f44'}"></div>
                 </div>
-                <div>
+                <div style="flex:1">
                   <strong>${escapeFn(p.name)}</strong>
                   <p>${escapeFn(p.desc||'')}</p>
+                </div>
+                <div class="tcd-card-foot-actions">
+                  <button type="button" class="tcd-edit-quick-btn" data-theme-act="edit-direct" data-theme-id="${p.id}" title="${(isOwner || p.custom || (p.shared && p.senderId === currentUser?.id)) ? 'Изменить оформление этой темы' : 'Настроить и создать свою копию'}">✏️ Изменить</button>
+                  <button type="button" class="tcd-copy-quick-btn" data-theme-act="copy" data-theme-id="${p.id}" title="Скопировать тему для себя">📋 Скопировать</button>
                 </div>
               </div>
             `).join('')}
@@ -4159,8 +4190,13 @@ body.auth-locked #auth-close{display:none!important}
 
       <div class="tcd-foot" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
         <button type="button" class="tcd-reset-btn" id="tcd-reset-btn" style="color:var(--muted)">Сбросить всё к стандарту</button>
-        <div style="display:flex;gap:10px">
-          <button type="button" class="primary tcd-save-btn" id="tcd-save-btn">✓ Сохранить оформление</button>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          ${targetEditingTheme ? `
+            <button type="button" class="primary tcd-save-direct-btn" id="tcd-save-direct-btn" title="Сохранить внесённые изменения в эту тему">💾 Сохранить в «${escapeFn(targetEditingTheme.name)}»</button>
+            <button type="button" class="tcd-copy-quick-btn" id="tcd-save-as-new-btn" title="Сохранить текущие параметры как отдельную новую тему">➕ Сохранить как новую тему</button>
+          ` : `
+            <button type="button" class="primary tcd-save-btn" id="tcd-save-btn">✓ Сохранить оформление</button>
+          `}
         </div>
       </div>
     </div>`;
@@ -4191,6 +4227,81 @@ body.auth-locked #auth-close{display:none!important}
       const targetTheme = allThemes().find(x => x.id === themeId);
       if (!targetTheme) return;
 
+      const isOwner = (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'OWNER');
+      const isMyTheme = targetTheme.custom || (targetTheme.shared && targetTheme.senderId === currentUser?.id);
+
+      // 0. EDIT-DIRECT: Open theme directly for editing
+      if (act === 'edit-direct') {
+        if (isOwner || isMyTheme) {
+          editingThemeId = targetTheme.id;
+          applyTheme({
+            cardColor: '', cardTransparency: 60,
+            ...targetTheme,
+            id: targetTheme.id,
+            bgImage: typeof targetTheme.bgImage === 'string' ? targetTheme.bgImage : '',
+            bgLum: targetTheme.bgLum
+          }, true);
+          activeDesignTab = 'header';
+          if (window.__rerenderDesign) window.__rerenderDesign();
+          if (typeof toast === 'function') {
+            toast(isOwner 
+              ? '✏️ Тема «' + targetTheme.name + '» открыта для изменения (Владелец)' 
+              : '✏️ Ваша тема «' + targetTheme.name + '» открыта для изменения');
+          }
+        } else {
+          // Regular employee editing a standard preset or colleague's theme:
+          // Make an editable personal copy
+          const list = loadCustomThemes();
+          const newId = 'u' + Date.now().toString(36);
+          const { id, custom, shared, senderId, ...restProps } = targetTheme;
+          const cleanName = targetTheme.name.replace(/^⭐\s*/, '').replace(/\s*\(копия\)$/, '');
+          const copyName = '⭐ ' + cleanName + ' (моя версия)';
+          const newTheme = {
+            ...restProps,
+            id: newId,
+            name: copyName,
+            desc: 'Моя версия темы «' + cleanName + '»',
+            custom: true
+          };
+          list.push(newTheme);
+          storeCustomThemes(list);
+          editingThemeId = newId;
+          applyTheme(newTheme, true);
+          activeDesignTab = 'header';
+          if (window.__rerenderDesign) window.__rerenderDesign();
+          if (typeof toast === 'function') {
+            toast('✓ Создана копия «' + copyName + '» — теперь вы можете изменять её под себя');
+          }
+        }
+        return;
+      }
+
+      // 0b. COPY: Duplicate theme and open for editing
+      if (act === 'copy') {
+        const list = loadCustomThemes();
+        const newId = 'u' + Date.now().toString(36);
+        const { id, custom, shared, senderId, ...restProps } = targetTheme;
+        const cleanName = targetTheme.name.replace(/^⭐\s*/, '').replace(/\s*\(копия\)$/, '');
+        const copyName = '⭐ ' + cleanName + ' (копия)';
+        const newTheme = {
+          ...restProps,
+          id: newId,
+          name: copyName,
+          desc: 'Копия темы «' + cleanName + '»',
+          custom: true
+        };
+        list.push(newTheme);
+        storeCustomThemes(list);
+        editingThemeId = newId;
+        applyTheme(newTheme, true);
+        activeDesignTab = 'header';
+        if (window.__rerenderDesign) window.__rerenderDesign();
+        if (typeof toast === 'function') {
+          toast('✓ Создана копия «' + copyName + '» — теперь вы можете изменять её');
+        }
+        return;
+      }
+
       // 1. UPDATE: Overwrite this theme with current active settings
       if (act === 'update') {
         const { id, name, desc, custom, shared, senderId, ...activeProps } = currentTheme;
@@ -4203,10 +4314,18 @@ body.auth-locked #auth-close{display:none!important}
           applyTheme({ id: themeId }, true);
           if (window.__rerenderDesign) window.__rerenderDesign();
           if (typeof toast === 'function') toast('✓ Тема «' + targetTheme.name + '» обновлена вашими настройками');
+        } else if (isOwner && PRESETS.some(p => p.id === themeId)) {
+          const overrides = getPresetOverrides();
+          overrides[themeId] = { ...targetTheme, ...activeProps };
+          setPresetOverrides(overrides);
+          applyTheme({ id: themeId }, true);
+          if (window.__rerenderDesign) window.__rerenderDesign();
+          if (typeof toast === 'function') toast('✓ Владелец: готовая тема «' + targetTheme.name + '» обновлена!');
         } else {
-          // If updating a preset, save it as custom
+          // If updating a preset or other theme as non-owner, save it as custom copy
           const newId = 'u' + Date.now().toString(36);
-          list.push({ ...targetTheme, ...activeProps, id: newId, name: targetTheme.name + ' (копия)' });
+          const copyName = '⭐ ' + targetTheme.name.replace(/^⭐\s*/, '') + ' (копия)';
+          list.push({ ...targetTheme, ...activeProps, id: newId, name: copyName, desc: 'Моя сохранённая тема', custom: true });
           storeCustomThemes(list);
           currentTheme.id = newId;
           applyTheme({ id: newId }, true);
@@ -4306,11 +4425,52 @@ body.auth-locked #auth-close{display:none!important}
       return;
     }
 
+    // Save direct button (updates currently editing theme in place)
+    const saveDirectBtn = e.target.closest('#tcd-save-direct-btn');
+    if (saveDirectBtn && editingThemeId) {
+      const targetTheme = allThemes().find(x => x.id === editingThemeId);
+      if (targetTheme) {
+        const { id, name, desc, custom, shared, senderId, ...activeProps } = currentTheme;
+        const isOwner = (typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'OWNER');
+        const list = loadCustomThemes();
+        const existingIdx = list.findIndex(x => x.id === editingThemeId);
+        if (existingIdx >= 0) {
+          list[existingIdx] = { ...list[existingIdx], ...activeProps };
+          storeCustomThemes(list);
+          applyTheme({ id: editingThemeId }, true);
+          if (typeof toast === 'function') toast('✓ Изменения сохранены в тему «' + targetTheme.name + '»');
+        } else if (isOwner && PRESETS.some(p => p.id === editingThemeId)) {
+          const overrides = getPresetOverrides();
+          overrides[editingThemeId] = { ...targetTheme, ...activeProps };
+          setPresetOverrides(overrides);
+          applyTheme({ id: editingThemeId }, true);
+          if (typeof toast === 'function') toast('✓ Владелец: готовая тема «' + targetTheme.name + '» обновлена!');
+        } else if (targetTheme.shared && targetTheme.senderId === currentUser?.id) {
+          list.push({ ...targetTheme, ...activeProps, id: editingThemeId, custom: true });
+          storeCustomThemes(list);
+          applyTheme({ id: editingThemeId }, true);
+          if (typeof toast === 'function') toast('✓ Изменения сохранены в тему «' + targetTheme.name + '»');
+        } else {
+          const newId = 'u' + Date.now().toString(36);
+          const copyName = '⭐ ' + targetTheme.name.replace(/^⭐\s*/, '') + ' (копия)';
+          list.push({ ...targetTheme, ...activeProps, id: newId, name: copyName, desc: 'Моя сохранённая тема', custom: true });
+          storeCustomThemes(list);
+          currentTheme.id = newId;
+          applyTheme({ id: newId }, true);
+          if (typeof toast === 'function') toast('✓ Сохранено в вашу личную тему «' + copyName + '»');
+        }
+        activeDesignTab = 'presets';
+        if (window.__rerenderDesign) window.__rerenderDesign();
+        return;
+      }
+    }
+
     // Preset card click (apply theme)
     const presetCard = e.target.closest('[data-apply-preset]');
-    if (presetCard && !e.target.closest('.tcd-dots-btn') && !e.target.closest('.tcd-menu-dropdown')) {
+    if (presetCard && !e.target.closest('.tcd-dots-btn') && !e.target.closest('.tcd-menu-dropdown') && !e.target.closest('.tcd-edit-quick-btn') && !e.target.closest('.tcd-copy-quick-btn')) {
       const p = allThemes().find(x => x.id === presetCard.dataset.applyPreset);
       if (p) {
+        editingThemeId = p.id;
         const base = { cardColor: '', cardTransparency: 60 };
         // If theme has bgImage (shared from colleague, saved custom, or preset), apply it directly!
         const nextBgImage = (typeof p.bgImage === 'string') ? p.bgImage : '';
@@ -4366,7 +4526,7 @@ body.auth-locked #auth-close{display:none!important}
     }
 
     // Save button (creates new theme in presets)
-    const saveBtn = e.target.closest('#tcd-save-btn, .tcd-save-btn');
+    const saveBtn = e.target.closest('#tcd-save-btn, .tcd-save-btn, #tcd-save-as-new-btn');
     if (saveBtn) {
       applyTheme(currentTheme, true);
       const list = loadCustomThemes();
