@@ -6284,12 +6284,12 @@ api('/api/admin/status').then(st=>{
   ensureAdmin(()=>{updateHeaderBadge();});
 });
 
-async async function openDesignPanel(){
+async function openDesignPanel(){
   ownerTab = 'design';
   if(typeof activeDesignTab!=='undefined')activeDesignTab='constructor';
   if(typeof openOwnerPanel==='function')await openOwnerPanel();
 }
-function openOwnerPanel(){
+async function openOwnerPanel(){
   await ensureAdmin(async()=>{
     if(!$('#drawer').hidden)closeDrawer();
     for(const el of document.querySelectorAll('main'))el.hidden=true;
