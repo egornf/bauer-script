@@ -453,11 +453,13 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       status,
       actorId: actor?.id || null,
       actorLogin: actor?.login || (typeof actor === 'string' ? actor : 'anonymous'),
+      actorName: actor?.displayName || actor?.login || (typeof actor === 'string' ? actor : 'anonymous'),
       actorRole: actor?.role || null,
+      actorManagerId: actor?.managerId || null,
       target,
       ip: String(ip || '').slice(0, 100),
       userAgent: String(userAgent || '').slice(0, 250),
-      details
+      details: { ...details, clicks: Math.max(1, Number(details?.clicks || details?.count || 1)) }
     };
     audit.push(entry);
     saveAudit();
@@ -2016,42 +2018,186 @@ function createAppServer(options = {}) {
         }
       }
 
+      // Activity tracking: POST /api/audit/track
+      if (pathname === '/api/audit/track' && method === 'POST') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        const body = await parseJson(req);
+        const action = String(body.action || 'activity.clicks').trim();
+        const target = body.target ? String(body.target).slice(0, 200) : null;
+        const details = (typeof body.details === 'object' && body.details !== null) ? body.details : {};
+        const clicks = Math.max(1, Math.min(1000, Number(body.clicks || details.count || 1)));
+        details.clicks = clicks;
+
+        const entry = store.logEvent({
+          action,
+          actor: auth.user,
+          target,
+          ip,
+          userAgent,
+          details,
+          status: 'success'
+        });
+        return sendJson(res, 200, { ok: true, id: entry.id });
+      }
+
       // Audit log: GET /api/audit
       if (pathname === '/api/audit' && method === 'GET') {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
         const isOwner = auth.user.role === 'OWNER';
         const isHead = auth.user.role === 'HEAD';
-        if (!isOwner && !isHead && !hasPermission(auth.user, 'audit.view')) {
+        const isAdmin = auth.user.role === 'ADMIN';
+        const hasAuditPerm = hasPermission(auth.user, 'audit.view');
+
+        if (!isOwner && !isHead && !hasAuditPerm) {
           store.logEvent({ action: 'audit.access.denied', actor: auth.user, ip, userAgent, status: 'denied' });
           return sendJson(res, 403, { error: 'Журнал действий доступен только Владельцу, Администраторам и Руководителям отдела.' });
         }
-        const limit = Math.min(500, Math.max(10, Number(url.searchParams.get('limit')) || 200));
+
+        const limit = Math.min(1000, Math.max(10, Number(url.searchParams.get('limit')) || 300));
         const filterUser = (url.searchParams.get('user') || '').trim().toLowerCase();
         const filterAction = (url.searchParams.get('action') || '').trim().toLowerCase();
+        const filterDepartment = (url.searchParams.get('department') || '').trim();
+        const filterPeriod = (url.searchParams.get('period') || 'all').trim().toLowerCase();
+
+        const allUsers = store.getUsers();
+        const heads = allUsers.filter(u => u.role === 'HEAD' || u.role === 'OWNER');
+
+        // Department isolation for HEAD (unless has global audit.view)
+        const isRestrictedHead = isHead && !isOwner && !hasAuditPerm;
+        let visibleUsers = allUsers;
+        let departments = [];
+
+        if (isRestrictedHead) {
+          visibleUsers = allUsers.filter(u => u.id === auth.user.id || (u.role === 'OPERATOR' && u.managerId === auth.user.id));
+          departments = [{ id: auth.user.id, name: 'Мой отдел (' + (auth.user.displayName || auth.user.login) + ')' }];
+        } else {
+          departments = heads.map(h => ({
+            id: h.id,
+            name: (h.displayName || h.login) + (h.role === 'OWNER' ? ' (Владелец)' : ' (Руководитель отдела)')
+          }));
+        }
+
+        const visibleLogins = new Set(visibleUsers.map(u => normalizeLogin(u.login)));
+        const visibleIds = new Set(visibleUsers.map(u => u.id));
 
         let entries = [...store.getAudit()].reverse();
-        if (isHead && !hasPermission(auth.user, 'audit.view')) {
-          const teamLogins = new Set(
-            store.getUsers()
-              .filter(u => u.id === auth.user.id || (u.role === 'OPERATOR' && u.managerId === auth.user.id))
-              .map(u => normalizeLogin(u.login))
-          );
+
+        // 1. Enforce team/department restriction for HEAD
+        if (isRestrictedHead) {
           entries = entries.filter(e =>
-            e.actorId === auth.user.id ||
-            teamLogins.has(normalizeLogin(e.actorLogin)) ||
-            teamLogins.has(normalizeLogin(e.target))
+            visibleIds.has(e.actorId) ||
+            visibleLogins.has(normalizeLogin(e.actorLogin)) ||
+            visibleLogins.has(normalizeLogin(e.target))
           );
+        } else if (filterDepartment) {
+          if (filterDepartment === 'none') {
+            const unassignedUsers = allUsers.filter(u => !u.managerId && u.role !== 'OWNER');
+            const unassignedLogins = new Set(unassignedUsers.map(u => normalizeLogin(u.login)));
+            entries = entries.filter(e => unassignedLogins.has(normalizeLogin(e.actorLogin)));
+          } else {
+            const deptUsers = allUsers.filter(u => u.id === filterDepartment || u.managerId === filterDepartment);
+            const deptLogins = new Set(deptUsers.map(u => normalizeLogin(u.login)));
+            entries = entries.filter(e => deptLogins.has(normalizeLogin(e.actorLogin)) || deptLogins.has(normalizeLogin(e.target)));
+          }
         }
+
+        // 2. Period filtering
+        const now = Date.now();
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayTs = todayStart.getTime();
+
+        if (filterPeriod === 'today') {
+          entries = entries.filter(e => e.timestamp >= todayTs);
+        } else if (filterPeriod === '3days') {
+          entries = entries.filter(e => e.timestamp >= (now - 3 * 86400000));
+        } else if (filterPeriod === 'week') {
+          entries = entries.filter(e => e.timestamp >= (now - 7 * 86400000));
+        }
+
+        // 3. User / Search filtering
         if (filterUser) {
           entries = entries.filter(e =>
             (e.actorLogin || '').toLowerCase().includes(filterUser) ||
+            (e.actorName || '').toLowerCase().includes(filterUser) ||
             (e.target || '').toLowerCase().includes(filterUser)
           );
         }
+
+        // 4. Action filtering
         if (filterAction) {
-          entries = entries.filter(e => (e.action || '').toLowerCase().includes(filterAction));
+          if (filterAction === 'operator') {
+            entries = entries.filter(e => (e.action || '').startsWith('activity.'));
+          } else if (filterAction === 'auth') {
+            entries = entries.filter(e => (e.action || '').startsWith('auth.') || (e.action || '').startsWith('owner.recovery'));
+          } else if (filterAction === 'users') {
+            entries = entries.filter(e => (e.action || '').startsWith('users.') || e.action === 'user.password.changed');
+          } else if (filterAction === 'layouts') {
+            entries = entries.filter(e => (e.action || '').startsWith('layouts.') || e.action === 'content.publish');
+          } else {
+            entries = entries.filter(e => (e.action || '').toLowerCase().includes(filterAction));
+          }
         }
-        return sendJson(res, 200, { events: entries.slice(0, limit), total: entries.length });
+
+        // 5. Aggregate employee activity and click statistics
+        const statsMap = new Map();
+        visibleUsers.forEach(u => {
+          const mgr = heads.find(h => h.id === u.managerId);
+          statsMap.set(u.id, {
+            id: u.id,
+            login: u.login,
+            displayName: u.displayName || u.login,
+            role: u.role,
+            managerId: u.managerId || null,
+            managerName: mgr ? (mgr.displayName || mgr.login) : (u.role === 'OWNER' ? 'Владелец' : '—'),
+            clicksToday: 0,
+            clicksPeriod: 0,
+            lastAction: null,
+            lastActionDetails: null,
+            lastTimestamp: null,
+            isOnline: false
+          });
+        });
+
+        const fullAudit = store.getAudit();
+        for (let i = 0; i < fullAudit.length; i++) {
+          const ev = fullAudit[i];
+          const stat = statsMap.get(ev.actorId) || [...statsMap.values()].find(s => normalizeLogin(s.login) === normalizeLogin(ev.actorLogin));
+          if (!stat) continue;
+
+          const clicks = Number(ev.details?.clicks || ev.details?.count || 1);
+          if (ev.timestamp >= todayTs) {
+            stat.clicksToday += clicks;
+          }
+          if (filterPeriod === 'today') {
+            if (ev.timestamp >= todayTs) stat.clicksPeriod += clicks;
+          } else if (filterPeriod === '3days') {
+            if (ev.timestamp >= (now - 3 * 86400000)) stat.clicksPeriod += clicks;
+          } else if (filterPeriod === 'week') {
+            if (ev.timestamp >= (now - 7 * 86400000)) stat.clicksPeriod += clicks;
+          } else {
+            stat.clicksPeriod += clicks;
+          }
+
+          if (!stat.lastTimestamp || ev.timestamp > stat.lastTimestamp) {
+            stat.lastTimestamp = ev.timestamp;
+            stat.lastAction = ev.action;
+            stat.lastActionDetails = ev.details;
+          }
+        }
+
+        const stats = [...statsMap.values()].map(s => {
+          s.isOnline = s.lastTimestamp ? (now - s.lastTimestamp) < 5 * 60 * 1000 : false;
+          return s;
+        }).sort((a, b) => (b.clicksToday - a.clicksToday) || ((b.lastTimestamp || 0) - (a.lastTimestamp || 0)));
+
+        return sendJson(res, 200, {
+          events: entries.slice(0, limit),
+          total: entries.length,
+          stats,
+          departments,
+          isHead: isRestrictedHead
+        });
       }
 
       return sendJson(res, 404, { error: 'Маршрут API не найден.' });

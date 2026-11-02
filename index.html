@@ -1671,6 +1671,157 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 }
 </style>
 
+
+<style id="theme-screenshot-elements-adaptation">
+/* Universal high-contrast adaptation for all elements indicated in screenshots */
+:root .intro h1,
+:root .intro-left h1 {
+  color: var(--custom-page-fg, var(--ink)) !important;
+  text-shadow: var(--custom-page-shadow, none) !important;
+}
+:root[data-theme="dark"] .intro h1,
+:root[data-theme="dark"] .intro-left h1,
+:root[data-page-dark="1"] .intro h1,
+:root[data-page-dark="1"] .intro-left h1 {
+  color: var(--custom-page-fg, #ffffff) !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,0.85)) !important;
+}
+
+:root .workspace-pickers-bar label span,
+:root .script-picker > span,
+:root .venue-picker label > span {
+  color: var(--custom-page-fg, var(--ink)) !important;
+  text-shadow: var(--custom-page-shadow, none) !important;
+  font-weight: 750 !important;
+}
+:root[data-theme="dark"] .workspace-pickers-bar label span,
+:root[data-theme="dark"] .script-picker > span,
+:root[data-theme="dark"] .venue-picker label > span,
+:root[data-page-dark="1"] .workspace-pickers-bar label span,
+:root[data-page-dark="1"] .script-picker > span,
+:root[data-page-dark="1"] .venue-picker label > span {
+  color: var(--custom-page-fg, #ffffff) !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,0.85)) !important;
+}
+
+:root .search-wrap input {
+  background: var(--custom-input-bg, rgba(255, 255, 255, 0.92)) !important;
+  color: var(--custom-input-fg, var(--ink)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 50%, var(--custom-page-line, var(--line))) !important;
+}
+:root .search-wrap input::placeholder {
+  color: var(--custom-placeholder, rgba(0, 0, 0, 0.55)) !important;
+}
+:root[data-theme="dark"] .search-wrap input,
+:root[data-page-dark="1"] .search-wrap input {
+  background: var(--custom-input-bg, rgba(15, 23, 42, 0.78)) !important;
+  color: #ffffff !important;
+  border-color: color-mix(in srgb, var(--custom-accent, var(--teal)) 60%, rgba(255, 255, 255, 0.3)) !important;
+}
+:root[data-theme="dark"] .search-wrap input::placeholder,
+:root[data-page-dark="1"] .search-wrap input::placeholder {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+:root #whole-script,
+:root .pager .pager-back {
+  background: var(--custom-action-btn-bg, var(--custom-page-soft, rgba(255, 255, 255, 0.75))) !important;
+  color: var(--custom-action-btn-fg, var(--custom-page-fg, var(--ink))) !important;
+  border: 1.5px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 55%, var(--custom-page-line, var(--line))) !important;
+  font-weight: 700 !important;
+  transition: all .16s ease !important;
+}
+:root[data-theme="dark"] #whole-script,
+:root[data-page-dark="1"] #whole-script,
+:root[data-theme="dark"] .pager .pager-back,
+:root[data-page-dark="1"] .pager .pager-back {
+  background: var(--custom-action-btn-bg, rgba(255, 255, 255, 0.16)) !important;
+  color: var(--custom-action-btn-fg, #ffffff) !important;
+  border: 1.5px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 65%, rgba(255, 255, 255, 0.35)) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+}
+
+:root .stage-count {
+  background: var(--custom-pill-bg, rgba(0, 0, 0, 0.06)) !important;
+  border: 1px solid var(--custom-pill-border, rgba(0, 0, 0, 0.1)) !important;
+  border-radius: 999px !important;
+}
+:root .stage-count strong,
+:root .stage-count span {
+  color: var(--custom-pill-fg, var(--ink)) !important;
+}
+:root[data-theme="dark"] .stage-count,
+:root[data-page-dark="1"] .stage-count {
+  background: var(--custom-pill-bg, rgba(0, 0, 0, 0.45)) !important;
+  border-color: var(--custom-pill-border, rgba(255, 255, 255, 0.18)) !important;
+}
+:root[data-theme="dark"] .stage-count strong,
+:root[data-theme="dark"] .stage-count span,
+:root[data-page-dark="1"] .stage-count strong,
+:root[data-page-dark="1"] .stage-count span {
+  color: var(--custom-pill-fg, #ffffff) !important;
+}
+
+:root .objections-pane h3 {
+  color: var(--custom-objection-title, var(--ink)) !important;
+}
+:root .objections-pane .sub,
+:root .objections-pane .rail-foot {
+  color: var(--custom-objection-sub, var(--muted)) !important;
+}
+:root[data-theme="dark"] .objections-pane h3,
+:root[data-page-dark="1"] .objections-pane h3 {
+  color: var(--custom-objection-title, #ffffff) !important;
+}
+:root[data-theme="dark"] .objections-pane .sub,
+:root[data-theme="dark"] .objections-pane .rail-foot,
+:root[data-page-dark="1"] .objections-pane .sub,
+:root[data-page-dark="1"] .objections-pane .rail-foot {
+  color: var(--custom-objection-sub, rgba(255, 255, 255, 0.72)) !important;
+}
+
+:root .pager-middle strong,
+:root #counter,
+:root .pager-middle span,
+:root #next-label {
+  color: var(--custom-page-fg, var(--ink)) !important;
+  text-shadow: var(--custom-page-shadow, none) !important;
+}
+:root[data-theme="dark"] .pager-middle strong,
+:root[data-theme="dark"] #counter,
+:root[data-page-dark="1"] .pager-middle strong,
+:root[data-page-dark="1"] #counter {
+  color: var(--custom-page-fg, #ffffff) !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,0.85)) !important;
+  font-weight: 750 !important;
+}
+:root[data-theme="dark"] .pager-middle span,
+:root[data-theme="dark"] #next-label,
+:root[data-page-dark="1"] .pager-middle span,
+:root[data-page-dark="1"] #next-label {
+  color: var(--custom-page-fg, #ffffff) !important;
+  opacity: 0.92 !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,0.85)) !important;
+}
+
+.audit-period-btn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.audit-period-btn:hover {
+  border-color: var(--teal);
+}
+.audit-period-btn.selected {
+  background: var(--teal) !important;
+  color: #ffffff !important;
+  border-color: var(--teal) !important;
+  font-weight: 750 !important;
+}
+</style>
+
 </head>
 <body>
 <header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet header-design-btn" id="header-design-btn" title="Персональный дизайн и конструктор темы" aria-label="Конструктор темы оформления">🎨 <span>Дизайн</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
@@ -2142,6 +2293,11 @@ function updatePosition(announce=true){
 function go(index,{fromHash=false}={}){
   if(!Number.isInteger(index)||index<0||index>=data.stages.length||data.stages[index].hidden)return;
   current=index;updatePosition();renderStepper();
+  if(!fromHash && typeof window.trackActivity==='function'){
+    const stg=data.stages[current];
+    const visIdx=(typeof visibleIndices==='function'?visibleIndices().indexOf(current):current)+1;
+    window.trackActivity('activity.stage_view','Этап '+(visIdx)+': '+(stg?stg.title:''),{stageIndex:visIdx,stageTitle:stg?stg.title:'',stageId:stg?stg.id:null});
+  }
   if(!fromHash){try{history.replaceState(null,'',`#block-${data.stages[current].id}`);}catch{}}
   const button=$('#stepper').querySelector('[aria-current="step"]');if(button){const nav=$('#stepper');if(button.offsetLeft<nav.scrollLeft||button.offsetLeft+button.offsetWidth>nav.scrollLeft+nav.clientWidth)nav.scrollTo({left:button.offsetLeft-nav.clientWidth/2+button.offsetWidth/2,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});}
 }
@@ -2939,21 +3095,134 @@ async function api_local_vault(rawPath,options={}){
     }
   }
 
+  if(pathname==='/api/audit/track'&&method==='POST'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    const action=String(body.action||'activity.clicks').trim();
+    const target=body.target?String(body.target).slice(0,200):null;
+    const details=(typeof body.details==='object'&&body.details!==null)?body.details:{};
+    const clicks=Math.max(1,Math.min(1000,Number(body.clicks||details.count||1)));
+    details.clicks=clicks;
+
+    const entry={
+      id:'aud_trk_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      timestamp:Date.now(),
+      action,
+      status:'success',
+      actorId:authUser.id||null,
+      actorLogin:authUser.login||'anonymous',
+      actorName:authUser.displayName||authUser.login||'anonymous',
+      actorRole:authUser.role||null,
+      actorManagerId:authUser.managerId||null,
+      target,
+      ip:'127.0.0.1',
+      userAgent:navigator.userAgent||'Browser',
+      details
+    };
+    audit.push(entry);
+    await VaultDB.set('audit',audit);
+    return {ok:true,id:entry.id};
+  }
+
   if(pathname==='/api/audit'&&method==='GET'){
     if(!authUser)throw fail('Требуется авторизация.',401);
-    const isFullAudit=authUser.role==='OWNER'||authUser.role==='ADMIN';
-    if(!isFullAudit&&authUser.role!=='HEAD'&&!hasPerm(authUser,'audit.view'))throw fail('Недостаточно прав для просмотра журнала действий.',403);
-    const limit=Math.min(500,Math.max(10,Number(uObj.searchParams.get('limit'))||200));
+    const isOwner=authUser.role==='OWNER';
+    const isHead=authUser.role==='HEAD';
+    const isAdmin=authUser.role==='ADMIN';
+    const hasAuditPerm=hasPerm(authUser,'audit.view');
+    if(!isOwner&&!isHead&&!hasAuditPerm)throw fail('Недостаточно прав для просмотра журнала действий.',403);
+
+    const limit=Math.min(1000,Math.max(10,Number(uObj.searchParams.get('limit'))||300));
     const fu=(uObj.searchParams.get('user')||'').trim().toLowerCase();
     const fa=(uObj.searchParams.get('action')||'').trim().toLowerCase();
-    let list=[...audit].reverse();
-    if(authUser.role==='HEAD'&&!isFullAudit){
-      const deptLogins=new Set(users.filter(u=>u.id===authUser.id||(u.role==='OPERATOR'&&u.managerId===authUser.id)).map(u=>normLogin(u.login)));
-      list=list.filter(e=>deptLogins.has(normLogin(e.actorLogin))||deptLogins.has(normLogin(e.target)));
+    const fd=(uObj.searchParams.get('department')||'').trim();
+    const fp=(uObj.searchParams.get('period')||'all').trim().toLowerCase();
+
+    const heads=users.filter(u=>u.role==='HEAD'||u.role==='OWNER');
+    const isRestrictedHead=isHead&&!isOwner&&!hasAuditPerm;
+    let visibleUsers=users;
+    let departments=[];
+
+    if(isRestrictedHead){
+      visibleUsers=users.filter(u=>u.id===authUser.id||(u.role==='OPERATOR'&&u.managerId===authUser.id));
+      departments=[{id:authUser.id,name:'Мой отдел ('+(authUser.displayName||authUser.login)+')'}];
+    }else{
+      departments=heads.map(h=>({id:h.id,name:(h.displayName||h.login)+(h.role==='OWNER'?' (Владелец)':' (Руководитель отдела)')}));
     }
-    if(fu)list=list.filter(e=>(e.actorLogin||'').toLowerCase().includes(fu)||(e.target||'').toLowerCase().includes(fu));
-    if(fa)list=list.filter(e=>(e.action||'').toLowerCase().includes(fa));
-    return {events:list.slice(0,limit),total:list.length};
+
+    const visibleLogins=new Set(visibleUsers.map(u=>normLogin(u.login)));
+    let list=[...audit].reverse();
+
+    if(isRestrictedHead){
+      list=list.filter(e=>visibleLogins.has(normLogin(e.actorLogin))||visibleLogins.has(normLogin(e.target)));
+    }else if(fd){
+      if(fd==='unassigned'){
+        const unassignedLogins=new Set(users.filter(u=>u.role==='OPERATOR'&&!u.managerId).map(u=>normLogin(u.login)));
+        list=list.filter(e=>unassignedLogins.has(normLogin(e.actorLogin)));
+      }else{
+        const deptUsers=users.filter(u=>u.id===fd||u.managerId===fd);
+        const deptLogins=new Set(deptUsers.map(u=>normLogin(u.login)));
+        list=list.filter(e=>deptLogins.has(normLogin(e.actorLogin))||deptLogins.has(normLogin(e.target)));
+      }
+    }
+
+    const now=Date.now();
+    const todayStart=new Date();todayStart.setHours(0,0,0,0);
+    const todayTs=todayStart.getTime();
+
+    if(fp==='today'){
+      list=list.filter(e=>e.timestamp>=todayTs);
+    }else if(fp==='3days'){
+      list=list.filter(e=>e.timestamp>=(now-3*86400000));
+    }else if(fp==='week'){
+      list=list.filter(e=>e.timestamp>=(now-7*86400000));
+    }
+
+    if(fu){
+      list=list.filter(e=>(e.actorLogin||'').toLowerCase().includes(fu)||(e.actorName||'').toLowerCase().includes(fu)||(e.target||'').toLowerCase().includes(fu));
+    }
+    if(fa){
+      if(fa==='operator')list=list.filter(e=>(e.action||'').startsWith('activity.'));
+      else if(fa==='auth')list=list.filter(e=>(e.action||'').startsWith('auth.')||(e.action||'').startsWith('owner.recovery'));
+      else if(fa==='users')list=list.filter(e=>(e.action||'').startsWith('users.')||e.action==='user.password.changed');
+      else if(fa==='layouts')list=list.filter(e=>(e.action||'').startsWith('layouts.')||e.action==='content.publish');
+      else list=list.filter(e=>(e.action||'').toLowerCase().includes(fa));
+    }
+
+    const statsMap=new Map();
+    visibleUsers.forEach(u=>{
+      const mgr=heads.find(h=>h.id===u.managerId);
+      statsMap.set(u.id,{
+        id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,
+        managerId:u.managerId||null,
+        managerName:mgr?(mgr.displayName||mgr.login):(u.role==='OWNER'?'Владелец':'—'),
+        clicksToday:0,clicksPeriod:0,lastAction:null,lastActionDetails:null,lastTimestamp:null,isOnline:false
+      });
+    });
+
+    for(let i=0;i<audit.length;i++){
+      const ev=audit[i];
+      const stat=statsMap.get(ev.actorId)||[...statsMap.values()].find(s=>normLogin(s.login)===normLogin(ev.actorLogin));
+      if(!stat)continue;
+      const clicks=Number(ev.details?.clicks||ev.details?.count||1);
+      if(ev.timestamp>=todayTs)stat.clicksToday+=clicks;
+      if(fp==='today'){if(ev.timestamp>=todayTs)stat.clicksPeriod+=clicks;}
+      else if(fp==='3days'){if(ev.timestamp>=(now-3*86400000))stat.clicksPeriod+=clicks;}
+      else if(fp==='week'){if(ev.timestamp>=(now-7*86400000))stat.clicksPeriod+=clicks;}
+      else stat.clicksPeriod+=clicks;
+
+      if(!stat.lastTimestamp||ev.timestamp>stat.lastTimestamp){
+        stat.lastTimestamp=ev.timestamp;
+        stat.lastAction=ev.action;
+        stat.lastActionDetails=ev.details;
+      }
+    }
+
+    const stats=[...statsMap.values()].map(s=>{
+      s.isOnline=s.lastTimestamp?(now-s.lastTimestamp)<5*60*1000:false;
+      return s;
+    }).sort((a,b)=>(b.clicksToday-a.clicksToday)||((b.lastTimestamp||0)-(a.lastTimestamp||0)));
+
+    return {events:list.slice(0,limit),total:list.length,stats,departments,isHead:isRestrictedHead};
   }
 
   if(pathname==='/api/content'){
@@ -5767,6 +6036,15 @@ const ROLE_NAMES={
   OPERATOR:'Менеджер обзвона'
 };
 const ACTION_LABELS={
+  'activity.clicks':'🖱️ Активность на сайте (клики)',
+  'activity.stage_view':'🎯 Переход на этап скрипта',
+  'activity.objection_view':'💬 Просмотр возражения',
+  'activity.script_select':'📜 Выбор рабочего скрипта',
+  'activity.venue_select':'🏢 Выбор города / зала',
+  'activity.sms_copy':'📋 Копирование SMS клиенту',
+  'activity.search':'🔍 Поиск по скрипту',
+  'activity.whole_script':'⛶ Открытие полного скрипта',
+  'activity.theme_change':'🎨 Применение темы оформления',
   'owner.setup':'Первичная регистрация OWNER',
   'owner.setup.denied':'Попытка повторного создания OWNER',
   'auth.login.success':'Успешный вход в систему',
@@ -5829,7 +6107,83 @@ showScript=function(index=current,tab='script'){
   origShowScript(index,tab);
 };
 
-let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],allLayoutsList=[],deptScriptsIds=[],empFilter='all',auditFilterUser='',auditFilterAction='',roleDefaults={};
+let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',roleDefaults={};
+
+function formatAuditDetails(ev){
+  if(!ev) return '';
+  const act = ev.action || '';
+  const d = ev.details || {};
+  const clicks = Number(d.clicks || d.count || 0);
+
+  if(act === 'activity.clicks'){
+    return '🖱️ Зафиксировано кликов: <b>+' + clicks + '</b>' + (d.page ? ' (раздел: ' + E(d.page) + ')' : '');
+  }
+  if(act === 'activity.stage_view'){
+    return 'Этап ' + (d.stageIndex ? ('№' + d.stageIndex + ' ') : '') + (d.stageTitle ? ('«' + E(d.stageTitle) + '»') : '') + (clicks > 1 ? (' (кликов: +' + clicks + ')') : '');
+  }
+  if(act === 'activity.objection_view'){
+    return 'Возражение: ' + (d.objectionTitle ? ('«' + E(d.objectionTitle) + '»') : (ev.target ? E(ev.target) : '—')) + (d.stageTitle ? (' (этап: ' + E(d.stageTitle) + ')') : '');
+  }
+  if(act === 'activity.script_select'){
+    return 'Скрипт: <b>' + E(d.scriptName || ev.target || '—') + '</b>';
+  }
+  if(act === 'activity.venue_select'){
+    return 'Выбран город / зал: <b>' + E(ev.target || ((d.city || '') + ' / ' + (d.hall || ''))) + '</b>';
+  }
+  if(act === 'activity.sms_copy'){
+    return 'Скопирован шаблон SMS: <b>' + E(d.title || ev.target || '—') + '</b>';
+  }
+  if(act === 'activity.search'){
+    return 'Поисковый запрос: <i>«' + E(d.query || ev.target || '') + '»</i>';
+  }
+  if(act === 'activity.whole_script'){
+    return 'Просмотр полного текста скрипта на одном экране';
+  }
+  if(act === 'activity.theme_change'){
+    return 'Тема: <b>' + E(d.themeName || ev.target || '—') + '</b>';
+  }
+  if(act === 'auth.login.success'){
+    return 'Успешный вход в аккаунт';
+  }
+  if(act === 'auth.login.failed'){
+    return 'Неверный пароль' + (d.login ? (' для логина @' + E(d.login)) : '');
+  }
+  if(act === 'auth.logout'){
+    return 'Завершение сеанса работы';
+  }
+  if(act === 'user.password.changed'){
+    return 'Пароль успешно обновлён пользователем';
+  }
+  if(act === 'users.create'){
+    return 'Создан пользователь <b>@' + E(ev.target || d.login || '') + '</b> (' + (ROLE_NAMES[d.role] || d.role || '') + ')';
+  }
+  if(act === 'users.update'){
+    const changes = [];
+    if(d.displayName) changes.push('ФИО: ' + E(d.displayName));
+    if(d.role) changes.push('Роль: ' + (ROLE_NAMES[d.role] || d.role));
+    if(d.managerId !== undefined) changes.push('Руководитель отдела');
+    if(d.blocked !== undefined) changes.push(d.blocked ? 'Заблокирован' : 'Разблокирован');
+    if(d.passwordReset) changes.push('Сброс пароля');
+    return (ev.target ? ('Пользователь @' + E(ev.target) + ': ') : '') + (changes.join(', ') || 'Настройки сохранены');
+  }
+  if(act === 'users.delete'){
+    return 'Удалена учётная запись <b>@' + E(ev.target || '') + '</b>';
+  }
+  if(act === 'sessions.revoke'){
+    return 'Принудительно закрыта сессия';
+  }
+  if(act === 'sessions.revoke_user'){
+    return 'Сброшены все активные сессии пользователя @' + E(ev.target || '');
+  }
+  if(act === 'content.publish'){
+    return 'Опубликована новая версия рабочего скрипта';
+  }
+
+  // Fallback: render readable string if available
+  const keys = Object.keys(d);
+  if(keys.length === 0) return ev.target ? ('Объект: ' + E(ev.target)) : '—';
+  return keys.map(k => '<b>' + E(k) + ':</b> ' + E(typeof d[k] === 'object' ? JSON.stringify(d[k]) : String(d[k]))).join(', ');
+}
 
 function fmtTime(ts){
   if(!ts)return '—';
@@ -5973,10 +6327,17 @@ async function loadOwnerData(){
     }).catch(()=>{}));
     if(canSessions)tasks.push(api('/api/sessions').then(sRes=>{sessionsList=sRes.sessions||[];}));
     if(canAudit){
-      const params=new URLSearchParams({limit:'200'});
+      const params=new URLSearchParams({limit:'300'});
+      if(auditFilterDept)params.set('department',auditFilterDept);
+      if(auditFilterPeriod)params.set('period',auditFilterPeriod);
       if(auditFilterUser)params.set('user',auditFilterUser);
       if(auditFilterAction)params.set('action',auditFilterAction);
-      tasks.push(api('/api/audit?'+params.toString()).then(aRes=>{auditList=aRes.events||[];}));
+      tasks.push(api('/api/audit?'+params.toString()).then(aRes=>{
+        auditList=aRes.events||[];
+        auditStats=aRes.stats||[];
+        auditDepartments=aRes.departments||[];
+        auditIsHead=!!aRes.isHead;
+      }));
     }
     await Promise.all(tasks);
   }catch(e){
@@ -6187,46 +6548,201 @@ function renderSessionsSection(){
 }
 
 function renderAuditSection(){
+  const isOwner = currentUser?.role === 'OWNER';
+  const isHead = currentUser?.role === 'HEAD';
+  const isAdmin = currentUser?.role === 'ADMIN';
+
+  // Period label
+  const periodTitles = {
+    'today': 'Сегодня',
+    '3days': 'Последние 3 дня',
+    'week': 'За неделю',
+    'all': 'За всё время'
+  };
+
   return `<div class="owner-card">
-    <div class="owner-card-head">
+    <div class="owner-card-head" style="margin-bottom:18px">
       <div>
-        <h2>Журнал входов и действий (Audit Log)</h2>
-        <p>Фиксируются все входы, попытки подбора пароля, изменения ролей, блокировки, сессии и правки контента.</p>
+        <h2 style="display:flex;align-items:center;gap:10px">
+          <span>📊 Контроль активности и журнал действий</span>
+          ${auditIsHead ? '<span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal)">Мой отдел</span>' : ''}
+        </h2>
+        <p>Детальный разбор работы сотрудников: переходы по этапам скрипта, просмотры возражений, копирование SMS, смена настроек и общий счётчик кликов.</p>
       </div>
-      <button type="button" data-owner-act="refresh">↻ Обновить журнал</button>
+      <button type="button" data-owner-act="refresh" style="white-space:nowrap">↻ Обновить журнал</button>
     </div>
-    <div class="audit-toolbar">
-      <input type="search" id="audit-filter-user" placeholder="Фильтр по логину пользователя или цели…" value="${E(auditFilterUser)}">
-      <input type="search" id="audit-filter-action" placeholder="Фильтр по типу события (например: auth, users, layouts)…" value="${E(auditFilterAction)}">
-      <button type="button" class="primary" data-owner-act="filter-audit">Найти</button>
-      ${(auditFilterUser||auditFilterAction)?`<button type="button" data-owner-act="clear-audit-filter">Сбросить</button>`:''}
+
+    <!-- Filter Bar -->
+    <div style="background:var(--surface-alt);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:20px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:var(--muted);margin-right:4px">Период:</span>
+          <button type="button" class="audit-period-btn ${auditFilterPeriod==='today'?'selected':''}" data-audit-period="today" style="min-height:30px;padding:0 12px;font-size:12px;border-radius:8px">Сегодня</button>
+          <button type="button" class="audit-period-btn ${auditFilterPeriod==='3days'?'selected':''}" data-audit-period="3days" style="min-height:30px;padding:0 12px;font-size:12px;border-radius:8px">3 дня</button>
+          <button type="button" class="audit-period-btn ${auditFilterPeriod==='week'?'selected':''}" data-audit-period="week" style="min-height:30px;padding:0 12px;font-size:12px;border-radius:8px">Неделя</button>
+          <button type="button" class="audit-period-btn ${auditFilterPeriod==='all'?'selected':''}" data-audit-period="all" style="min-height:30px;padding:0 12px;font-size:12px;border-radius:8px">Всё время</button>
+        </div>
+
+        ${(auditFilterUser || auditFilterAction || auditFilterDept || auditFilterPeriod !== 'today') ? `
+          <button type="button" data-owner-act="clear-audit-filter" style="min-height:30px;padding:0 12px;font-size:12px">Сбросить фильтры ✕</button>
+        ` : ''}
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)) auto;gap:10px;align-items:center">
+        <!-- Department selector -->
+        <div>
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px" for="audit-filter-dept">Отдел / Руководитель</label>
+          <select id="audit-filter-dept" style="width:100%;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:0 10px;font-size:12px;font-weight:600">
+            ${auditIsHead ? `
+              <option value="">Мой отдел (${E(currentUser?.displayName || currentUser?.login)})</option>
+            ` : `
+              <option value="">Все отделы (вся компания)</option>
+              <option value="unassigned" ${auditFilterDept==='unassigned'?'selected':''}>Без руководителя (общие)</option>
+              ${(auditDepartments||[]).map(d => `
+                <option value="${E(d.id)}" ${auditFilterDept===d.id?'selected':''}>${E(d.name)}</option>
+              `).join('')}
+            `}
+          </select>
+        </div>
+
+        <!-- Action category selector -->
+        <div>
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px" for="audit-filter-action">Категория действий</label>
+          <select id="audit-filter-action" style="width:100%;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:0 10px;font-size:12px;font-weight:600">
+            <option value="">Все действия</option>
+            <option value="operator" ${auditFilterAction==='operator'?'selected':''}>🎯 Работа операторов со скриптом</option>
+            <option value="auth" ${auditFilterAction==='auth'?'selected':''}>🔑 Входы и сессии</option>
+            <option value="users" ${auditFilterAction==='users'?'selected':''}>👥 Пользователи и пароли</option>
+            <option value="layouts" ${auditFilterAction==='layouts'?'selected':''}>🎨 Макеты и публикация</option>
+          </select>
+        </div>
+
+        <!-- Search user input -->
+        <div>
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px" for="audit-filter-user">Поиск по сотруднику или цели</label>
+          <input type="search" id="audit-filter-user" placeholder="ФИО, логин или этап…" value="${E(auditFilterUser)}" style="width:100%;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:0 12px;font-size:12px">
+        </div>
+
+        <div style="align-self:flex-end">
+          <button type="button" class="primary" data-owner-act="filter-audit" style="height:36px;padding:0 18px;font-size:13px;font-weight:700">Найти</button>
+        </div>
+      </div>
     </div>
-    <div class="audit-table-wrap">
-      <table class="audit-table">
-        <thead>
-          <tr>
-            <th>Дата и время</th>
-            <th>Статус</th>
-            <th>Пользователь</th>
-            <th>Действие</th>
-            <th>Объект / Детали</th>
-            <th>IP</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${auditList.map(ev=>{
-            const det=ev.details&&Object.keys(ev.details).length?JSON.stringify(ev.details):'';
-            return `<tr>
-              <td style="white-space:nowrap">${fmtTime(ev.timestamp)}</td>
-              <td><span class="audit-status ${E(ev.status||'success')}">${ev.status==='denied'?'ОТКАЗ':ev.status==='failed'?'ОШИБКА':'ОК'}</span></td>
-              <td><b>${E(ev.actorLogin||'anonymous')}</b>${ev.actorRole?` <small style="color:var(--muted)">(${E(ev.actorRole)})</small>`:''}</td>
-              <td><b>${E(ACTION_LABELS[ev.action]||ev.action)}</b><br><small style="color:var(--muted)">${E(ev.action)}</small></td>
-              <td>${ev.target?`<b>${E(ev.target)}</b> `:''}${det?`<small style="color:var(--muted);word-break:break-all">${E(det)}</small>`:''}</td>
-              <td style="white-space:nowrap;color:var(--muted)">${E(ev.ip||'—')}</td>
-            </tr>`;
-          }).join('')||'<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--muted)">Записей в журнале не найдено.</td></tr>'}
-        </tbody>
-      </table>
+
+    <!-- Summary Statistics Table (Employee Activity & Click Breakdown) -->
+    <div style="margin-bottom:26px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="font-size:15px;font-weight:800;color:var(--ink);margin:0">
+          👥 Сводка по сотрудникам и кликам (${periodTitles[auditFilterPeriod] || 'за период'})
+        </h3>
+        <span style="font-size:12px;color:var(--muted)">Всего сотрудников: <b>${(auditStats||[]).length}</b></span>
+      </div>
+
+      <div class="audit-table-wrap" style="max-height:340px;overflow-y:auto;border-radius:12px;border:1px solid var(--line)">
+        <table class="audit-table" style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--surface-alt);border-bottom:1px solid var(--line);text-align:left">
+              <th style="padding:10px 14px">Сотрудник</th>
+              <th style="padding:10px 14px">Роль</th>
+              <th style="padding:10px 14px">Отдел / Руководитель</th>
+              <th style="padding:10px 14px;text-align:center">Кликов сегодня</th>
+              <th style="padding:10px 14px;text-align:center">Кликов ${auditFilterPeriod==='today'?'сегодня':(auditFilterPeriod==='3days'?'за 3 дня':(auditFilterPeriod==='week'?'за неделю':'всего'))}</th>
+              <th style="padding:10px 14px">Статус</th>
+              <th style="padding:10px 14px">Последнее действие</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(auditStats||[]).map(st => {
+              const roleTitle = ROLE_NAMES[st.role] || st.role;
+              const onlineBadge = st.isOnline 
+                ? '<span style="display:inline-flex;align-items:center;gap:5px;color:#10b981;font-weight:700"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b981"></span> В сети</span>'
+                : '<span style="display:inline-flex;align-items:center;gap:5px;color:var(--muted)"><span style="width:8px;height:8px;border-radius:50%;background:#94a3b8"></span> Не в сети</span>';
+
+              const lastActionText = st.lastAction 
+                ? (ACTION_LABELS[st.lastAction] || st.lastAction)
+                : '—';
+
+              return `<tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:10px 14px;font-weight:750">
+                  <span style="color:var(--ink)">${E(st.displayName || st.login)}</span>
+                  <div style="font-size:11px;font-weight:500;color:var(--muted)">@${E(st.login)}</div>
+                </td>
+                <td style="padding:10px 14px;color:var(--muted)">${E(roleTitle)}</td>
+                <td style="padding:10px 14px;color:var(--ink)">${E(st.managerName || '—')}</td>
+                <td style="padding:10px 14px;text-align:center">
+                  <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-weight:800;font-size:12px;background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal)">
+                    ${st.clicksToday}
+                  </span>
+                </td>
+                <td style="padding:10px 14px;text-align:center;font-weight:800;color:var(--ink)">
+                  ${st.clicksPeriod}
+                </td>
+                <td style="padding:10px 14px;white-space:nowrap">
+                  ${onlineBadge}
+                </td>
+                <td style="padding:10px 14px;font-size:12px">
+                  <div style="font-weight:650;color:var(--ink)">${E(lastActionText)}</div>
+                  <div style="font-size:11px;color:var(--muted)">${st.lastTimestamp ? fmtTime(st.lastTimestamp) : 'Действий не зафиксировано'}</div>
+                </td>
+              </tr>`;
+            }).join('') || '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Сотрудников в этом отделе не найдено.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Detailed Action Log Table -->
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h3 style="font-size:15px;font-weight:800;color:var(--ink);margin:0">
+          📜 Хронология всех событий и действий
+        </h3>
+        <span style="font-size:12px;color:var(--muted)">Записей в выборке: <b>${auditList.length}</b></span>
+      </div>
+
+      <div class="audit-table-wrap" style="max-height:550px;overflow-y:auto;border-radius:12px;border:1px solid var(--line)">
+        <table class="audit-table" style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--surface-alt);border-bottom:1px solid var(--line);text-align:left">
+              <th style="padding:10px 14px">Дата и время</th>
+              <th style="padding:10px 14px">Статус</th>
+              <th style="padding:10px 14px">Сотрудник</th>
+              <th style="padding:10px 14px">Действие</th>
+              <th style="padding:10px 14px">Подробности на русском</th>
+              <th style="padding:10px 14px">IP</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${auditList.map(ev=>{
+              const actionTitle = ACTION_LABELS[ev.action] || ev.action;
+              const detailsText = formatAuditDetails(ev);
+              const actorDisplay = ev.actorName || ev.actorLogin || 'Аноним';
+              const roleTitle = ev.actorRole ? (ROLE_NAMES[ev.actorRole] || ev.actorRole) : '';
+
+              return `<tr style="border-bottom:1px solid var(--line)">
+                <td style="padding:10px 14px;white-space:nowrap;font-size:12px;color:var(--muted)">${fmtTime(ev.timestamp)}</td>
+                <td style="padding:10px 14px;white-space:nowrap">
+                  <span class="audit-status ${E(ev.status||'success')}">
+                    ${ev.status==='denied'?'ОТКАЗ':ev.status==='failed'?'ОШИБКА':'ОК'}
+                  </span>
+                </td>
+                <td style="padding:10px 14px;white-space:nowrap">
+                  <div style="font-weight:750;color:var(--ink)">${E(actorDisplay)}</div>
+                  <div style="font-size:11px;color:var(--muted)">@${E(ev.actorLogin||'anonymous')}${roleTitle ? (' · ' + E(roleTitle)) : ''}</div>
+                </td>
+                <td style="padding:10px 14px">
+                  <div style="font-weight:700;color:var(--ink)">${E(actionTitle)}</div>
+                  <div style="font-size:11px;color:var(--muted)">${E(ev.action)}</div>
+                </td>
+                <td style="padding:10px 14px;font-size:12.5px;color:var(--ink)">
+                  ${detailsText}
+                </td>
+                <td style="padding:10px 14px;white-space:nowrap;color:var(--muted);font-size:11.5px">${E(ev.ip||'—')}</td>
+              </tr>`;
+            }).join('')||'<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Записей по заданным фильтрам не найдено.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>`;
 }
@@ -6880,14 +7396,22 @@ document.getElementById('header-style-btn')?.addEventListener('click',openStyleM
     }catch(err){toast(err.message);}
     return;
   }
+  const periodBtn = e.target.closest('[data-audit-period]');
+  if(periodBtn){
+    auditFilterPeriod = periodBtn.dataset.auditPeriod || 'today';
+    await loadOwnerData();
+    renderOwnerView();
+    return;
+  }
   if(act==='filter-audit'){
     auditFilterUser=document.getElementById('audit-filter-user')?.value.trim()||'';
     auditFilterAction=document.getElementById('audit-filter-action')?.value.trim()||'';
+    auditFilterDept=document.getElementById('audit-filter-dept')?.value||'';
     await loadOwnerData();renderOwnerView();
     return;
   }
   if(act==='clear-audit-filter'){
-    auditFilterUser='';auditFilterAction='';
+    auditFilterUser='';auditFilterAction='';auditFilterDept='';auditFilterPeriod='today';
     await loadOwnerData();renderOwnerView();
     return;
   }
@@ -6993,4 +7517,134 @@ document.addEventListener('submit',async e=>{
 });
 })();
 </script>
+
+<script id="activity-tracker-module">
+(() => {
+  let pendingClicks = 0;
+  let clickFlushTimer = null;
+
+  async function flushClicks() {
+    if (pendingClicks <= 0) return;
+    const count = pendingClicks;
+    pendingClicks = 0;
+    try {
+      if (typeof api === 'function') {
+        await api('/api/audit/track', {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'activity.clicks',
+            target: 'Активность на сайте (' + count + ' кликов)',
+            details: { count, page: (typeof currentTab !== 'undefined' ? currentTab : 'script') },
+            clicks: count
+          })
+        });
+      }
+    } catch (e) {}
+  }
+
+  function recordClick() {
+    pendingClicks++;
+    if (pendingClicks >= 15) {
+      if (clickFlushTimer) clearTimeout(clickFlushTimer);
+      flushClicks();
+    } else if (!clickFlushTimer) {
+      clickFlushTimer = setTimeout(() => {
+        clickFlushTimer = null;
+        flushClicks();
+      }, 15000);
+    }
+  }
+
+  window.trackActivity = async function(action, target, details = {}, clicks = 1) {
+    recordClick();
+    try {
+      if (typeof api === 'function') {
+        await api('/api/audit/track', {
+          method: 'POST',
+          body: JSON.stringify({
+            action,
+            target,
+            details,
+            clicks: Math.max(1, clicks)
+          })
+        });
+      }
+    } catch (e) {}
+  };
+
+  document.addEventListener('click', (e) => {
+    recordClick();
+    // Check if user clicked an objection button
+    const obBtn = e.target.closest('[data-objection]');
+    if (obBtn && typeof data !== 'undefined') {
+      const obId = Number(obBtn.dataset.objection);
+      const ob = data.objections && data.objections[obId];
+      const curStage = data.stages && data.stages[typeof current !== 'undefined' ? current : 0];
+      if (ob) {
+        window.trackActivity('activity.objection_view', 'Возражение: ' + ob.title, {
+          objectionId: obId,
+          objectionTitle: ob.title,
+          stageTitle: curStage ? curStage.title : '',
+          stageIndex: (typeof visibleIndices === 'function' ? (visibleIndices().indexOf(current) + 1) : 1)
+        });
+      }
+    }
+
+    // Check if user clicked SMS copy button
+    const smsBtn = e.target.closest('.sms-copy-btn, [data-copy-sms], .copy-btn');
+    if (smsBtn) {
+      const title = smsBtn.dataset.smsTitle || smsBtn.getAttribute('aria-label') || 'Текст SMS';
+      window.trackActivity('activity.sms_copy', 'Копирование SMS: ' + title, { title });
+    }
+
+    // Check if user clicked whole script
+    const wsBtn = e.target.closest('#whole-script');
+    if (wsBtn) {
+      window.trackActivity('activity.whole_script', 'Открытие полного текста скрипта');
+    }
+  }, { passive: true });
+
+  document.addEventListener('change', (e) => {
+    if (e.target.id === 'script-picker') {
+      const selText = e.target.options[e.target.selectedIndex]?.text || e.target.value;
+      window.trackActivity('activity.script_select', 'Скрипт: ' + selText, {
+        scriptName: selText,
+        scriptId: e.target.value
+      });
+    } else if (e.target.id === 'venue-city' || e.target.id === 'venue-hall') {
+      const city = document.getElementById('venue-city')?.value || '';
+      const hall = document.getElementById('venue-hall')?.value || '';
+      if (city || hall) {
+        window.trackActivity('activity.venue_select', 'Площадка: ' + city + (hall ? (' / ' + hall) : ''), { city, hall });
+      }
+    } else if (e.target.id === 'audit-filter-dept' || e.target.id === 'audit-filter-action') {
+      if (typeof loadOwnerData === 'function') {
+        auditFilterDept = document.getElementById('audit-filter-dept')?.value || '';
+        auditFilterAction = document.getElementById('audit-filter-action')?.value || '';
+        loadOwnerData().then(() => { if (typeof renderOwnerView === 'function') renderOwnerView(); });
+      }
+    }
+  });
+
+  let searchDebounce = null;
+  document.addEventListener('input', (e) => {
+    if (e.target.id === 'search') {
+      const q = e.target.value.trim();
+      if (q.length < 2) return;
+      if (searchDebounce) clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        window.trackActivity('activity.search', 'Поиск: «' + q + '»', { query: q });
+      }, 1200);
+    }
+  });
+
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushClicks();
+  });
+  window.addEventListener('beforeunload', () => {
+    flushClicks();
+  });
+})();
+</script>
+
 </body></html>
