@@ -3451,7 +3451,7 @@ async function ensureAdmin(action){
     if(state.csrfToken)csrfToken=state.csrfToken;
     if(state.unlocked){
       adminUnlocked=true;
-      updateHeaderBadge();
+      if (typeof window.updateHeaderBadge === 'function') window.updateHeaderBadge();
       return await action();
     }
     adminUnlocked=false;afterAuth=action;authSetup=!state.configured;
@@ -6507,6 +6507,7 @@ function updateHeaderBadge(){
     if(tabLbl)tabLbl.textContent='Владелец · Управление';
   }
 }
+window.updateHeaderBadge = updateHeaderBadge;
 
 const authDlgEl=document.getElementById('auth-dialog');
 if(authDlgEl){
