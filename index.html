@@ -96,6 +96,7 @@
     if (ut.objectionBtnBg) root.style.setProperty('--custom-objection-btn-bg', ut.objectionBtnBg);
     if (ut.objectionBtnFg) root.style.setProperty('--custom-objection-btn-fg', ut.objectionBtnFg);
     if (ut.actionBtnBg) root.style.setProperty('--custom-action-btn-bg', ut.actionBtnBg);
+    if (ut.stageHeadingColor) root.style.setProperty('--custom-stage-heading-color', ut.stageHeadingColor);
     if (ut.actionBtnFg) root.style.setProperty('--custom-action-btn-fg', ut.actionBtnFg);
     root.style.setProperty('--custom-page-soft', pageDark ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.06)');
     root.style.setProperty('--custom-page-soft-hover', pageDark ? 'rgba(255,255,255,.26)' : 'rgba(0,0,0,.12)');
@@ -942,6 +943,13 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[style*="--custom-action-btn-fg"] #whole-script,
 :root[style*="--custom-action-btn-fg"] .pager .pager-back {
   color: var(--custom-action-btn-fg) !important;
+}
+
+/* Custom Stage Title Heading Color ("Приветствие") */
+:root[style*="--custom-stage-heading-color"] .stage-heading h2,
+:root[style*="--custom-stage-heading-color"] .whole-stage-title,
+:root[style*="--custom-stage-heading-color"] .whole-stage-card h2 {
+  color: var(--custom-stage-heading-color) !important;
 }
 
 /* Custom Stage Count Pill Overrides */
@@ -4624,6 +4632,11 @@ body.auth-locked #auth-close{display:none!important}
     if (currentTheme.pillBorder) {
       root.style.setProperty('--custom-pill-border', currentTheme.pillBorder);
     }
+    if (currentTheme.stageHeadingColor) {
+      root.style.setProperty('--custom-stage-heading-color', currentTheme.stageHeadingColor);
+    } else {
+      root.style.removeProperty('--custom-stage-heading-color');
+    }
     if (currentTheme.objectionHeadingColor) {
       root.style.setProperty('--custom-objection-title', currentTheme.objectionHeadingColor);
     } else {
@@ -4911,7 +4924,7 @@ body.auth-locked #auth-close{display:none!important}
 
             <!-- Card Header & Badge -->
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-              <h2 style="font-size:18px;font-weight:800;margin:0;color:${bInfo.fg}">Приветствие</h2>
+              <h2 style="font-size:18px;font-weight:800;margin:0;color:${currentTheme.stageHeadingColor||bInfo.fg}">Приветствие</h2>
               <!-- Stage Count Pill Hotspot -->
               <div class="mock-hotspot ${activeConstructorBlock==='pill'?'active':''}" data-mock-select="pill" style="padding:2px 4px;border-radius:999px;cursor:pointer" title="Кликните для настройки бейджа 01/07">
                 <span class="stage-count" style="background:${effPillBg};color:${effPillFg};padding:4px 12px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid ${bInfo.pillBorder||'rgba(0,0,0,0.1)'}">
@@ -5106,6 +5119,22 @@ body.auth-locked #auth-close{display:none!important}
                 <button type="button" class="tcd-option-btn ${(currentTheme.cardStyle==='default'||!currentTheme.cardStyle)?'selected':''}" data-tcd-prop="cardStyle" data-val="default">Классическая</button>
                 <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='glass'?'selected':''}" data-tcd-prop="cardStyle" data-val="glass">💎 Матовое стекло</button>
                 <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='neon'?'selected':''}" data-tcd-prop="cardStyle" data-val="neon">⚡ Неон</button>
+              </div>
+            </div>
+
+            <div class="tcd-row" style="margin-bottom:14px">
+              <span class="tcd-label">Цвет названия этапа в карточке («Приветствие»):</span>
+              <div class="tcd-color-row">
+                ${['#142026', '#ffffff', '#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'].map(c => `
+                  <button type="button" class="tcd-color-swatch ${(currentTheme.stageHeadingColor||bInfo.fg)===c?'selected':''}" style="background:${c}" data-construct-color="stageHeadingColor" data-val="${c}" title="${c}"></button>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="stageHeadingColor" value="${currentTheme.stageHeadingColor || (bInfo.fg&&/^#[0-9a-f]{6}$/i.test(bInfo.fg)?bInfo.fg:'#142026')}" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+                ${currentTheme.stageHeadingColor ? `
+                  <button type="button" class="quiet" data-construct-reset="stageHeadingColor" style="font-size:11px;padding:4px 8px;margin-left:8px;border-radius:6px" title="Сбросить к авто-цвету текста карточки">↺ Авто</button>
+                ` : ''}
               </div>
             </div>
 
@@ -5423,6 +5452,19 @@ body.auth-locked #auth-close{display:none!important}
       let b = mockSelect.dataset.mockSelect;
       if (b === 'action-btn' || b === 'accent-btn') b = 'nav-btns';
       activeConstructorBlock = b;
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
+
+    // Construct reset button
+    const constructReset = e.target.closest('[data-construct-reset]');
+    if (constructReset) {
+      e.stopPropagation();
+      const b = constructReset.dataset.constructReset;
+      if (b === 'stageHeadingColor') {
+        delete currentTheme.stageHeadingColor;
+      }
+      applyTheme(currentTheme, true);
       if (window.__rerenderDesign) window.__rerenderDesign();
       return;
     }
