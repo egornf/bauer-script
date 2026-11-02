@@ -5,130 +5,129 @@
 <script>
 (function(){
   try {
-    const savedTheme = localStorage.getItem("bauer-color-theme");
-    document.documentElement.dataset.theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const curLogin = localStorage.getItem("bauer-current-login");
+    let raw = curLogin ? localStorage.getItem("bauer-user-theme:" + curLogin) : null;
     
-    // Find active theme config: prioritize bauer-active-theme, then bauer-user-theme:* or bauer-user-theme
-    let raw = localStorage.getItem("bauer-active-theme");
+    // Initial entry for everyone: Classic BAUER, Light!
     if (!raw) {
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('bauer-user-theme:')) { raw = localStorage.getItem(k); break; }
-      }
+      document.documentElement.dataset.theme = "light";
+      document.documentElement.dataset.themePreset = "default";
+      document.documentElement.dataset.cardStyle = "default";
+      document.documentElement.dataset.headerPattern = "none";
+      document.documentElement.dataset.bodyPattern = "none";
+      document.documentElement.dataset.pageDark = "0";
+      return;
     }
-    if (!raw) raw = localStorage.getItem("bauer-user-theme");
-    
-    if (raw) {
-      const ut = JSON.parse(raw);
-      if (ut.id === 'velvet-night') { localStorage.removeItem('bauer-active-theme'); return; }
-      const root = document.documentElement;
-      if (ut.preset) root.dataset.themePreset = ut.preset;
-      const cardStyle = ut.cardStyle === 'frosted' ? 'glass' : (ut.cardStyle || 'default');
-      root.dataset.cardStyle = cardStyle;
-      if (ut.headerPattern) root.dataset.headerPattern = ut.headerPattern;
-      if (ut.bodyPattern) root.dataset.bodyPattern = ut.bodyPattern;
 
-      // Header
-      if (ut.headerBg) {
-        root.style.setProperty('--custom-header-bg', ut.headerBg);
-        const hd = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(ut.headerBg);
-        const lum = hd ? (parseInt(hd[1],16)*0.299 + parseInt(hd[2],16)*0.587 + parseInt(hd[3],16)*0.114) : 100;
-        const dark = lum < 135;
-        root.style.setProperty('--custom-header-fg', dark ? '#ffffff' : '#12262e');
-        root.style.setProperty('--custom-header-soft', dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.07)');
-        root.style.setProperty('--custom-header-line', dark ? 'rgba(255,255,255,.28)' : 'rgba(0,0,0,.2)');
-      }
+    const ut = JSON.parse(raw);
+    if (!ut) return;
+    const root = document.documentElement;
 
-      // Accent
-      const effAccent = ut.accent || '#008578';
-      root.style.setProperty('--custom-accent', effAccent);
-      const ad = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(effAccent);
-      const accLum = ad ? (parseInt(ad[1],16)*0.299 + parseInt(ad[2],16)*0.587 + parseInt(ad[3],16)*0.114) : 100;
-      const accDark = accLum < 140;
-      root.style.setProperty('--custom-accent-fg', accDark ? '#ffffff' : '#142026');
-      root.style.setProperty('--custom-accent-border', accDark ? 'color-mix(in srgb, ' + effAccent + ' 80%, #ffffff)' : 'color-mix(in srgb, ' + effAccent + ' 80%, #000000)');
+    root.dataset.theme = ut.theme === "dark" ? "dark" : "light";
+    root.dataset.themePreset = ut.id || "custom";
+    const cardStyle = ut.cardStyle === 'frosted' ? 'glass' : (ut.cardStyle || 'default');
+    root.dataset.cardStyle = cardStyle;
+    root.dataset.headerPattern = ut.headerPattern || 'none';
+    root.dataset.bodyPattern = ut.bodyPattern || 'none';
 
-      // Background Image & Body
-      if (ut.bodyBg) root.style.setProperty('--custom-body-bg', ut.bodyBg);
-      if (typeof ut.bgDim === 'number') root.style.setProperty('--custom-bg-dim', ut.bgDim);
-      if (ut.bgImage) {
-        root.dataset.hasBg = '1';
-        const st = document.createElement('style');
-        st.id = 'custom-bg-style';
-        st.dataset.sig = ut.bgImage;
-        st.textContent = ':root{--custom-bg-image:url("' + ut.bgImage + '")}';
-        document.head.appendChild(st);
-      }
+    // Header
+    if (ut.headerBg) {
+      root.style.setProperty('--custom-header-bg', ut.headerBg);
+      const hd = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(ut.headerBg);
+      const lum = hd ? (parseInt(hd[1],16)*0.299 + parseInt(hd[2],16)*0.587 + parseInt(hd[3],16)*0.114) : 100;
+      const dark = lum < 135;
+      root.style.setProperty('--custom-header-fg', dark ? '#ffffff' : '#12262e');
+      root.style.setProperty('--custom-header-soft', dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.07)');
+      root.style.setProperty('--custom-header-line', dark ? 'rgba(255,255,255,.28)' : 'rgba(0,0,0,.2)');
+    }
 
-      // Page luminance & foreground
-      const hasImage = !!ut.bgImage;
-      let pageDark = false;
-      if (hasImage) {
-        pageDark = typeof ut.bgLum === 'number' ? ut.bgLum < 0.48 : true;
-      } else if (ut.bodyBg && typeof ut.bodyBg === 'string') {
-        const hexes = ut.bodyBg.match(/#[0-9a-fA-F]{3,8}\b/g);
-        if (hexes && hexes.length) {
-          const lums = hexes.map(h => {
-            const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h) || (h.length === 4 ? /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(h) : null);
-            if (!m) return 0.5;
-            const r = parseInt(m[1].length===1?m[1]+m[1]:m[1], 16), g = parseInt(m[2].length===1?m[2]+m[2]:m[2], 16), b = parseInt(m[3].length===1?m[3]+m[3]:m[3], 16);
-            return (r*0.299 + g*0.587 + b*0.114) / 255;
-          });
-          pageDark = (lums.reduce((a,b)=>a+b, 0) / lums.length) < 0.48;
-        } else {
-          pageDark = ut.theme === 'dark';
-        }
+    // Accent
+    const effAccent = ut.accent || '#008578';
+    root.style.setProperty('--custom-accent', effAccent);
+    const ad = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(effAccent);
+    const accLum = ad ? (parseInt(ad[1],16)*0.299 + parseInt(ad[2],16)*0.587 + parseInt(ad[3],16)*0.114) : 100;
+    const accDark = accLum < 140;
+    root.style.setProperty('--custom-accent-fg', accDark ? '#ffffff' : '#142026');
+    root.style.setProperty('--custom-accent-border', accDark ? 'color-mix(in srgb, ' + effAccent + ' 80%, #ffffff)' : 'color-mix(in srgb, ' + effAccent + ' 80%, #000000)');
+
+    // Background Image & Body
+    if (ut.bodyBg) root.style.setProperty('--custom-body-bg', ut.bodyBg);
+    if (typeof ut.bgDim === 'number') root.style.setProperty('--custom-bg-dim', ut.bgDim);
+    if (ut.bgImage) {
+      root.dataset.hasBg = '1';
+      const st = document.createElement('style');
+      st.id = 'custom-bg-style';
+      st.dataset.sig = ut.bgImage;
+      st.textContent = ':root{--custom-bg-image:url("' + ut.bgImage + '")}';
+      document.head.appendChild(st);
+    }
+
+    // Page luminance & foreground
+    const hasImage = !!ut.bgImage;
+    let pageDark = false;
+    if (hasImage) {
+      pageDark = typeof ut.bgLum === 'number' ? ut.bgLum < 0.48 : true;
+    } else if (ut.bodyBg && typeof ut.bodyBg === 'string') {
+      const hexes = ut.bodyBg.match(/#[0-9a-fA-F]{3,8}\b/g);
+      if (hexes && hexes.length) {
+        const lums = hexes.map(h => {
+          const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h) || (h.length === 4 ? /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(h) : null);
+          if (!m) return 0.5;
+          const r = parseInt(m[1].length===1?m[1]+m[1]:m[1], 16), g = parseInt(m[2].length===1?m[2]+m[2]:m[2], 16), b = parseInt(m[3].length===1?m[3]+m[3]:m[3], 16);
+          return (r*0.299 + g*0.587 + b*0.114) / 255;
+        });
+        pageDark = (lums.reduce((a,b)=>a+b, 0) / lums.length) < 0.48;
       } else {
         pageDark = ut.theme === 'dark';
       }
-      root.dataset.pageDark = pageDark ? '1' : '0';
-      root.style.setProperty('--custom-page-fg', pageDark ? '#ffffff' : '#12262e');
-      root.style.setProperty('--custom-page-shadow', pageDark ? '0 1px 4px rgba(0,0,0,.85)' : 'none');
-      root.style.setProperty('--custom-page-soft', pageDark ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.06)');
-      root.style.setProperty('--custom-page-soft-hover', pageDark ? 'rgba(255,255,255,.26)' : 'rgba(0,0,0,.12)');
-      root.style.setProperty('--custom-page-line', pageDark ? 'rgba(255,255,255,.32)' : 'rgba(0,0,0,.18)');
-      root.style.setProperty('--custom-input-bg', pageDark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.92)');
-      root.style.setProperty('--custom-input-fg', pageDark ? '#ffffff' : '#12262e');
-      root.style.setProperty('--custom-placeholder', pageDark ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.55)');
+    } else {
+      pageDark = ut.theme === 'dark';
+    }
+    root.dataset.pageDark = pageDark ? '1' : '0';
+    root.style.setProperty('--custom-page-fg', pageDark ? '#ffffff' : '#12262e');
+    root.style.setProperty('--custom-page-shadow', pageDark ? '0 1px 4px rgba(0,0,0,.85)' : 'none');
+    root.style.setProperty('--custom-page-soft', pageDark ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.06)');
+    root.style.setProperty('--custom-page-soft-hover', pageDark ? 'rgba(255,255,255,.26)' : 'rgba(0,0,0,.12)');
+    root.style.setProperty('--custom-page-line', pageDark ? 'rgba(255,255,255,.32)' : 'rgba(0,0,0,.18)');
+    root.style.setProperty('--custom-input-bg', pageDark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.92)');
+    root.style.setProperty('--custom-input-fg', pageDark ? '#ffffff' : '#12262e');
+    root.style.setProperty('--custom-placeholder', pageDark ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.55)');
 
-      // Step buttons (Inactive) - Always contrasty & clear
-      root.style.setProperty('--custom-step-bg', 'rgba(255, 255, 255, 0.92)');
-      root.style.setProperty('--custom-step-border', pageDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.16)');
-      root.style.setProperty('--custom-step-fg', '#142026');
-      root.style.setProperty('--custom-step-num-bg', 'rgba(0, 0, 0, 0.08)');
-      root.style.setProperty('--custom-step-hover', '#ffffff');
+    // Step buttons (Inactive) - Always contrasty & clear
+    root.style.setProperty('--custom-step-bg', 'rgba(255, 255, 255, 0.92)');
+    root.style.setProperty('--custom-step-border', pageDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.16)');
+    root.style.setProperty('--custom-step-fg', '#142026');
+    root.style.setProperty('--custom-step-num-bg', 'rgba(0, 0, 0, 0.08)');
+    root.style.setProperty('--custom-step-hover', '#ffffff');
 
-      // Card / Block styles
-      if (cardStyle === 'glass') {
-        const trans = Math.max(0, Math.min(100, typeof ut.cardTransparency === 'number' ? ut.cardTransparency : 60));
-        const a = Math.max(0, Math.min(1, (100 - trans) / 100));
-        const cardCol = ut.cardColor || '#ffffff';
-        const cd = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(cardCol);
-        const rgb = cd ? [parseInt(cd[1],16), parseInt(cd[2],16), parseInt(cd[3],16)] : [255,255,255];
-        const cardBg = a <= 0.001 ? 'transparent' : ('rgba(' + rgb.join(',') + ',' + a.toFixed(2) + ')');
-        root.style.setProperty('--custom-card-bg', cardBg);
-        root.style.setProperty('--custom-card-blur', (trans >= 98 ? 0 : Math.round(8 * (1 - trans / 100) + 1)) + 'px');
+    // Card / Block styles
+    if (cardStyle === 'glass') {
+      const trans = Math.max(0, Math.min(100, typeof ut.cardTransparency === 'number' ? ut.cardTransparency : 60));
+      const a = Math.max(0, Math.min(1, (100 - trans) / 100));
+      const cardCol = ut.cardColor || '#ffffff';
+      const cd = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(cardCol);
+      const rgb = cd ? [parseInt(cd[1],16), parseInt(cd[2],16), parseInt(cd[3],16)] : [255,255,255];
+      const cardBg = a <= 0.001 ? 'transparent' : ('rgba(' + rgb.join(',') + ',' + a.toFixed(2) + ')');
+      root.style.setProperty('--custom-card-bg', cardBg);
+      root.style.setProperty('--custom-card-blur', (trans >= 98 ? 0 : Math.round(8 * (1 - trans / 100) + 1)) + 'px');
 
-        const lineTrans = Math.max(0, Math.min(100, typeof ut.lineTransparency === 'number' ? ut.lineTransparency : 40));
-        const lineA = Math.max(0, Math.min(1, (100 - lineTrans) / 100));
-        const lineBg = lineA <= 0.001 ? 'transparent' : ('rgba(255,255,255,' + lineA.toFixed(2) + ')');
-        root.style.setProperty('--custom-line-bg', lineBg);
-        root.style.setProperty('--custom-line-blur', lineTrans >= 98 ? '0px' : '4px');
-        root.style.setProperty('--custom-line-border', lineA <= 0.001 ? 'rgba(255,255,255,0.18)' : ('rgba(255,255,255,' + (0.15 + 0.25 * lineA).toFixed(2) + ')'));
-
-        let effDark = (a < 0.3) ? pageDark : false;
-        if (ut.textColorMode === 'light') effDark = true;
-        else if (ut.textColorMode === 'dark') effDark = false;
-        const blockFg = effDark ? '#ffffff' : '#12262e';
-        root.style.setProperty('--custom-block-fg', blockFg);
-        root.style.setProperty('--custom-line-fg', blockFg);
-        root.style.setProperty('--custom-line-shadow', effDark ? '0 1px 2px rgba(0,0,0,0.6)' : 'none');
-        root.style.setProperty('--custom-pill-bg', effDark ? 'rgba(0, 0, 0, 0.50)' : 'rgba(255, 255, 255, 0.88)');
-        root.style.setProperty('--custom-pill-fg', effDark ? '#ffffff' : '#12262e');
-        root.style.setProperty('--custom-pill-border', effDark ? 'rgba(255, 255, 255, 0.30)' : 'rgba(0, 0, 0, 0.15)');
-      } else if (ut.cardColor) {
-        root.style.setProperty('--custom-card-bg', ut.cardColor);
-      }
+      const lineTrans = Math.max(0, Math.min(100, typeof ut.lineTransparency === 'number' ? ut.lineTransparency : 40));
+      const lineA = Math.max(0, Math.min(1, (100 - lineTrans) / 100));
+      root.style.setProperty('--custom-line-bg', lineA <= 0.001 ? 'transparent' : ('rgba(255,255,255,' + lineA.toFixed(2) + ')'));
+      root.style.setProperty('--custom-line-shadow', lineA <= 0.001 ? 'none' : '0 1px 3px rgba(0,0,0,0.06)');
+      root.style.setProperty('--custom-line-border', lineA <= 0.001 ? 'transparent' : 'rgba(255,255,255,0.4)');
+      root.style.setProperty('--custom-line-blur', lineA <= 0.001 ? 'none' : 'blur(4px)');
+      const lineDk = (lineA * 0.9 + (1 - lineA) * (pageDark ? 0.05 : 0.9)) < 0.42;
+      root.style.setProperty('--custom-line-fg', lineDk ? '#ffffff' : '#142026');
+      root.style.setProperty('--custom-block-fg', pageDark ? '#ffffff' : '#142026');
+    } else if (cardStyle === 'neon') {
+      root.style.setProperty('--custom-card-bg', 'rgba(10,16,26,.88)');
+      root.style.setProperty('--custom-block-fg', '#e6f2f0');
+    } else if (ut.cardColor) {
+      root.style.setProperty('--custom-card-bg', ut.cardColor);
+      const cd = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(ut.cardColor);
+      const lum = cd ? (parseInt(cd[1],16)*0.299 + parseInt(cd[2],16)*0.587 + parseInt(cd[3],16)*0.114) : 255;
+      root.style.setProperty('--custom-block-fg', lum < 135 ? '#ffffff' : '#12262e');
     }
   } catch(e) {
     document.documentElement.dataset.theme = "light";
@@ -1945,7 +1944,16 @@ window.addEventListener('hashchange',()=>{initialPosition();go(current,{fromHash
 </script>
 <script id="feature-script">let adminUnlocked=false,authSetup=false,afterAuth=null,savedLayouts=[],previewId=null,previewSnapshot=null,uploadGiftId=null,uploadContext='active',deletingLayout=null,isPublishing=false;
 function updateThemeButton(){const dark=document.documentElement.dataset.theme==='dark',button=$('#theme-toggle');button.innerHTML=(dark?'☀':'☾')+' <span>'+(dark?'Светлая':'Тёмная')+'</span>';button.setAttribute('aria-label',dark?'Включить светлую тему':'Включить тёмную тему');button.setAttribute('aria-pressed',String(dark));}
-$('#theme-toggle').addEventListener('click',()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';try{localStorage.setItem('bauer-color-theme',document.documentElement.dataset.theme);}catch{}updateThemeButton();});
+$('#theme-toggle').addEventListener('click',()=>{
+  const newTheme = document.documentElement.dataset.theme==='dark'?'light':'dark';
+  document.documentElement.dataset.theme = newTheme;
+  try{localStorage.setItem('bauer-color-theme',newTheme);}catch{}
+  updateThemeButton();
+  if (typeof currentTheme !== 'undefined' && currentTheme) {
+    currentTheme.theme = newTheme;
+    if (typeof applyTheme === 'function') applyTheme({ theme: newTheme }, true);
+  }
+});
 updateThemeButton();
 const offline=location.protocol==='file:';
 const cleanPhoto=src=>typeof src==='string'&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(src)?src:'';
@@ -2893,6 +2901,7 @@ $('#auth-form').addEventListener('submit',async event=>{
   try{
     const res=await api('/api/admin/'+(authSetup?'setup':'login'),{method:'POST',body:JSON.stringify({password,login:$('#admin-login').value})});
     adminUnlocked=true;currentUser=res.user||null;if(res.csrfToken)csrfToken=res.csrfToken;
+    if (currentUser) { try { localStorage.setItem('bauer-current-login', currentUser.login); } catch(e){} }
     dispatchEvent(new Event('auth-changed')); window.dispatchEvent(new CustomEvent('bauer:auth-changed')); if(typeof window.fetchSharedThemes === 'function') window.fetchSharedThemes();
     $('#auth-dialog').close();
     if(res.recoveryCodes&&res.recoveryCodes.length&&typeof window.showOwnerRecoveryCodesModal==='function'){
@@ -3746,27 +3755,24 @@ body.auth-locked #auth-close{display:none!important}
   ];
 
   function getUserThemeKey() {
-    const user = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : null;
-    return user ? ('bauer-user-theme:' + user) : 'bauer-user-theme';
+    const user = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : localStorage.getItem('bauer-current-login');
+    return user ? ('bauer-user-theme:' + user) : null;
   }
 
   function loadSavedTheme() {
     try {
-      const activeRaw = localStorage.getItem('bauer-active-theme');
-      if (activeRaw) {
-        const o = JSON.parse(activeRaw);
-        if (o.id === 'velvet-night') return { ...PRESETS[0] };
-        if (o.cardStyle === 'frosted') o.cardStyle = 'glass';
-        return o;
-      }
-      const raw = localStorage.getItem(getUserThemeKey()) || localStorage.getItem('bauer-user-theme');
-      if (raw) {
-        const o = JSON.parse(raw);
-        if (o.cardStyle === 'frosted') o.cardStyle = 'glass';
-        return o;
+      const key = getUserThemeKey();
+      if (key) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const o = JSON.parse(raw);
+          if (o.cardStyle === 'frosted') o.cardStyle = 'glass';
+          return o;
+        }
       }
     } catch (e) {}
-    return { ...PRESETS[0] };
+    // Initial entry for everyone: Classic BAUER, Light!
+    return { ...PRESETS[0], theme: 'light' };
   }
 
   function getCustomThemesKey() {
@@ -4092,8 +4098,12 @@ body.auth-locked #auth-close{display:none!important}
     // Synchronous immediate save so reloads never lose state
     if (save) {
       try {
-        localStorage.setItem('bauer-active-theme', JSON.stringify(currentTheme));
-        localStorage.setItem(getUserThemeKey(), JSON.stringify(currentTheme));
+        const user = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : localStorage.getItem('bauer-current-login');
+        if (user) {
+          localStorage.setItem('bauer-current-login', user);
+          localStorage.setItem('bauer-user-theme:' + user, JSON.stringify(currentTheme));
+        }
+        localStorage.setItem('bauer-color-theme', currentTheme.theme || 'light');
       } catch (e) {}
     }
   }
@@ -5030,6 +5040,8 @@ async function performLogout(){
     await api('/api/admin/logout',{method:'POST',body:'{}'});
   }catch{}
   adminUnlocked=false;currentUser=null;
+  try { localStorage.removeItem('bauer-current-login'); } catch (e) {}
+  if (typeof refreshUserTheme === 'function') refreshUserTheme();
   updateHeaderBadge();
   showScript();
   toast('Вы вышли из учётной записи');
@@ -5053,6 +5065,12 @@ api('/api/admin/status').then(st=>{
   if(st.csrfToken)csrfToken=st.csrfToken;
   if(st.roleDefaults)roleDefaults=st.roleDefaults;
   updateHeaderBadge();
+  if (currentUser) {
+    try { localStorage.setItem('bauer-current-login', currentUser.login); } catch (e) {}
+  } else {
+    try { localStorage.removeItem('bauer-current-login'); } catch (e) {}
+  }
+  if (typeof refreshUserTheme === 'function') refreshUserTheme();
   if(currentUser&&currentUser.mustChangePassword){
     showChangeTempPasswordModal();
     return;
@@ -5061,6 +5079,7 @@ api('/api/admin/status').then(st=>{
     ensureAdmin(()=>{updateHeaderBadge();});
   }
 }).catch(()=>{
+  if (typeof refreshUserTheme === 'function') refreshUserTheme();
   ensureAdmin(()=>{updateHeaderBadge();});
 });
 
