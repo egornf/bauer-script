@@ -1079,14 +1079,20 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 
 /* Adaptive controls & high contrast text across ALL dark and light themes */
 :root[data-page-dark="1"] .intro h1,
+:root[data-page-dark="1"] .intro-left h1,
 :root[data-theme="dark"] .intro h1,
-:root[style*="--custom-page-fg"] .intro h1 {
+:root[data-theme="dark"] .intro-left h1,
+:root[style*="--custom-page-fg"] .intro h1,
+:root[style*="--custom-page-fg"] .intro-left h1 {
   color: var(--custom-page-fg, #ffffff) !important;
   text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,.85)) !important;
 }
 :root[data-page-dark="1"] .intro .sub,
+:root[data-page-dark="1"] .intro-left .sub,
 :root[data-theme="dark"] .intro .sub,
-:root[style*="--custom-page-fg"] .intro .sub {
+:root[data-theme="dark"] .intro-left .sub,
+:root[style*="--custom-page-fg"] .intro .sub,
+:root[style*="--custom-page-fg"] .intro-left .sub {
   color: var(--custom-page-fg, #ffffff) !important;
   opacity: 0.92 !important;
   text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,.85)) !important;
@@ -1116,6 +1122,15 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   text-shadow: var(--custom-page-shadow, none) !important;
   transition: all .16s ease !important;
 }
+:root[data-page-dark="1"] #whole-script,
+:root[data-theme="dark"] #whole-script,
+:root[style*="--custom-page-fg: #ffffff"] #whole-script,
+:root[style*="--custom-page-fg:#ffffff"] #whole-script {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  border: 1.5px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 65%, rgba(255, 255, 255, 0.35)) !important;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+}
 #whole-script:hover {
   background: var(--custom-accent, var(--teal)) !important;
   color: var(--custom-accent-fg, #ffffff) !important;
@@ -1131,20 +1146,25 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   -webkit-backdrop-filter: blur(8px) !important;
 }
 .search-wrap input::placeholder {
-  color: var(--custom-placeholder, rgba(0, 0, 0, 0.55)) !important;
+  color: var(--custom-placeholder, var(--custom-input-placeholder, rgba(0, 0, 0, 0.55))) !important;
 }
 :root[data-page-dark="1"] .search-wrap input,
-:root[data-theme="dark"] .search-wrap input {
-  background: var(--custom-input-bg, rgba(15, 23, 42, 0.75)) !important;
+:root[data-theme="dark"] .search-wrap input,
+:root[style*="--custom-page-fg: #ffffff"] .search-wrap input,
+:root[style*="--custom-page-fg:#ffffff"] .search-wrap input {
+  background: var(--custom-input-bg, rgba(15, 23, 42, 0.78)) !important;
   color: #ffffff !important;
-  border-color: color-mix(in srgb, var(--custom-accent, var(--teal)) 60%, rgba(255, 255, 255, 0.28)) !important;
+  border-color: color-mix(in srgb, var(--custom-accent, var(--teal)) 60%, rgba(255, 255, 255, 0.3)) !important;
 }
 :root[data-page-dark="1"] .search-wrap input::placeholder,
-:root[data-theme="dark"] .search-wrap input::placeholder {
-  color: rgba(255, 255, 255, 0.65) !important;
+:root[data-theme="dark"] .search-wrap input::placeholder,
+:root[style*="--custom-page-fg: #ffffff"] .search-wrap input::placeholder,
+:root[style*="--custom-page-fg:#ffffff"] .search-wrap input::placeholder {
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 .search-wrap .search-icon {
   color: var(--custom-accent, var(--teal)) !important;
+  opacity: 0.9 !important;
 }
 :root[data-page-dark="1"] .search-results,
 :root[data-theme="dark"] .search-results {
@@ -1196,8 +1216,9 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[data-page-dark="1"] .pager .pager-back:disabled,
 :root[data-theme="dark"] .pager .pager-back:disabled,
 :root[style*="--custom-page-fg"] .pager .pager-back:disabled {
-  opacity: 0.45 !important;
+  opacity: 0.55 !important;
   cursor: not-allowed !important;
+  color: color-mix(in srgb, var(--custom-page-fg, #ffffff) 65%, transparent) !important;
 }
 
 :root[data-page-dark="1"] .edit-note,
@@ -3735,7 +3756,7 @@ body.auth-locked #auth-close{display:none!important}
       desc: 'Глубокий хвойный градиент и эффект матового стекла',
       headerBg: '#0d3832',
       headerPattern: 'cyber',
-      theme: 'light',
+      theme: 'dark',
       accent: '#00f5d4',
       cardStyle: 'glass',
       bodyPattern: 'none',
@@ -3891,7 +3912,15 @@ body.auth-locked #auth-close{display:none!important}
 
   function hexRgb(hex) {
     if (!hex || typeof hex !== 'string') return null;
-    const m = /^#?([a-fd]{2})([a-fd]{2})([a-fd]{2})$/i.exec(hex.trim());
+    const clean = hex.trim().replace(/^#/, '');
+    if (clean.length === 3) {
+      return [
+        parseInt(clean[0] + clean[0], 16),
+        parseInt(clean[1] + clean[1], 16),
+        parseInt(clean[2] + clean[2], 16)
+      ];
+    }
+    const m = /^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(clean);
     return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : null;
   }
   function relLum(rgb) {
