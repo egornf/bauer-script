@@ -86,6 +86,17 @@
     root.dataset.pageDark = pageDark ? '1' : '0';
     root.style.setProperty('--custom-page-fg', pageDark ? '#ffffff' : '#12262e');
     root.style.setProperty('--custom-page-shadow', pageDark ? '0 1px 4px rgba(0,0,0,.85)' : 'none');
+    if (ut.pageTextColor) root.style.setProperty('--custom-page-fg', ut.pageTextColor);
+    if (ut.pageTextShadow) root.style.setProperty('--custom-page-shadow', ut.pageTextShadow);
+    if (ut.pillBg) root.style.setProperty('--custom-pill-bg', ut.pillBg);
+    if (ut.pillFg) root.style.setProperty('--custom-pill-fg', ut.pillFg);
+    if (ut.pillBorder) root.style.setProperty('--custom-pill-border', ut.pillBorder);
+    if (ut.objectionHeadingColor) root.style.setProperty('--custom-objection-title', ut.objectionHeadingColor);
+    if (ut.objectionHintColor) root.style.setProperty('--custom-objection-sub', ut.objectionHintColor);
+    if (ut.objectionBtnBg) root.style.setProperty('--custom-objection-btn-bg', ut.objectionBtnBg);
+    if (ut.objectionBtnFg) root.style.setProperty('--custom-objection-btn-fg', ut.objectionBtnFg);
+    if (ut.actionBtnBg) root.style.setProperty('--custom-action-btn-bg', ut.actionBtnBg);
+    if (ut.actionBtnFg) root.style.setProperty('--custom-action-btn-fg', ut.actionBtnFg);
     root.style.setProperty('--custom-page-soft', pageDark ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.06)');
     root.style.setProperty('--custom-page-soft-hover', pageDark ? 'rgba(255,255,255,.26)' : 'rgba(0,0,0,.12)');
     root.style.setProperty('--custom-page-line', pageDark ? 'rgba(255,255,255,.32)' : 'rgba(0,0,0,.18)');
@@ -908,6 +919,207 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   background: var(--custom-page-soft) !important;
   border-color: var(--custom-page-line) !important;
 }
+/* Custom Objections Section (Linked: Title, Subtitle, Footnote, Buttons) */
+:root[style*="--custom-objection-title"] .objections-pane h3 {
+  color: var(--custom-objection-title) !important;
+}
+:root[style*="--custom-objection-sub"] .objections-pane .sub,
+:root[style*="--custom-objection-sub"] .objections-pane .rail-foot {
+  color: var(--custom-objection-sub) !important;
+}
+:root[style*="--custom-objection-btn-bg"] .objections-pane .objection-button {
+  background: var(--custom-objection-btn-bg) !important;
+}
+:root[style*="--custom-objection-btn-fg"] .objections-pane .objection-button {
+  color: var(--custom-objection-btn-fg) !important;
+}
+
+/* Custom Secondary Action Buttons (Linked: "Весь скрипт" and "Назад") */
+:root[style*="--custom-action-btn-bg"] #whole-script,
+:root[style*="--custom-action-btn-bg"] .pager .pager-back {
+  background: var(--custom-action-btn-bg) !important;
+}
+:root[style*="--custom-action-btn-fg"] #whole-script,
+:root[style*="--custom-action-btn-fg"] .pager .pager-back {
+  color: var(--custom-action-btn-fg) !important;
+}
+
+/* Custom Stage Count Pill Overrides */
+:root[style*="--custom-pill-bg"] .stage-count {
+  background: var(--custom-pill-bg) !important;
+}
+:root[style*="--custom-pill-fg"] .stage-count,
+:root[style*="--custom-pill-fg"] .stage-count strong,
+:root[style*="--custom-pill-fg"] .stage-count span {
+  color: var(--custom-pill-fg) !important;
+}
+
+/* Interactive Theme Constructor Styles */
+.constructor-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+}
+.constructor-nav-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 6px;
+  background: var(--surface-alt, #f3f6f5);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.constructor-nav-pills button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 750;
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.constructor-nav-pills button:hover {
+  background: var(--surface, #ffffff);
+  border-color: var(--line);
+}
+.constructor-nav-pills button.active {
+  background: var(--custom-accent, var(--teal, #008578));
+  color: var(--custom-accent-fg, #ffffff);
+  border-color: var(--custom-accent, var(--teal, #008578));
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
+.constructor-canvas {
+  position: relative;
+  border-radius: 18px;
+  padding: 18px;
+  border: 2px dashed rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+  overflow: hidden;
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.06);
+  cursor: default;
+}
+:root[data-theme="dark"] .constructor-canvas {
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.mock-hotspot {
+  position: relative;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: all 0.15s ease;
+}
+.mock-hotspot:hover {
+  outline: 2px solid var(--custom-accent, var(--teal, #008578));
+  outline-offset: 2px;
+}
+.mock-hotspot.active {
+  outline: 2.5px solid var(--custom-accent, var(--teal, #008578)) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 30%, transparent) !important;
+}
+.mock-tag {
+  position: absolute;
+  top: -8px;
+  right: 6px;
+  background: var(--custom-accent, var(--teal, #008578));
+  color: var(--custom-accent-fg, #ffffff);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  z-index: 10;
+  white-space: nowrap;
+}
+
+.constructor-inspector {
+  background: var(--surface, #ffffff);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.06);
+}
+.inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.inspector-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.inspector-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.inspector-linked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--custom-accent, var(--teal)) 14%, transparent);
+  color: var(--custom-accent, var(--teal));
+  font-size: 11px;
+  font-weight: 750;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 35%, transparent);
+}
+.gradient-swatches-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.gradient-swatch-card {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface-alt);
+}
+.gradient-swatch-card:hover {
+  border-color: var(--teal);
+  transform: translateY(-1px);
+}
+.gradient-swatch-card.active {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px var(--teal);
+}
+.gradient-swatch-bar {
+  height: 24px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+}
+.gradient-swatch-card span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+}
+
 /* preview + split layout + 3-dots menu */
 .tcd-split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; align-items: start; }
 @media (max-width: 960px) { .tcd-split { grid-template-columns: 1fr; } }
@@ -1461,7 +1673,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 
 </head>
 <body>
-<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet theme-toggle" id="theme-toggle" aria-label="Включить тёмную тему" title="Переключить тему" aria-pressed="false">☾ <span>Тёмная</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
+<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet header-design-btn" id="header-design-btn" title="Персональный дизайн и конструктор темы" aria-label="Конструктор темы оформления">🎨 <span>Дизайн</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
 <nav class="app-switcher" aria-label="Разделы сайта"><div class="switcher-tabs"><button id="script-tab" class="section-tab active" aria-pressed="true">Скрипт</button><button id="gifts-tab" class="section-tab" aria-pressed="false" hidden="">Подарки</button><button id="sms-tab" class="section-tab" aria-pressed="false">Помощник СМС</button><button id="objections-tab" class="section-tab" aria-pressed="false">Возражения</button><button id="layouts-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M6 9V6a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg>Макеты</button><button id="addresses-tab" class="section-tab" aria-pressed="false">Адреса</button></div><span class="switcher-hint">Рабочее пространство оператора</span></nav>
 <main class="workspace">
   <div class="intro">
@@ -2001,8 +2213,14 @@ document.addEventListener('keydown',e=>{
 window.addEventListener('hashchange',()=>{initialPosition();go(current,{fromHash:true});});
 </script>
 <script id="feature-script">let adminUnlocked=false,authSetup=false,afterAuth=null,savedLayouts=[],previewId=null,previewSnapshot=null,uploadGiftId=null,uploadContext='active',deletingLayout=null,isPublishing=false;
-function updateThemeButton(){const dark=document.documentElement.dataset.theme==='dark',button=$('#theme-toggle');button.innerHTML=(dark?'☀':'☾')+' <span>'+(dark?'Светлая':'Тёмная')+'</span>';button.setAttribute('aria-label',dark?'Включить светлую тему':'Включить тёмную тему');button.setAttribute('aria-pressed',String(dark));}
-$('#theme-toggle').addEventListener('click',()=>{
+function updateThemeButton(){
+  const dark=document.documentElement.dataset.theme==='dark',button=$('#theme-toggle');
+  if(!button) return;
+  button.innerHTML=(dark?'☀':'☾')+' <span>'+(dark?'Светлая':'Тёмная')+'</span>';
+  button.setAttribute('aria-label',dark?'Включить светлую тему':'Включить тёмную тему');
+  button.setAttribute('aria-pressed',String(dark));
+}
+$('#theme-toggle')?.addEventListener('click',()=>{
   const newTheme = document.documentElement.dataset.theme==='dark'?'light':'dark';
   document.documentElement.dataset.theme = newTheme;
   try{localStorage.setItem('bauer-color-theme',newTheme);}catch{}
@@ -2011,6 +2229,10 @@ $('#theme-toggle').addEventListener('click',()=>{
     currentTheme.theme = newTheme;
     if (typeof applyTheme === 'function') applyTheme({ theme: newTheme }, true);
   }
+});
+$('#header-design-btn')?.addEventListener('click',()=>{
+  if(typeof openDesignPanel==='function')openDesignPanel();
+  else if(typeof openOwnerPanel==='function'){ownerTab='design';openOwnerPanel();}
 });
 updateThemeButton();
 const offline=location.protocol==='file:';
@@ -3908,6 +4130,7 @@ body.auth-locked #auth-close{display:none!important}
 
   let currentTheme = loadSavedTheme();
   let activeDesignTab = 'presets';
+  let activeConstructorBlock = 'page-text';
   let editingThemeId = null;
 
   function hexRgb(hex) {
@@ -4115,6 +4338,53 @@ body.auth-locked #auth-close{display:none!important}
     root.style.setProperty('--custom-input-bg', pInfo.inputBg);
     root.style.setProperty('--custom-input-fg', pInfo.inputFg);
     root.style.setProperty('--custom-placeholder', pInfo.placeholder);
+
+    // Custom overrides from theme constructor
+    if (currentTheme.pageTextColor) {
+      root.style.setProperty('--custom-page-fg', currentTheme.pageTextColor);
+    }
+    if (currentTheme.pageTextShadow) {
+      root.style.setProperty('--custom-page-shadow', currentTheme.pageTextShadow);
+    }
+    if (currentTheme.pillBg) {
+      root.style.setProperty('--custom-pill-bg', currentTheme.pillBg);
+    }
+    if (currentTheme.pillFg) {
+      root.style.setProperty('--custom-pill-fg', currentTheme.pillFg);
+    }
+    if (currentTheme.pillBorder) {
+      root.style.setProperty('--custom-pill-border', currentTheme.pillBorder);
+    }
+    if (currentTheme.objectionHeadingColor) {
+      root.style.setProperty('--custom-objection-title', currentTheme.objectionHeadingColor);
+    } else {
+      root.style.removeProperty('--custom-objection-title');
+    }
+    if (currentTheme.objectionHintColor) {
+      root.style.setProperty('--custom-objection-sub', currentTheme.objectionHintColor);
+    } else {
+      root.style.removeProperty('--custom-objection-sub');
+    }
+    if (currentTheme.objectionBtnBg) {
+      root.style.setProperty('--custom-objection-btn-bg', currentTheme.objectionBtnBg);
+    } else {
+      root.style.removeProperty('--custom-objection-btn-bg');
+    }
+    if (currentTheme.objectionBtnFg) {
+      root.style.setProperty('--custom-objection-btn-fg', currentTheme.objectionBtnFg);
+    } else {
+      root.style.removeProperty('--custom-objection-btn-fg');
+    }
+    if (currentTheme.actionBtnBg) {
+      root.style.setProperty('--custom-action-btn-bg', currentTheme.actionBtnBg);
+    } else {
+      root.style.removeProperty('--custom-action-btn-bg');
+    }
+    if (currentTheme.actionBtnFg) {
+      root.style.setProperty('--custom-action-btn-fg', currentTheme.actionBtnFg);
+    } else {
+      root.style.removeProperty('--custom-action-btn-fg');
+    }
     root.dataset.headerPattern = currentTheme.headerPattern || 'none';
     root.dataset.bodyPattern = currentTheme.bodyPattern || 'none';
 
@@ -4192,6 +4462,422 @@ body.auth-locked #auth-close{display:none!important}
     }
   });
 
+  
+  function renderConstructorTab() {
+    const isDark = currentTheme.theme === 'dark';
+    const effPageFg = currentTheme.pageTextColor || (isDark ? '#ffffff' : '#142026');
+    const effPageShadow = currentTheme.pageTextShadow !== undefined ? currentTheme.pageTextShadow : (isDark ? '0 1px 4px rgba(0,0,0,0.85)' : 'none');
+    const effCardBg = currentTheme.cardColor || (isDark ? '#162332' : '#ffffff');
+    const effCardFg = currentTheme.textColorMode === 'light' ? '#ffffff' : (currentTheme.textColorMode === 'dark' ? '#142026' : (isDark ? '#ffffff' : '#142026'));
+    const effPillBg = currentTheme.pillBg || (isDark ? 'rgba(0,0,0,0.48)' : 'rgba(0,0,0,0.06)');
+    const effPillFg = currentTheme.pillFg || (isDark ? '#ffffff' : '#142026');
+    const effObTitle = currentTheme.objectionHeadingColor || effCardFg;
+    const effObSub = currentTheme.objectionHintColor || (isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.55)');
+    const effObBtnBg = currentTheme.objectionBtnBg || (isDark ? 'rgba(255,255,255,0.12)' : '#ffffff');
+    const effObBtnFg = currentTheme.objectionBtnFg || effCardFg;
+    const effActionBg = currentTheme.actionBtnBg || (isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.06)');
+    const effActionFg = currentTheme.actionBtnFg || effPageFg;
+    const effAccent = currentTheme.accent || '#008578';
+    const effLineBg = currentTheme.lineColor ? currentTheme.lineColor : (isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.04)');
+    const effLineFg = effCardFg;
+
+    const bgPreviewStyle = currentTheme.bodyBg ? currentTheme.bodyBg : (isDark ? '#080d1a' : '#f0f4f3');
+    const bgImageStyle = currentTheme.bgImage ? 'linear-gradient(rgba(0,0,0,'+(currentTheme.bgDim||0)+'), rgba(0,0,0,'+(currentTheme.bgDim||0)+')), url("' + currentTheme.bgImage + '")' : '';
+    const bgPatternStyle = (!currentTheme.bgImage && currentTheme.bodyPattern && currentTheme.bodyPattern !== 'none') ? 'var(--pat-' + currentTheme.bodyPattern + ')' : '';
+    const finalBgCss = bgImageStyle ? (bgImageStyle + ' center/cover no-repeat') : (bgPatternStyle ? (bgPatternStyle + ' repeat, ' + bgPreviewStyle) : bgPreviewStyle);
+
+    const gradients = [
+      { id: 'emerald', name: 'Изумрудный хвойный', css: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)' },
+      { id: 'space', name: 'Глубокий космос', css: 'linear-gradient(180deg, #090a0f 0%, #15102a 100%)' },
+      { id: 'amber', name: 'Тёплый янтарь', css: 'linear-gradient(135deg, #f7f3ee 0%, #ede5d8 100%)' },
+      { id: 'nordic', name: 'Северное сияние', css: 'linear-gradient(135deg, #e6f4f1 0%, #cce7e1 100%)' },
+      { id: 'cyber', name: 'Кибер Неон', css: 'linear-gradient(135deg, #080c14 0%, #141c2c 100%)' },
+      { id: 'chocolate', name: 'Тёмный шоколад', css: 'linear-gradient(135deg, #1c130d 0%, #2e1d14 100%)' },
+      { id: 'mint', name: 'Мятный бриз', css: 'linear-gradient(135deg, #e2f3ef 0%, #d0eae3 100%)' },
+      { id: 'white', name: 'Чистый белый', css: '#ffffff' }
+    ];
+
+    const solidColors = ['#102f44', '#0d3832', '#070b18', '#090a0f', '#1b3b36', '#2a1a08', '#1e293b', '#f3f6f5', '#ffffff'];
+    const textColors = ['#ffffff', '#142026', '#00f5d4', '#f5b544', '#38bdf8', '#a7f3d0', '#fbcfe8', '#94a3b8'];
+
+    return `<div class="constructor-wrap">
+      <div style="background:var(--surface-alt);border-radius:14px;padding:14px 18px;border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <strong style="font-size:14px;color:var(--ink)">🎨 Интерактивный конструктор макета</strong>
+          <p style="margin:2px 0 0;font-size:12px;color:var(--muted)">
+            Нажимайте прямо на элементы в макете ниже — похожие блоки объединены в <b>связанные группы</b> и обновляются синхронно.
+          </p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:12px;color:var(--muted)">Стандарт темы:</span>
+          <button type="button" class="tcd-option-btn ${!isDark?'selected':''}" data-tcd-prop="theme" data-val="light" style="padding:6px 12px;font-size:11px">☀️ Светлая</button>
+          <button type="button" class="tcd-option-btn ${isDark?'selected':''}" data-tcd-prop="theme" data-val="dark" style="padding:6px 12px;font-size:11px">🌙 Тёмная</button>
+        </div>
+      </div>
+
+      <div class="constructor-nav-pills">
+        <span style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:4px">Выбор блока:</span>
+        <button type="button" class="${activeConstructorBlock==='page-text'?'active':''}" data-mock-select="page-text">📝 Заголовки и подписи</button>
+        <button type="button" class="${activeConstructorBlock==='bg'?'active':''}" data-mock-select="bg">🖼️ Фон страницы</button>
+        <button type="button" class="${activeConstructorBlock==='pill'?'active':''}" data-mock-select="pill">🏷️ Бейдж 01/07</button>
+        <button type="button" class="${activeConstructorBlock==='objections'?'active':''}" data-mock-select="objections">⚡ Блок возражений</button>
+        <button type="button" class="${activeConstructorBlock==='action-btn'?'active':''}" data-mock-select="action-btn">🔘 Кнопки «Весь скрипт» / «Назад»</button>
+        <button type="button" class="${activeConstructorBlock==='card'?'active':''}" data-mock-select="card">🪟 Карточка диалога</button>
+        <button type="button" class="${activeConstructorBlock==='lines'?'active':''}" data-mock-select="lines">💬 Реплики оператора</button>
+        <button type="button" class="${activeConstructorBlock==='accent-btn'?'active':''}" data-mock-select="accent-btn">🟢 Акцент «Далее»</button>
+      </div>
+
+      <!-- Live Mockup of the Site Screen -->
+      <div class="constructor-canvas mock-hotspot ${activeConstructorBlock==='bg'?'active':''}" data-mock-select="bg" style="background:${finalBgCss};min-height:380px" title="Кликните на свободное пространство фона для настройки фона страницы">
+        ${activeConstructorBlock==='bg'?`<span class="mock-tag">✦ Редактируется: Фон страницы</span>`:''}
+
+        <!-- Mock header -->
+        <div style="background:${currentTheme.headerBg||'#102f44'};color:#ffffff;padding:8px 16px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+          <span style="font-weight:900;letter-spacing:1px;font-size:13px">BAUER <small style="font-size:9px;opacity:0.7">НАВИГАТОР РАЗГОВОРА</small></span>
+          <div style="display:flex;gap:6px">
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,0.15)">Скрипт</span>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,0.15)">Возражения</span>
+          </div>
+        </div>
+
+        <!-- Mock controls bar -->
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+          <!-- Page text hotspot -->
+          <div class="mock-hotspot ${activeConstructorBlock==='page-text'?'active':''}" data-mock-select="page-text" style="padding:6px 10px;border-radius:8px" title="Кликните для настройки цвета заголовка и подписей">
+            <div style="font-size:17px;font-weight:800;color:${effPageFg};text-shadow:${effPageShadow}">От звонка до встречи</div>
+            <div style="display:flex;gap:10px;font-size:11px;font-weight:700;color:${effPageFg};text-shadow:${effPageShadow};margin-top:2px">
+              <span>Выбор скрипта: ▾</span>
+              <span>Город: ▾</span>
+              <span>Зал: ▾</span>
+            </div>
+            ${activeConstructorBlock==='page-text'?`<span class="mock-tag">✦ Заголовки и подписи (связаны)</span>`:''}
+          </div>
+
+          <!-- Action button hotspot -->
+          <div class="mock-hotspot ${activeConstructorBlock==='action-btn'?'active':''}" data-mock-select="action-btn" title="Кликните для настройки кнопки">
+            <button type="button" style="padding:7px 14px;border-radius:8px;font-size:11px;font-weight:700;background:${effActionBg};color:${effActionFg};border:1.5px solid color-mix(in srgb, ${effAccent} 55%, rgba(255,255,255,0.3));cursor:pointer">⛶ Весь скрипт</button>
+            ${activeConstructorBlock==='action-btn'?`<span class="mock-tag">✦ Кнопка</span>`:''}
+          </div>
+        </div>
+
+        <!-- Mock Stepper -->
+        <div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px">
+          <div style="padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;background:${effAccent};color:#ffffff;display:flex;align-items:center;gap:6px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.25);font-size:10px">01</span>
+            <span>Приветствие</span>
+          </div>
+          <div style="padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;background:rgba(255,255,255,0.92);color:#142026;display:flex;align-items:center;gap:6px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.08);font-size:10px">02</span>
+            <span>Повод звонка</span>
+          </div>
+          <div style="padding:6px 12px;border-radius:8px;font-size:11px;font-weight:700;background:rgba(255,255,255,0.92);color:#142026;display:flex;align-items:center;gap:6px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.08);font-size:10px">03</span>
+            <span>Программа встречи</span>
+          </div>
+        </div>
+
+        <!-- Mock Stage Card -->
+        <div class="mock-hotspot ${activeConstructorBlock==='card'?'active':''}" data-mock-select="card" style="background:${effCardBg};color:${effCardFg};border-radius:14px;padding:16px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.25);box-shadow:0 6px 20px rgba(0,0,0,0.08)" title="Кликните для настройки карточки диалога">
+          ${activeConstructorBlock==='card'?`<span class="mock-tag">✦ Карточка диалога</span>`:''}
+
+          <!-- Card Header & Badge -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h4 style="margin:0;font-size:18px;font-weight:800">Приветствие</h4>
+            <div class="mock-hotspot ${activeConstructorBlock==='pill'?'active':''}" data-mock-select="pill" style="padding:2px 4px;border-radius:999px" title="Кликните для настройки бейджа номера этапа">
+              <span style="display:inline-block;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:700;background:${effPillBg};color:${effPillFg};border:1px solid rgba(255,255,255,0.3)"><strong>01</strong> / 07</span>
+              ${activeConstructorBlock==='pill'?`<span class="mock-tag">✦ Бейдж этапа (связан)</span>`:''}
+            </div>
+          </div>
+
+          <!-- Replicas Hotspot -->
+          <div class="mock-hotspot ${activeConstructorBlock==='lines'?'active':''}" data-mock-select="lines" style="margin-bottom:14px;padding:4px;border-radius:8px" title="Кликните для настройки реплик диалога">
+            <div style="padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.5;background:${effLineBg};color:${effLineFg};border:1px solid rgba(255,255,255,0.25)">
+              — Наталья Петровна, добрый день! Меня зовут Елена, компания Бауэр...
+            </div>
+            ${activeConstructorBlock==='lines'?`<span class="mock-tag">✦ Реплики диалога</span>`:''}
+          </div>
+
+          <!-- Objections Hotspot -->
+          <div class="mock-hotspot ${activeConstructorBlock==='objections'?'active':''}" data-mock-select="objections" style="padding:12px;border-radius:10px;background:rgba(0,0,0,0.03);border:1px solid rgba(0,0,0,0.07)" title="Кликните для настройки раздела возражений">
+            <div style="font-size:13px;font-weight:800;color:${effObTitle}">Частые возражения</div>
+            <div style="font-size:11px;color:${effObSub};margin:3px 0 9px">Подборка для этого этапа · нажмите на ответ гостя</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button type="button" style="padding:6px 11px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid rgba(0,0,0,0.1);background:${effObBtnBg};color:${effObBtnFg}">Если отмазка: ↗</button>
+              <button type="button" style="padding:6px 11px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid rgba(0,0,0,0.1);background:${effObBtnBg};color:${effObBtnFg}">Если, вдруг не помню: ↗</button>
+            </div>
+            <div style="font-size:10px;color:${effObSub};margin-top:8px">Отработка откроется рядом.Вы вернётесь на тот же этап.</div>
+            ${activeConstructorBlock==='objections'?`<span class="mock-tag">✦ Блок возражений (связан)</span>`:''}
+          </div>
+        </div>
+
+        <!-- Mock Bottom Pager -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:0 4px">
+          <button type="button" class="mock-hotspot ${activeConstructorBlock==='action-btn'?'active':''}" data-mock-select="action-btn" style="padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;background:${effActionBg};color:${effActionFg};border:1px solid rgba(255,255,255,0.3);cursor:pointer">← Назад</button>
+          
+          <div class="mock-hotspot ${activeConstructorBlock==='page-text'?'active':''}" data-mock-select="page-text" style="text-align:center;padding:4px 8px;border-radius:8px" title="Кликните для настройки цвета текста">
+            <strong style="font-size:12px;color:${effPageFg};text-shadow:${effPageShadow}">Этап 1 из 7</strong><br>
+            <small style="font-size:10px;color:${effPageFg};text-shadow:${effPageShadow}">Следующий: Повод звонка</small>
+          </div>
+
+          <button type="button" class="mock-hotspot ${activeConstructorBlock==='accent-btn'?'active':''}" data-mock-select="accent-btn" style="padding:8px 18px;border-radius:8px;font-size:12px;font-weight:700;background:${effAccent};color:#ffffff;border:0;cursor:pointer">Далее →</button>
+        </div>
+      </div>
+
+      <!-- Active Inspector Panel -->
+      <div class="constructor-inspector">
+        <div class="inspector-head">
+          <div class="inspector-title">
+            ${activeConstructorBlock==='page-text'?'<h3>📝 Заголовки и подписи страницы</h3>':''}
+            ${activeConstructorBlock==='bg'?'<h3>🖼️ Фон страницы и заливка</h3>':''}
+            ${activeConstructorBlock==='pill'?'<h3>🏷️ Бейдж номера этапа (01 / 07)</h3>':''}
+            ${activeConstructorBlock==='objections'?'<h3>⚡ Раздел «Частые возражения»</h3>':''}
+            ${activeConstructorBlock==='action-btn'?'<h3>🔘 Вспомогательные кнопки («Весь скрипт» и «Назад»)</h3>':''}
+            ${activeConstructorBlock==='card'?'<h3>🪟 Главная карточка диалога</h3>':''}
+            ${activeConstructorBlock==='lines'?'<h3>💬 Блоки реплик оператора</h3>':''}
+            ${activeConstructorBlock==='accent-btn'?'<h3>🟢 Главный акцент (кнопка «Далее»)</h3>':''}
+
+            <span class="inspector-linked-badge">
+              🔗 ${
+                activeConstructorBlock==='page-text' ? 'Связка: Заголовок, подписи списков («Выбор скрипта», «Город», «Зал») и счётчик этапов' :
+                activeConstructorBlock==='bg' ? 'Фон всей рабочей области сайта' :
+                activeConstructorBlock==='pill' ? 'Связка: Бейдж этапа 01/07 и нумерация шагов' :
+                activeConstructorBlock==='objections' ? 'Связка: Заголовок, подсказка, сноска и кнопки возражений' :
+                activeConstructorBlock==='action-btn' ? 'Связка: Кнопки «Весь скрипт» и «Назад»' :
+                activeConstructorBlock==='card' ? 'Основной фон и стиль диалога' :
+                activeConstructorBlock==='lines' ? 'Связка: Все блоки реплик диалога' :
+                'Акцентная кнопка «Далее» и ключевые индикаторы'
+              }
+            </span>
+          </div>
+
+          <button type="button" class="tcd-option-btn" data-construct-reset="${activeConstructorBlock}" style="padding:6px 12px;font-size:11px">↺ Сбросить к авто-настройке</button>
+        </div>
+
+        <div class="inspector-body">
+          ${activeConstructorBlock==='bg' ? `
+            <div class="tcd-row" style="margin-bottom:14px">
+              <span class="tcd-label">Готовые эскизы и градиенты заливки:</span>
+              <div class="gradient-swatches-grid">
+                ${gradients.map(g => `
+                  <div class="gradient-swatch-card ${currentTheme.bodyBg===g.css?'active':''}" data-construct-gradient="${escapeFn(g.css)}">
+                    <div class="gradient-swatch-bar" style="background:${g.css}"></div>
+                    <span>${escapeFn(g.name)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="tcd-row" style="margin-bottom:14px">
+              <span class="tcd-label">Сплошной цвет фона:</span>
+              <div class="tcd-color-row">
+                ${solidColors.map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.bodyBg===c?'selected':''}" style="background:${c}" data-construct-color="bodyBg" data-val="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="bodyBg" value="${currentTheme.bodyBg&&/^#[0-9a-f]{6}$/i.test(currentTheme.bodyBg)?currentTheme.bodyBg:'#102f44'}" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Текстурный узор поверх фона:</span>
+              <div class="tcd-options-grid" style="grid-template-columns:repeat(auto-fill, minmax(110px, 1fr))">
+                <button type="button" class="tcd-option-btn ${(currentTheme.bodyPattern==='none'||!currentTheme.bodyPattern)?'selected':''}" data-construct-pattern="none">Без узора</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='cyber'?'selected':''}" data-construct-pattern="cyber">Кибер-сетка</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='stars'?'selected':''}" data-construct-pattern="stars">Звёзды</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='stripes'?'selected':''}" data-construct-pattern="stripes">Полосы</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.bodyPattern==='carbon'?'selected':''}" data-construct-pattern="carbon">Карбон</button>
+              </div>
+            </div>
+          ` : ''}
+
+          ${activeConstructorBlock==='page-text' ? `
+            <div class="tcd-row" style="margin-bottom:14px">
+              <span class="tcd-label">Цвет текста (заголовок, списки, счётчик внизу):</span>
+              <div class="tcd-color-row">
+                ${textColors.map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.pageTextColor===c?'selected':''}" style="background:${c}" data-construct-color="pageTextColor" data-val="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="pageTextColor" value="${currentTheme.pageTextColor&&/^#[0-9a-f]{6}$/i.test(currentTheme.pageTextColor)?currentTheme.pageTextColor:'#ffffff'}" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Тень текста (для тёмных или контрастных фонов):</span>
+              <div class="tcd-options-grid" style="grid-template-columns:repeat(2, 170px)">
+                <button type="button" class="tcd-option-btn ${currentTheme.pageTextShadow==='none'?'selected':''}" data-construct-shadow="none">Без тени</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.pageTextShadow!=='none'?'selected':''}" data-construct-shadow="0 1px 4px rgba(0,0,0,0.85)">💡 Контурная тень</button>
+              </div>
+            </div>
+          ` : ''}
+
+          ${activeConstructorBlock==='pill' ? `
+            <div class="tcd-row" style="margin-bottom:14px">
+              <span class="tcd-label">Цвет фона бейджа «01 / 07»:</span>
+              <div class="tcd-color-row">
+                ${['rgba(0,0,0,0.5)', 'rgba(255,255,255,0.2)', '#102f44', '#0d3832', '#008578', '#f5b544'].map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.pillBg===c?'selected':''}" style="background:${c}" data-construct-color="pillBg" data-val="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="pillBg" value="#0d3832" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Цвет цифр внутри бейджа:</span>
+              <div class="tcd-color-row">
+                ${['#ffffff', '#142026', '#00f5d4', '#f5b544', '#38bdf8'].map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.pillFg===c?'selected':''}" style="background:${c}" data-construct-color="pillFg" data-val="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="pillFg" value="#ffffff" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+          ` : ''}
+
+          ${activeConstructorBlock==='objections' ? `
+            <div class="tcd-row" style="margin-bottom:12px">
+              <span class="tcd-label">Цвет заголовка «Частые возражения»:</span>
+              <div class="tcd-color-row">
+                ${textColors.map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.objectionHeadingColor===c?'selected':''}" style="background:${c}" data-construct-color="objectionHeadingColor" data-val="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <input type="color" data-construct-color-inp="objectionHeadingColor" value="#ffffff" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+
+            <div class="tcd-row" style="margin-bottom:12px">
+              <span class="tcd-label">Цвет текста пояснений и сноски:</span>
+              <div class="tcd-color-row">
+                ${['rgba(255,255,255,0.7)', 'rgba(0,0,0,0.6)', '#ffffff', '#94a3b8', '#a7f3d0'].map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.objectionHintColor===c?'selected':''}" style="background:${c}" data-construct-color="objectionHintColor" data-val="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <input type="color" data-construct-color-inp="objectionHintColor" value="#94a3b8" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Фон и цвет текста кнопок возражений:</span>
+              <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;cursor:pointer">
+                  <span>Фон кнопки:</span>
+                  <input type="color" data-construct-color-inp="objectionBtnBg" value="#ffffff" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;cursor:pointer">
+                  <span>Текст кнопки:</span>
+                  <input type="color" data-construct-color-inp="objectionBtnFg" value="#142026" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+          ` : ''}
+
+          ${activeConstructorBlock==='action-btn' ? `
+            <div class="tcd-row" style="margin-bottom:14px">
+              <span class="tcd-label">Цвет фона кнопок («Весь скрипт» и «Назад»):</span>
+              <div class="tcd-color-row">
+                ${['rgba(255,255,255,0.16)', 'rgba(0,0,0,0.08)', '#102f44', '#0d3832', '#008578', '#ffffff'].map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.actionBtnBg===c?'selected':''}" style="background:${c}" data-construct-color="actionBtnBg" data-val="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="actionBtnBg" value="#102f44" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Цвет текста кнопок:</span>
+              <div class="tcd-color-row">
+                ${textColors.map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.actionBtnFg===c?'selected':''}" style="background:${c}" data-construct-color="actionBtnFg" data-val="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="actionBtnFg" value="#ffffff" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+          ` : ''}
+
+          ${activeConstructorBlock==='card' ? `
+            <div class="tcd-row" style="margin-bottom:14px">
+              <span class="tcd-label">Стиль карточки диалога:</span>
+              <div class="tcd-options-grid" style="grid-template-columns:repeat(3, 1fr)">
+                <button type="button" class="tcd-option-btn ${(currentTheme.cardStyle==='default'||!currentTheme.cardStyle)?'selected':''}" data-tcd-prop="cardStyle" data-val="default">Классическая</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='glass'?'selected':''}" data-tcd-prop="cardStyle" data-val="glass">Матовое стекло</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.cardStyle==='neon'?'selected':''}" data-tcd-prop="cardStyle" data-val="neon">Неон</button>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Цвет фона карточки:</span>
+              <div class="tcd-color-row">
+                ${['#ffffff', '#162332', '#0d2822', '#2a1a08', '#e2f3ef', '#fff6de', '#e6f0fa'].map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.cardColor===c?'selected':''}" style="background:${c}" data-tcd-card-color="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="cardColor" value="#ffffff" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+          ` : ''}
+
+          ${activeConstructorBlock==='lines' ? `
+            <div class="tcd-row" style="margin-bottom:14px">
+              <span class="tcd-label">Цвет текста реплик диалога:</span>
+              <div class="tcd-options-grid" style="grid-template-columns:repeat(3, 1fr)">
+                <button type="button" class="tcd-option-btn ${currentTheme.textColorMode==='auto'?'selected':''}" data-tcd-prop="textColorMode" data-val="auto">Авто (по фону)</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.textColorMode==='light'?'selected':''}" data-tcd-prop="textColorMode" data-val="light">Светлый текст</button>
+                <button type="button" class="tcd-option-btn ${currentTheme.textColorMode==='dark'?'selected':''}" data-tcd-prop="textColorMode" data-val="dark">Тёмный текст</button>
+              </div>
+            </div>
+
+            <div class="tcd-row">
+              <span class="tcd-label">Цвет подложки реплик диалога:</span>
+              <div class="tcd-color-row">
+                ${['#ffffff', '#162030', '#0f2c26', '#e2f3ef', '#f8faf9'].map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.lineColor===c?'selected':''}" style="background:${c}" data-tcd-line-color="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="lineColor" value="#ffffff" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+          ` : ''}
+
+          ${activeConstructorBlock==='accent-btn' ? `
+            <div class="tcd-row">
+              <span class="tcd-label">Главный акцентный цвет («Далее» и индикаторы):</span>
+              <div class="tcd-color-row">
+                ${['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'].map(c => `
+                  <div class="tcd-color-swatch ${currentTheme.accent===c?'selected':''}" style="background:${c}" data-tcd-accent="${c}"></div>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="accent" value="${currentTheme.accent||'#008578'}" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>`;
+  }
+
   function renderDesignSection() {
     const headerColors = ['#102f44', '#0d3832', '#0d0221', '#2a1a08', '#070b18', '#090a0b', '#1b3b36', '#3b1248', '#881337', '#1e293b'];
     const accents = ['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b'];
@@ -4226,13 +4912,15 @@ body.auth-locked #auth-close{display:none!important}
         </div>
       </div>
       <div class="theme-nav-tabs" style="margin:16px 0 20px">
-        <button type="button" class="${activeDesignTab==='presets'?'active':''}" data-tcd-tab="presets">🌟 Готовые темы</button>
-        <button type="button" class="${activeDesignTab==='header'?'active':''}" data-tcd-tab="header">🎨 Шапка и узоры</button>
-        <button type="button" class="${activeDesignTab==='background'?'active':''}" data-tcd-tab="background">🖼️ Фон страницы</button>
-        <button type="button" class="${activeDesignTab==='blocks'?'active':''}" data-tcd-tab="blocks">🪟 Блоки и карточки</button>
+        <button type="button" class="${activeDesignTab==='presets'?'active':''}" data-tcd-tab="presets">🌟 Мои темы и пресеты</button>
+        <button type="button" class="${activeDesignTab==='constructor'?'active':''}" data-tcd-tab="constructor">🛠️ Интерактивный конструктор</button>
+        <button type="button" class="${activeDesignTab==='background'?'active':''}" data-tcd-tab="background">🖼️ Фон страницы и обои</button>
+        <button type="button" class="${activeDesignTab==='header'?'active':''}" data-tcd-tab="header">🎨 Шапка и акцент</button>
+        <button type="button" class="${activeDesignTab==='blocks'?'active':''}" data-tcd-tab="blocks">🪟 Карточка и реплики</button>
       </div>
 
       <div class="tcd-body">
+        ${activeDesignTab === 'constructor' ? renderConstructorTab() : ''}
         ${activeDesignTab === 'presets' ? `
           <div class="preset-grid">
             ${allThemes().map(p => `
@@ -4414,6 +5102,92 @@ body.auth-locked #auth-close{display:none!important}
 
   // Global event delegation
   document.addEventListener('click', async (e) => {
+    // Hotspot select in interactive constructor
+    const mockSelect = e.target.closest('[data-mock-select]');
+    if (mockSelect) {
+      e.stopPropagation();
+      activeConstructorBlock = mockSelect.dataset.mockSelect;
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
+
+    // Construct color swatch
+    const constructCol = e.target.closest('[data-construct-color]');
+    if (constructCol) {
+      e.stopPropagation();
+      const prop = constructCol.dataset.constructColor;
+      const val = constructCol.dataset.val;
+      currentTheme[prop] = val;
+      if (prop === 'bodyBg') currentTheme.bgImage = '';
+      currentTheme.id = currentTheme.id || 'custom';
+      applyTheme(currentTheme, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
+
+    // Construct gradient
+    const constructGrad = e.target.closest('[data-construct-gradient]');
+    if (constructGrad) {
+      e.stopPropagation();
+      currentTheme.bodyBg = constructGrad.dataset.constructGradient;
+      currentTheme.bgImage = '';
+      currentTheme.id = currentTheme.id || 'custom';
+      applyTheme(currentTheme, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
+
+    // Construct pattern
+    const constructPat = e.target.closest('[data-construct-pattern]');
+    if (constructPat) {
+      e.stopPropagation();
+      currentTheme.bodyPattern = constructPat.dataset.constructPattern;
+      currentTheme.id = currentTheme.id || 'custom';
+      applyTheme(currentTheme, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
+
+    // Construct shadow
+    const constructShad = e.target.closest('[data-construct-shadow]');
+    if (constructShad) {
+      e.stopPropagation();
+      currentTheme.pageTextShadow = constructShad.dataset.constructShadow;
+      currentTheme.id = currentTheme.id || 'custom';
+      applyTheme(currentTheme, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
+
+    // Construct reset
+    const constructReset = e.target.closest('[data-construct-reset]');
+    if (constructReset) {
+      e.stopPropagation();
+      const b = constructReset.dataset.constructReset;
+      if (b === 'page-text') {
+        delete currentTheme.pageTextColor;
+        delete currentTheme.pageTextShadow;
+      } else if (b === 'pill') {
+        delete currentTheme.pillBg;
+        delete currentTheme.pillFg;
+        delete currentTheme.pillBorder;
+      } else if (b === 'objections') {
+        delete currentTheme.objectionHeadingColor;
+        delete currentTheme.objectionHintColor;
+        delete currentTheme.objectionBtnBg;
+        delete currentTheme.objectionBtnFg;
+      } else if (b === 'action-btn') {
+        delete currentTheme.actionBtnBg;
+        delete currentTheme.actionBtnFg;
+      } else if (b === 'bg') {
+        delete currentTheme.bodyBg;
+        delete currentTheme.bodyPattern;
+        delete currentTheme.bgImage;
+      }
+      applyTheme(currentTheme, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+      return;
+    }
     // 3-dots button toggle
     const dotsBtn = e.target.closest('[data-theme-dots]');
     if (dotsBtn) {
@@ -4450,7 +5224,7 @@ body.auth-locked #auth-close{display:none!important}
             bgImage: typeof targetTheme.bgImage === 'string' ? targetTheme.bgImage : '',
             bgLum: targetTheme.bgLum
           }, true);
-          activeDesignTab = 'header';
+          activeDesignTab = 'constructor';
           if (window.__rerenderDesign) window.__rerenderDesign();
           if (typeof toast === 'function') {
             toast(isOwner 
@@ -4476,7 +5250,7 @@ body.auth-locked #auth-close{display:none!important}
           storeCustomThemes(list);
           editingThemeId = newId;
           applyTheme(newTheme, true);
-          activeDesignTab = 'header';
+          activeDesignTab = 'constructor';
           if (window.__rerenderDesign) window.__rerenderDesign();
           if (typeof toast === 'function') {
             toast('✓ Создана копия «' + copyName + '» — теперь вы можете изменять её под себя');
@@ -4503,7 +5277,7 @@ body.auth-locked #auth-close{display:none!important}
         storeCustomThemes(list);
         editingThemeId = newId;
         applyTheme(newTheme, true);
-        activeDesignTab = 'header';
+        activeDesignTab = 'constructor';
         if (window.__rerenderDesign) window.__rerenderDesign();
         if (typeof toast === 'function') {
           toast('✓ Создана копия «' + copyName + '» — теперь вы можете изменять её');
@@ -4762,7 +5536,14 @@ body.auth-locked #auth-close{display:none!important}
 
   // Color & Opacity pickers input handlers
   document.addEventListener('input', (e) => {
-    if (e.target.matches('#tcd-header-picker, .tcd-header-picker')) {
+    if (e.target.matches('[data-construct-color-inp]')) {
+      const prop = e.target.dataset.constructColorInp;
+      currentTheme[prop] = e.target.value;
+      if (prop === 'bodyBg') currentTheme.bgImage = '';
+      currentTheme.id = currentTheme.id || 'custom';
+      applyTheme(currentTheme, true);
+      if (window.__rerenderDesign) window.__rerenderDesign();
+    } else if (e.target.matches('#tcd-header-picker, .tcd-header-picker')) {
       applyTheme({ headerBg: e.target.value, id: 'custom' }, true);
     } else if (e.target.matches('#tcd-accent-picker, .tcd-accent-picker')) {
       applyTheme({ accent: e.target.value, id: 'custom' }, true);
@@ -5149,7 +5930,12 @@ api('/api/admin/status').then(st=>{
   ensureAdmin(()=>{updateHeaderBadge();});
 });
 
-async function openOwnerPanel(){
+async async function openDesignPanel(){
+  ownerTab = 'design';
+  if(typeof activeDesignTab!=='undefined')activeDesignTab='constructor';
+  if(typeof openOwnerPanel==='function')await openOwnerPanel();
+}
+function openOwnerPanel(){
   await ensureAdmin(async()=>{
     if(!$('#drawer').hidden)closeDrawer();
     for(const el of document.querySelectorAll('main'))el.hidden=true;
