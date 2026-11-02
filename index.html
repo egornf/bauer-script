@@ -2620,7 +2620,20 @@ async function api_remote(path,options={}){
   if(result&&result.csrfToken)csrfToken=result.csrfToken;
   if(result&&result.user!==undefined)currentUser=result.user;
   if(result&&result.mustChangePassword&&typeof showChangeTempPasswordModal==='function'){showChangeTempPasswordModal();}
-  if(!response.ok){if(response.status===401){adminUnlocked=false;currentUser=null;dispatchEvent(new Event('auth-changed')); window.dispatchEvent(new CustomEvent('bauer:auth-changed')); if(typeof window.fetchSharedThemes === 'function') window.fetchSharedThemes();}const error=new Error(result.error||'Не удалось выполнить действие.');error.status=response.status;throw error;}
+  if(!response.ok){
+    if(response.status===401){
+      const wasLoggedIn = Boolean(adminUnlocked || currentUser);
+      adminUnlocked=false;
+      currentUser=null;
+      if (wasLoggedIn) {
+        dispatchEvent(new Event('auth-changed')); 
+        window.dispatchEvent(new CustomEvent('bauer:auth-changed'));
+      }
+    }
+    const error=new Error(result.error||'Не удалось выполнить действие.');
+    error.status=response.status;
+    throw error;
+  }
   return result;
 }
 
@@ -3433,8 +3446,11 @@ async function ensureAdmin(action){
     const state=await api('/api/admin/status');
     currentUser=state.user||null;
     if(state.csrfToken)csrfToken=state.csrfToken;
-    dispatchEvent(new Event('auth-changed')); window.dispatchEvent(new CustomEvent('bauer:auth-changed')); if(typeof window.fetchSharedThemes === 'function') window.fetchSharedThemes();
-    if(state.unlocked){adminUnlocked=true;return await action();}
+    if(state.unlocked){
+      adminUnlocked=true;
+      updateHeaderBadge();
+      return await action();
+    }
     adminUnlocked=false;afterAuth=action;authSetup=!state.configured;
     $('#admin-password').value='';$('#admin-login').value='';$('#password-confirm').value='';$('#auth-error').textContent='';
     $('#admin-password').type='password';$('#password-visibility').textContent='Показать';
@@ -4401,6 +4417,10 @@ body.auth-locked #auth-close{display:none!important}
 
   let serverSharedThemes = [];
   async function fetchSharedThemes() {
+    if (typeof currentUser === 'undefined' || !currentUser) {
+      serverSharedThemes = [];
+      return;
+    }
     try {
       if (typeof api === 'function') {
         const res = await api('/api/themes/shared');
@@ -6494,12 +6514,6 @@ document.getElementById('header-logout-btn')?.addEventListener('click',performLo
 
 addEventListener('auth-changed',()=>{
   updateHeaderBadge();
-  if(!adminUnlocked||!currentUser){
-    const recDlg=document.getElementById('owner-recover-dialog');
-    if((!authDlgEl||!authDlgEl.open)&&(!recDlg||!recDlg.open)){
-      ensureAdmin(()=>{updateHeaderBadge();});
-    }
-  }
 });
 
 api('/api/admin/status').then(st=>{

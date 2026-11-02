@@ -1271,7 +1271,8 @@ function createAppServer(options = {}) {
 
       // Shared Themes: GET /api/themes/shared, POST /api/themes/shared, DELETE /api/themes/shared
       if (pathname === '/api/themes/shared') {
-        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        if (!auth && method !== 'GET') return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        if (!auth && method === 'GET') return sendJson(res, 200, { ok: true, sharedThemes: [] });
         const allUsers = store.getUsers();
         const user = auth.user;
         const isOwner = user.role === 'OWNER';
