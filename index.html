@@ -62,11 +62,34 @@
 
       // Page luminance & foreground
       const hasImage = !!ut.bgImage;
-      const pageDark = hasImage ? (typeof ut.bgLum === 'number' ? ut.bgLum < 0.42 : true) : (ut.bodyBg ? false : (ut.theme === 'dark'));
+      let pageDark = false;
+      if (hasImage) {
+        pageDark = typeof ut.bgLum === 'number' ? ut.bgLum < 0.48 : true;
+      } else if (ut.bodyBg && typeof ut.bodyBg === 'string') {
+        const hexes = ut.bodyBg.match(/#[0-9a-fA-F]{3,8}\b/g);
+        if (hexes && hexes.length) {
+          const lums = hexes.map(h => {
+            const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h) || (h.length === 4 ? /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(h) : null);
+            if (!m) return 0.5;
+            const r = parseInt(m[1].length===1?m[1]+m[1]:m[1], 16), g = parseInt(m[2].length===1?m[2]+m[2]:m[2], 16), b = parseInt(m[3].length===1?m[3]+m[3]:m[3], 16);
+            return (r*0.299 + g*0.587 + b*0.114) / 255;
+          });
+          pageDark = (lums.reduce((a,b)=>a+b, 0) / lums.length) < 0.48;
+        } else {
+          pageDark = ut.theme === 'dark';
+        }
+      } else {
+        pageDark = ut.theme === 'dark';
+      }
+      root.dataset.pageDark = pageDark ? '1' : '0';
       root.style.setProperty('--custom-page-fg', pageDark ? '#ffffff' : '#12262e');
-      root.style.setProperty('--custom-page-shadow', pageDark ? '0 1px 3px rgba(0,0,0,.75)' : 'none');
-      root.style.setProperty('--custom-page-soft', pageDark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.07)');
-      root.style.setProperty('--custom-page-line', pageDark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)');
+      root.style.setProperty('--custom-page-shadow', pageDark ? '0 1px 4px rgba(0,0,0,.85)' : 'none');
+      root.style.setProperty('--custom-page-soft', pageDark ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.06)');
+      root.style.setProperty('--custom-page-soft-hover', pageDark ? 'rgba(255,255,255,.26)' : 'rgba(0,0,0,.12)');
+      root.style.setProperty('--custom-page-line', pageDark ? 'rgba(255,255,255,.32)' : 'rgba(0,0,0,.18)');
+      root.style.setProperty('--custom-input-bg', pageDark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.92)');
+      root.style.setProperty('--custom-input-fg', pageDark ? '#ffffff' : '#12262e');
+      root.style.setProperty('--custom-placeholder', pageDark ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.55)');
 
       // Step buttons (Inactive) - Always contrasty & clear
       root.style.setProperty('--custom-step-bg', 'rgba(255, 255, 255, 0.92)');
@@ -1018,36 +1041,135 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   background: var(--custom-step-hover, #ffffff) !important;
 }
 
-/* Other controls adapting cleanly */
-:root[style*="--custom-accent"] #whole-script {
+/* Adaptive controls & high contrast text across ALL dark and light themes */
+:root[data-page-dark="1"] .intro h1,
+:root[data-theme="dark"] .intro h1,
+:root[style*="--custom-page-fg"] .intro h1 {
+  color: var(--custom-page-fg, #ffffff) !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,.85)) !important;
+}
+:root[data-page-dark="1"] .intro .sub,
+:root[data-theme="dark"] .intro .sub,
+:root[style*="--custom-page-fg"] .intro .sub {
+  color: var(--custom-page-fg, #ffffff) !important;
+  opacity: 0.92 !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,.85)) !important;
+}
+
+:root[data-page-dark="1"] .workspace-pickers-bar label span,
+:root[data-theme="dark"] .workspace-pickers-bar label span,
+:root[data-page-dark="1"] .script-picker > span,
+:root[data-theme="dark"] .script-picker > span,
+:root[data-page-dark="1"] .venue-picker label > span,
+:root[data-theme="dark"] .venue-picker label > span,
+:root[style*="--custom-page-fg"] .workspace-pickers-bar label span,
+:root[style*="--custom-page-fg"] .script-picker > span,
+:root[style*="--custom-page-fg"] .venue-picker label > span {
+  color: var(--custom-page-fg, #ffffff) !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,.85)) !important;
+  font-weight: 700 !important;
+}
+
+#whole-script {
   background: var(--custom-page-soft, rgba(255, 255, 255, 0.75)) !important;
   color: var(--custom-page-fg, var(--ink)) !important;
-  border: 1.5px solid color-mix(in srgb, var(--custom-accent) 45%, var(--line)) !important;
-  backdrop-filter: blur(6px) !important;
+  border: 1.5px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 55%, var(--custom-page-line, var(--line))) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  font-weight: 700 !important;
+  text-shadow: var(--custom-page-shadow, none) !important;
+  transition: all .16s ease !important;
 }
-:root[style*="--custom-accent"] #whole-script:hover {
-  background: var(--custom-accent) !important;
+#whole-script:hover {
+  background: var(--custom-accent, var(--teal)) !important;
   color: var(--custom-accent-fg, #ffffff) !important;
+  border-color: var(--custom-accent, var(--teal)) !important;
+  text-shadow: none !important;
 }
-:root[style*="--custom-accent"] .search-wrap input {
-  background: var(--custom-page-soft, rgba(255, 255, 255, 0.85)) !important;
-  color: var(--custom-page-fg, var(--ink)) !important;
-  border: 1.5px solid color-mix(in srgb, var(--custom-accent) 45%, var(--line)) !important;
-  backdrop-filter: blur(6px) !important;
+
+.search-wrap input {
+  background: var(--custom-input-bg, rgba(255, 255, 255, 0.85)) !important;
+  color: var(--custom-input-fg, var(--ink)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 55%, var(--custom-page-line, var(--line))) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
 }
-:root[style*="--custom-accent"] .search-wrap .search-icon {
-  color: var(--custom-accent) !important;
+.search-wrap input::placeholder {
+  color: var(--custom-placeholder, rgba(0, 0, 0, 0.55)) !important;
+}
+:root[data-page-dark="1"] .search-wrap input,
+:root[data-theme="dark"] .search-wrap input {
+  background: var(--custom-input-bg, rgba(15, 23, 42, 0.75)) !important;
+  color: #ffffff !important;
+  border-color: color-mix(in srgb, var(--custom-accent, var(--teal)) 60%, rgba(255, 255, 255, 0.28)) !important;
+}
+:root[data-page-dark="1"] .search-wrap input::placeholder,
+:root[data-theme="dark"] .search-wrap input::placeholder {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.search-wrap .search-icon {
+  color: var(--custom-accent, var(--teal)) !important;
+}
+:root[data-page-dark="1"] .search-results,
+:root[data-theme="dark"] .search-results {
+  background: var(--surface, #142438) !important;
+  border-color: var(--line, #36546e) !important;
+  color: var(--ink, #ffffff) !important;
+}
+:root[data-page-dark="1"] .search-results button,
+:root[data-theme="dark"] .search-results button {
+  color: var(--ink, #ffffff) !important;
 }
 
 /* Bottom Pager Text High Contrast Adaptation */
-:root[style*="--custom-page-fg"] .pager-middle strong {
-  color: var(--custom-page-fg) !important;
-  text-shadow: var(--custom-page-shadow, 0 1px 3px rgba(0,0,0,0.85)) !important;
+:root[data-page-dark="1"] .pager-middle strong,
+:root[data-theme="dark"] .pager-middle strong,
+:root[data-page-dark="1"] #counter,
+:root[data-theme="dark"] #counter,
+:root[style*="--custom-page-fg"] .pager-middle strong,
+:root[style*="--custom-page-fg"] #counter {
+  color: var(--custom-page-fg, #ffffff) !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,0.85)) !important;
+  font-weight: 700 !important;
 }
-:root[style*="--custom-page-fg"] .pager-middle span {
-  color: var(--custom-page-fg) !important;
-  opacity: 0.95 !important;
-  text-shadow: var(--custom-page-shadow, 0 1px 3px rgba(0,0,0,0.85)) !important;
+:root[data-page-dark="1"] .pager-middle span,
+:root[data-theme="dark"] .pager-middle span,
+:root[data-page-dark="1"] #next-label,
+:root[data-theme="dark"] #next-label,
+:root[style*="--custom-page-fg"] .pager-middle span,
+:root[style*="--custom-page-fg"] #next-label {
+  color: var(--custom-page-fg, #ffffff) !important;
+  opacity: 0.92 !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,0.85)) !important;
+}
+
+:root[data-page-dark="1"] .pager .pager-back,
+:root[data-theme="dark"] .pager .pager-back,
+:root[style*="--custom-page-fg"] .pager .pager-back {
+  background: var(--custom-page-soft, rgba(255, 255, 255, 0.14)) !important;
+  color: var(--custom-page-fg, #ffffff) !important;
+  border: 1px solid var(--custom-page-line, rgba(255, 255, 255, 0.3)) !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 3px rgba(0,0,0,0.7)) !important;
+  backdrop-filter: blur(6px) !important;
+}
+:root[data-page-dark="1"] .pager .pager-back:hover:not(:disabled),
+:root[data-theme="dark"] .pager .pager-back:hover:not(:disabled),
+:root[style*="--custom-page-fg"] .pager .pager-back:hover:not(:disabled) {
+  background: var(--custom-page-soft-hover, rgba(255, 255, 255, 0.25)) !important;
+}
+:root[data-page-dark="1"] .pager .pager-back:disabled,
+:root[data-theme="dark"] .pager .pager-back:disabled,
+:root[style*="--custom-page-fg"] .pager .pager-back:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}
+
+:root[data-page-dark="1"] .edit-note,
+:root[data-theme="dark"] .edit-note,
+:root[style*="--custom-page-fg"] .edit-note {
+  color: var(--custom-page-fg, #ffffff) !important;
+  opacity: 0.88 !important;
+  text-shadow: var(--custom-page-shadow, 0 1px 4px rgba(0,0,0,0.85)) !important;
 }
 
 :root:root:root[data-card-style="glass"] .deck-viewport {
@@ -3740,23 +3862,32 @@ body.auth-locked #auth-close{display:none!important}
     return (rgb[0] * 0.299 + rgb[1] * 0.587 + rgb[2] * 0.114) < 135;
   }
   function pageLum() {
-    const t = currentTheme;
+    const t = currentTheme || {};
     if (t.bgImage) return typeof t.bgLum === 'number' ? t.bgLum : 0.25;
-    if (t.bodyBg) {
-      const cols = (String(t.bodyBg).match(/#[0-9a-f]{6}|#[0-9a-f]{3}/gi) || []).map(hexRgb).filter(Boolean);
-      if (cols.length) return cols.reduce((s, c) => s + relLum(c), 0) / cols.length;
-      return 0.5;
+    if (t.bodyBg && typeof t.bodyBg === 'string' && t.bodyBg.trim()) {
+      const hexMatches = t.bodyBg.match(/#[0-9a-fA-F]{3,8}\b/g);
+      if (hexMatches && hexMatches.length > 0) {
+        const cols = hexMatches.map(hexRgb).filter(Boolean);
+        if (cols.length > 0) {
+          return cols.reduce((sum, c) => sum + relLum(c), 0) / cols.length;
+        }
+      }
     }
-    return t.theme === 'dark' ? 0.01 : 0.87;
+    const isDark = (t.theme === 'dark') || (document.documentElement && document.documentElement.dataset.theme === 'dark');
+    return isDark ? 0.05 : 0.90;
   }
   function pageInfo() {
-    if (!currentTheme.bgImage && !currentTheme.bodyBg) return null;
-    const dark = pageLum() < 0.42;
+    const dark = pageLum() < 0.48;
     return {
+      dark,
       fg: dark ? '#ffffff' : '#12262e',
-      shadow: dark ? '0 1px 3px rgba(0,0,0,.75)' : 'none',
-      soft: dark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.07)',
-      line: dark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.25)'
+      shadow: dark ? '0 1px 4px rgba(0,0,0,.85)' : 'none',
+      soft: dark ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.06)',
+      softHover: dark ? 'rgba(255,255,255,.26)' : 'rgba(0,0,0,.12)',
+      line: dark ? 'rgba(255,255,255,.32)' : 'rgba(0,0,0,.18)',
+      inputBg: dark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.92)',
+      inputFg: dark ? '#ffffff' : '#12262e',
+      placeholder: dark ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.55)'
     };
   }
 
@@ -3903,14 +4034,15 @@ body.auth-locked #auth-close{display:none!important}
     }
 
     const pInfo = pageInfo();
-    if (pInfo) {
-      root.style.setProperty('--custom-page-fg', pInfo.fg);
-      root.style.setProperty('--custom-page-shadow', pInfo.shadow);
-      root.style.setProperty('--custom-page-soft', pInfo.soft);
-      root.style.setProperty('--custom-page-line', pInfo.line);
-    } else {
-      ['--custom-page-fg','--custom-page-shadow','--custom-page-soft','--custom-page-line'].forEach(k => root.style.removeProperty(k));
-    }
+    root.dataset.pageDark = pInfo.dark ? '1' : '0';
+    root.style.setProperty('--custom-page-fg', pInfo.fg);
+    root.style.setProperty('--custom-page-shadow', pInfo.shadow);
+    root.style.setProperty('--custom-page-soft', pInfo.soft);
+    root.style.setProperty('--custom-page-soft-hover', pInfo.softHover);
+    root.style.setProperty('--custom-page-line', pInfo.line);
+    root.style.setProperty('--custom-input-bg', pInfo.inputBg);
+    root.style.setProperty('--custom-input-fg', pInfo.inputFg);
+    root.style.setProperty('--custom-placeholder', pInfo.placeholder);
     root.dataset.headerPattern = currentTheme.headerPattern || 'none';
     root.dataset.bodyPattern = currentTheme.bodyPattern || 'none';
 
