@@ -971,8 +971,11 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 
 /* Custom Stage Title Heading Color ("Приветствие") */
 :root[style*="--custom-stage-heading-color"] .stage-heading h2,
+:root[data-has-heading-color="1"] .stage-heading h2,
 :root[style*="--custom-stage-heading-color"] .whole-stage-title,
-:root[style*="--custom-stage-heading-color"] .whole-stage-card h2 {
+:root[data-has-heading-color="1"] .whole-stage-title,
+:root[style*="--custom-stage-heading-color"] .whole-stage-card h2,
+:root[data-has-heading-color="1"] .whole-stage-card h2 {
   color: var(--custom-stage-heading-color) !important;
 }
 
@@ -1856,7 +1859,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 
 </head>
 <body>
-<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><button class="quiet header-design-btn" id="header-design-btn" title="Персональный дизайн и конструктор темы" aria-label="Конструктор темы оформления">🎨 <span>Дизайн</span></button><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
+<header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
 <nav class="app-switcher" aria-label="Разделы сайта"><div class="switcher-tabs"><button id="script-tab" class="section-tab active" aria-pressed="true">Скрипт</button><button id="gifts-tab" class="section-tab" aria-pressed="false" hidden="">Подарки</button><button id="sms-tab" class="section-tab" aria-pressed="false">Помощник СМС</button><button id="objections-tab" class="section-tab" aria-pressed="false">Возражения</button><button id="layouts-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M6 9V6a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg>Макеты</button><button id="addresses-tab" class="section-tab" aria-pressed="false">Адреса</button></div><span class="switcher-hint">Рабочее пространство оператора</span></nav>
 <main class="workspace">
   <div class="intro">
@@ -4698,8 +4701,10 @@ body.auth-locked #auth-close{display:none!important}
     }
     if (currentTheme.stageHeadingColor) {
       root.style.setProperty('--custom-stage-heading-color', currentTheme.stageHeadingColor);
+      root.dataset.hasHeadingColor = '1';
     } else {
       root.style.removeProperty('--custom-stage-heading-color');
+      delete root.dataset.hasHeadingColor;
     }
     if (currentTheme.stepActiveBg) {
       root.style.setProperty('--custom-step-active-bg', currentTheme.stepActiveBg);
@@ -4985,6 +4990,7 @@ body.auth-locked #auth-close{display:none!important}
         <button type="button" class="${activeConstructorBlock==='bg'?'active':''}" data-mock-select="bg">🖼️ Фон страницы и обои</button>
         <button type="button" class="${activeConstructorBlock==='header'?'active':''}" data-mock-select="header">🎨 Шапка и акцент</button>
         <button type="button" class="${activeConstructorBlock==='card'?'active':''}" data-mock-select="card">🪟 Карточка диалога</button>
+        <button type="button" class="${activeConstructorBlock==='stage-heading'?'active':''}" data-mock-select="stage-heading">🏷️ Название блока («Приветствие»)</button>
         <button type="button" class="${activeConstructorBlock==='lines'?'active':''}" data-mock-select="lines">💬 Реплики оператора</button>
         <button type="button" class="${activeConstructorBlock==='stepper'?'active':''}" data-mock-select="stepper">📑 Кнопки этапов (зажатая / остальные)</button>
         <button type="button" class="${activeConstructorBlock==='page-text'?'active':''}" data-mock-select="page-text">📝 Заголовки и подписи</button>
@@ -5053,7 +5059,10 @@ body.auth-locked #auth-close{display:none!important}
 
             <!-- Card Header & Badge -->
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-              <h2 style="font-size:18px;font-weight:800;margin:0;color:${currentTheme.stageHeadingColor||bInfo.fg}">Приветствие</h2>
+              <div class="mock-hotspot ${activeConstructorBlock==='stage-heading'?'active':''}" data-mock-select="stage-heading" style="padding:4px 8px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;position:relative" title="Кликните для выбора цвета названия блока («Приветствие»)">
+                <h2 style="font-size:18px;font-weight:800;margin:0;color:${currentTheme.stageHeadingColor||bInfo.fg}">Приветствие</h2>
+                ${activeConstructorBlock==='stage-heading'?`<span class="mock-tag" style="top:-8px;left:0">✦ Название текста блока</span>`:''}
+              </div>
               <!-- Stage Count Pill Hotspot -->
               <div class="mock-hotspot ${activeConstructorBlock==='pill'?'active':''}" data-mock-select="pill" style="padding:2px 4px;border-radius:999px;cursor:pointer" title="Кликните для настройки бейджа 01/07">
                 <span class="stage-count" style="background:${effPillBg};color:${effPillFg};padding:4px 12px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid ${bInfo.pillBorder||'rgba(0,0,0,0.1)'}">
@@ -5110,6 +5119,7 @@ body.auth-locked #auth-close{display:none!important}
             ${activeConstructorBlock==='bg'?'<h3>🖼️ Фон страницы и обои</h3>':''}
             ${activeConstructorBlock==='header'?'<h3>🎨 Шапка и акцент</h3>':''}
             ${activeConstructorBlock==='card'?'<h3>🪟 Главная карточка диалога</h3>':''}
+            ${activeConstructorBlock==='stage-heading'?'<h3>🏷️ Название текста блока («Приветствие»)</h3>':''}
             ${activeConstructorBlock==='lines'?'<h3>💬 Блоки реплик оператора</h3>':''}
             ${activeConstructorBlock==='stepper'?'<h3>📑 Кнопки переключения этапов (зажатая и остальные)</h3>':''}
             ${activeConstructorBlock==='page-text'?'<h3>📝 Заголовки и подписи страницы</h3>':''}
@@ -5122,6 +5132,7 @@ body.auth-locked #auth-close{display:none!important}
                 activeConstructorBlock==='bg' ? 'Фон всей рабочей области сайта' :
                 activeConstructorBlock==='header' ? 'Шапка сайта и главный акцентный цвет' :
                 activeConstructorBlock==='card' ? 'Основной фон и стиль диалога' :
+                activeConstructorBlock==='stage-heading' ? 'Заголовок активного этапа («Приветствие»)' :
                 activeConstructorBlock==='lines' ? 'Связка: Все блоки реплик диалога' :
                 activeConstructorBlock==='stepper' ? 'Связка: Активный этап разговора (зажатая кнопка) и неактивные этапы (не зажатые кнопки)' :
                 activeConstructorBlock==='page-text' ? 'Связка: Заголовок, подписи списков («Выбор скрипта», «Город», «Зал») и счётчик этапа' :
@@ -5291,6 +5302,28 @@ body.auth-locked #auth-close{display:none!important}
             <div class="tcd-row">
               <span class="tcd-label">Прозрачность линий разделителей: <b id="tcd-line-opacity-val">${lineTransparency}%</b></span>
               <input type="range" id="tcd-line-opacity" min="0" max="100" step="1" value="${lineTransparency}" style="width:100%;accent-color:var(--ui);cursor:pointer">
+            </div>
+          ` : ''}
+
+          <!-- 3b. STAGE HEADING COLOR INSPECTOR CONTROLS -->
+          ${activeConstructorBlock==='stage-heading' ? `
+            <div class="tcd-row" style="margin-bottom:16px">
+              <span class="tcd-label">Цвет названия этапа в карточке диалога («Приветствие»):</span>
+              <div class="tcd-color-row">
+                ${['#142026', '#ffffff', '#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b', '#334155', '#475569'].map(c => `
+                  <button type="button" class="tcd-color-swatch ${(currentTheme.stageHeadingColor||bInfo.fg)===c?'selected':''}" style="background:${c}" data-construct-color="stageHeadingColor" data-val="${c}" title="${c}"></button>
+                `).join('')}
+                <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                  <span>Свой цвет:</span>
+                  <input type="color" data-construct-color-inp="stageHeadingColor" value="${currentTheme.stageHeadingColor || (bInfo.fg&&/^#[0-9a-f]{6}$/i.test(bInfo.fg)?bInfo.fg:'#142026')}" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                </label>
+                ${currentTheme.stageHeadingColor ? `
+                  <button type="button" class="quiet" data-construct-reset="stageHeadingColor" style="font-size:11px;padding:4px 8px;margin-left:8px;border-radius:6px" title="Сбросить к авто-цвету текста карточки">↺ Сбросить к авто</button>
+                ` : ''}
+              </div>
+            </div>
+            <div style="padding:10px 14px;background:var(--surface-alt);border-radius:10px;font-size:12px;color:var(--muted);border:1px solid var(--line)">
+              💡 Этот цвет применяется к названию активного этапа («Приветствие», «Повод звонка», «Программа встречи» и т.д.) в карточке оператора и в общем скрипте.
             </div>
           ` : ''}
 
