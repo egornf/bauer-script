@@ -236,8 +236,17 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
 
   function writeJsonAtomic(filePath, data) {
     const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(tmp, filePath);
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8' });
+      fs.renameSync(tmp, filePath);
+    } catch (err) {
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), { encoding: 'utf8' });
+      } catch (fallbackErr) {
+        console.error('writeJson error:', filePath, fallbackErr.message);
+      }
+      try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch {}
+    }
   }
 
   let users = readJson(files.users, []);
