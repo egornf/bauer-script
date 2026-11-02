@@ -4732,11 +4732,6 @@ body.auth-locked #auth-close{display:none!important}
     root.style.setProperty('--custom-bg-dim', typeof currentTheme.bgDim === 'number' ? currentTheme.bgDim : 0);
 
     const effAccent = currentTheme.accent || '#008578';
-    const effStepActiveBg = currentTheme.stepActiveBg || effAccent;
-    const effStepActiveDark = (typeof headerIsDark === 'function') ? headerIsDark(effStepActiveBg) : true;
-    const effStepActiveFg = currentTheme.stepActiveFg || (effStepActiveDark ? '#ffffff' : '#142026');
-    const effStepInactiveBg = currentTheme.stepInactiveBg || (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.92)');
-    const effStepInactiveFg = currentTheme.stepInactiveFg || (isDark ? '#ffffff' : '#142026');
     root.style.setProperty('--custom-accent', effAccent);
     const accDark = headerIsDark(effAccent);
     root.style.setProperty('--custom-accent-fg', accDark ? '#ffffff' : '#142026');
@@ -4827,6 +4822,11 @@ body.auth-locked #auth-close{display:none!important}
     const effAccent = currentTheme.accent || '#008578';
     const effAccentDark = (typeof headerIsDark === 'function') ? headerIsDark(effAccent) : true;
     const effAccentFg = effAccentDark ? '#ffffff' : '#142026';
+    const effStepActiveBg = currentTheme.stepActiveBg || effAccent;
+    const effStepActiveDark = (typeof headerIsDark === 'function') ? headerIsDark(effStepActiveBg) : true;
+    const effStepActiveFg = currentTheme.stepActiveFg || (effStepActiveDark ? '#ffffff' : '#142026');
+    const effStepInactiveBg = currentTheme.stepInactiveBg || (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.92)');
+    const effStepInactiveFg = currentTheme.stepInactiveFg || (isDark ? '#ffffff' : '#142026');
     const effLineBg = currentTheme.lineColor ? currentTheme.lineColor : bInfo.lineBg;
     const effLineFg = bInfo.lineFg;
 
