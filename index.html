@@ -2021,6 +2021,7 @@ async function api_remote(path,options={}){
   }
   if(result&&result.csrfToken)csrfToken=result.csrfToken;
   if(result&&result.user!==undefined)currentUser=result.user;
+  if(result&&result.mustChangePassword&&typeof showChangeTempPasswordModal==='function'){showChangeTempPasswordModal();}
   if(!response.ok){if(response.status===401){adminUnlocked=false;currentUser=null;dispatchEvent(new Event('auth-changed')); window.dispatchEvent(new CustomEvent('bauer:auth-changed')); if(typeof window.fetchSharedThemes === 'function') window.fetchSharedThemes();}const error=new Error(result.error||'Не удалось выполнить действие.');error.status=response.status;throw error;}
   return result;
 }
