@@ -97,6 +97,10 @@
     if (ut.objectionBtnFg) root.style.setProperty('--custom-objection-btn-fg', ut.objectionBtnFg);
     if (ut.actionBtnBg) root.style.setProperty('--custom-action-btn-bg', ut.actionBtnBg);
     if (ut.stageHeadingColor) root.style.setProperty('--custom-stage-heading-color', ut.stageHeadingColor);
+    if (ut.stepActiveBg) root.style.setProperty('--custom-step-active-bg', ut.stepActiveBg);
+    if (ut.stepActiveFg) root.style.setProperty('--custom-step-active-fg', ut.stepActiveFg);
+    if (ut.stepInactiveBg) root.style.setProperty('--custom-step-inactive-bg', ut.stepInactiveBg);
+    if (ut.stepInactiveFg) root.style.setProperty('--custom-step-inactive-fg', ut.stepInactiveFg);
     if (ut.actionBtnFg) root.style.setProperty('--custom-action-btn-fg', ut.actionBtnFg);
     root.style.setProperty('--custom-page-soft', pageDark ? 'rgba(255,255,255,.16)' : 'rgba(0,0,0,.06)');
     root.style.setProperty('--custom-page-soft-hover', pageDark ? 'rgba(255,255,255,.26)' : 'rgba(0,0,0,.12)');
@@ -943,6 +947,26 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 :root[style*="--custom-action-btn-fg"] #whole-script,
 :root[style*="--custom-action-btn-fg"] .pager .pager-back {
   color: var(--custom-action-btn-fg) !important;
+}
+
+/* Custom Stepper Buttons (Зажатая кнопка этапа и не зажатые) */
+:root[style*="--custom-step-active-bg"] .step[aria-current=step],
+:root[style*="--custom-step-active-bg"] .step[aria-current=step]:hover {
+  background: var(--custom-step-active-bg) !important;
+  border-color: var(--custom-step-active-bg) !important;
+}
+:root[style*="--custom-step-active-fg"] .step[aria-current=step],
+:root[style*="--custom-step-active-fg"] .step[aria-current=step] .step-title,
+:root[style*="--custom-step-active-fg"] .step[aria-current=step] .step-number {
+  color: var(--custom-step-active-fg) !important;
+}
+:root[style*="--custom-step-inactive-bg"] .step:not([aria-current=step]) {
+  background: var(--custom-step-inactive-bg) !important;
+}
+:root[style*="--custom-step-inactive-fg"] .step:not([aria-current=step]),
+:root[style*="--custom-step-inactive-fg"] .step:not([aria-current=step]) .step-title,
+:root[style*="--custom-step-inactive-fg"] .step:not([aria-current=step]) .step-number {
+  color: var(--custom-step-inactive-fg) !important;
 }
 
 /* Custom Stage Title Heading Color ("Приветствие") */
@@ -4637,6 +4661,26 @@ body.auth-locked #auth-close{display:none!important}
     } else {
       root.style.removeProperty('--custom-stage-heading-color');
     }
+    if (currentTheme.stepActiveBg) {
+      root.style.setProperty('--custom-step-active-bg', currentTheme.stepActiveBg);
+    } else {
+      root.style.removeProperty('--custom-step-active-bg');
+    }
+    if (currentTheme.stepActiveFg) {
+      root.style.setProperty('--custom-step-active-fg', currentTheme.stepActiveFg);
+    } else {
+      root.style.removeProperty('--custom-step-active-fg');
+    }
+    if (currentTheme.stepInactiveBg) {
+      root.style.setProperty('--custom-step-inactive-bg', currentTheme.stepInactiveBg);
+    } else {
+      root.style.removeProperty('--custom-step-inactive-bg');
+    }
+    if (currentTheme.stepInactiveFg) {
+      root.style.setProperty('--custom-step-inactive-fg', currentTheme.stepInactiveFg);
+    } else {
+      root.style.removeProperty('--custom-step-inactive-fg');
+    }
     if (currentTheme.objectionHeadingColor) {
       root.style.setProperty('--custom-objection-title', currentTheme.objectionHeadingColor);
     } else {
@@ -4688,6 +4732,11 @@ body.auth-locked #auth-close{display:none!important}
     root.style.setProperty('--custom-bg-dim', typeof currentTheme.bgDim === 'number' ? currentTheme.bgDim : 0);
 
     const effAccent = currentTheme.accent || '#008578';
+    const effStepActiveBg = currentTheme.stepActiveBg || effAccent;
+    const effStepActiveDark = (typeof headerIsDark === 'function') ? headerIsDark(effStepActiveBg) : true;
+    const effStepActiveFg = currentTheme.stepActiveFg || (effStepActiveDark ? '#ffffff' : '#142026');
+    const effStepInactiveBg = currentTheme.stepInactiveBg || (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.92)');
+    const effStepInactiveFg = currentTheme.stepInactiveFg || (isDark ? '#ffffff' : '#142026');
     root.style.setProperty('--custom-accent', effAccent);
     const accDark = headerIsDark(effAccent);
     root.style.setProperty('--custom-accent-fg', accDark ? '#ffffff' : '#142026');
@@ -4865,6 +4914,7 @@ body.auth-locked #auth-close{display:none!important}
         <button type="button" class="${activeConstructorBlock==='header'?'active':''}" data-mock-select="header">🎨 Шапка и акцент</button>
         <button type="button" class="${activeConstructorBlock==='card'?'active':''}" data-mock-select="card">🪟 Карточка диалога</button>
         <button type="button" class="${activeConstructorBlock==='lines'?'active':''}" data-mock-select="lines">💬 Реплики оператора</button>
+        <button type="button" class="${activeConstructorBlock==='stepper'?'active':''}" data-mock-select="stepper">📑 Кнопки этапов (зажатая / остальные)</button>
         <button type="button" class="${activeConstructorBlock==='page-text'?'active':''}" data-mock-select="page-text">📝 Заголовки и подписи</button>
         <button type="button" class="${activeConstructorBlock==='pill'?'active':''}" data-mock-select="pill">🏷️ Бейдж 01/07</button>
         <button type="button" class="${activeConstructorBlock==='objections'?'active':''}" data-mock-select="objections">⚡ Блок возражений</button>
@@ -4911,11 +4961,18 @@ body.auth-locked #auth-close{display:none!important}
             </div>
           </div>
 
-          <!-- Stepper bar hotspot -->
-          <div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px">
-            <div style="background:${effAccent};color:${effAccentFg};padding:5px 12px;border-radius:8px;font-size:11px;font-weight:750;white-space:nowrap">01 Приветствие</div>
-            <div style="background:var(--surface,#ffffff);color:var(--ink,#142026);border:1px solid var(--line);padding:5px 12px;border-radius:8px;font-size:11px;font-weight:700;opacity:0.85;white-space:nowrap">02 Повод звонка</div>
-            <div style="background:var(--surface,#ffffff);color:var(--ink,#142026);border:1px solid var(--line);padding:5px 12px;border-radius:8px;font-size:11px;font-weight:700;opacity:0.85;white-space:nowrap">03 Программа встречи</div>
+          <!-- Stepper bar hotspot with real-time styling for active and inactive buttons -->
+          <div class="mock-hotspot ${activeConstructorBlock==='stepper'?'active':''}" data-mock-select="stepper" style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding:4px 6px;border-radius:10px;cursor:pointer;position:relative" title="Кликните для настройки кнопок этапов (зажатая и не зажатые)">
+            <div style="background:${effStepActiveBg};color:${effStepActiveFg};padding:6px 14px;border-radius:8px;font-size:11px;font-weight:750;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,0.15)">
+              01 Приветствие
+            </div>
+            <div style="background:${effStepInactiveBg};color:${effStepInactiveFg};border:1px solid var(--line);padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.04)">
+              02 Повод звонка
+            </div>
+            <div style="background:${effStepInactiveBg};color:${effStepInactiveFg};border:1px solid var(--line);padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.04)">
+              03 Программа встречи
+            </div>
+            ${activeConstructorBlock==='stepper'?`<span class="mock-tag">✦ Кнопки этапов (зажатая / остальные)</span>`:''}
           </div>
 
           <!-- Mock Script Card Dialog Hotspot with Live Style, Opacity and Neon -->
@@ -4982,6 +5039,7 @@ body.auth-locked #auth-close{display:none!important}
             ${activeConstructorBlock==='header'?'<h3>🎨 Шапка и акцент</h3>':''}
             ${activeConstructorBlock==='card'?'<h3>🪟 Главная карточка диалога</h3>':''}
             ${activeConstructorBlock==='lines'?'<h3>💬 Блоки реплик оператора</h3>':''}
+            ${activeConstructorBlock==='stepper'?'<h3>📑 Кнопки переключения этапов (зажатая и остальные)</h3>':''}
             ${activeConstructorBlock==='page-text'?'<h3>📝 Заголовки и подписи страницы</h3>':''}
             ${activeConstructorBlock==='pill'?'<h3>🏷️ Бейдж номера этапа (01 / 07)</h3>':''}
             ${activeConstructorBlock==='objections'?'<h3>⚡ Раздел «Частые возражения»</h3>':''}
@@ -4993,6 +5051,7 @@ body.auth-locked #auth-close{display:none!important}
                 activeConstructorBlock==='header' ? 'Шапка сайта и главный акцентный цвет' :
                 activeConstructorBlock==='card' ? 'Основной фон и стиль диалога' :
                 activeConstructorBlock==='lines' ? 'Связка: Все блоки реплик диалога' :
+                activeConstructorBlock==='stepper' ? 'Связка: Активный этап разговора (зажатая кнопка) и неактивные этапы (не зажатые кнопки)' :
                 activeConstructorBlock==='page-text' ? 'Связка: Заголовок, подписи списков («Выбор скрипта», «Город», «Зал») и счётчик этапа' :
                 activeConstructorBlock==='pill' ? 'Связка: Бейдж этапа 01/07 и нумерация шагов' :
                 activeConstructorBlock==='objections' ? 'Связка: Заголовок, подсказка, сноска и кнопки возражений' :
@@ -5331,6 +5390,102 @@ body.auth-locked #auth-close{display:none!important}
             </div>
           ` : ''}
 
+          <!-- 7.5. STEPPER BUTTONS CONTROLS (Active & Inactive) -->
+          ${activeConstructorBlock==='stepper' ? `
+            <!-- Section 1: Active Button (Зажатая кнопка) -->
+            <div style="background:var(--surface-alt);border-radius:12px;padding:16px;border:1px solid var(--line);margin-bottom:16px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <span class="tcd-label" style="font-size:13px;font-weight:800;color:var(--ink);margin:0">🟢 Зажатая кнопка этапа («01 Приветствие»):</span>
+                <span style="font-size:11px;color:var(--muted)">Активный шаг разговора</span>
+              </div>
+
+              <div class="tcd-row" style="margin-bottom:12px">
+                <span class="tcd-label">Фон зажатой кнопки этапа:</span>
+                <div class="tcd-color-row">
+                  ${['#008578', '#00f5d4', '#d48806', '#38bdf8', '#e63946', '#8b5cf6', '#ec4899', '#059669', '#f59e0b', '#102f44', '#1e293b'].map(c => `
+                    <button type="button" class="tcd-color-swatch ${effStepActiveBg===c?'selected':''}" style="background:${c}" data-construct-color="stepActiveBg" data-val="${c}" title="${c}"></button>
+                  `).join('')}
+                  <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                    <span>Свой цвет:</span>
+                    <input type="color" data-construct-color-inp="stepActiveBg" value="${effStepActiveBg&&/^#[0-9a-f]{6}$/i.test(effStepActiveBg)?effStepActiveBg:'#008578'}" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                  </label>
+                  ${currentTheme.stepActiveBg ? `
+                    <button type="button" class="quiet" data-construct-reset="stepActiveBg" style="font-size:11px;padding:4px 8px;margin-left:8px;border-radius:6px" title="Сбросить к главному акценту темы">↺ Сброс</button>
+                  ` : ''}
+                </div>
+              </div>
+
+              <div class="tcd-row">
+                <span class="tcd-label">Цвет шрифта на зажатой кнопке:</span>
+                <div class="tcd-color-row">
+                  ${textColors.map(c => `
+                    <button type="button" class="tcd-color-swatch ${effStepActiveFg===c?'selected':''}" style="background:${c}" data-construct-color="stepActiveFg" data-val="${c}" title="${c}"></button>
+                  `).join('')}
+                  <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                    <span>Свой цвет:</span>
+                    <input type="color" data-construct-color-inp="stepActiveFg" value="${effStepActiveFg&&/^#[0-9a-f]{6}$/i.test(effStepActiveFg)?effStepActiveFg:'#ffffff'}" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                  </label>
+                </div>
+              </div>
+
+              <div style="margin-top:12px;padding:10px 14px;background:var(--surface);border-radius:8px;border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:var(--muted)">Предпросмотр зажатой кнопки:</span>
+                <div style="background:${effStepActiveBg};color:${effStepActiveFg};padding:8px 18px;border-radius:8px;font-size:12px;font-weight:800;box-shadow:0 3px 10px rgba(0,0,0,0.15)">
+                  01 Приветствие
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 2: Inactive Buttons (Не зажатые кнопки) -->
+            <div style="background:var(--surface-alt);border-radius:12px;padding:16px;border:1px solid var(--line)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <span class="tcd-label" style="font-size:13px;font-weight:800;color:var(--ink);margin:0">🔘 Не зажатые кнопки этапов («02 Повод звонка», «03 Программа»...):</span>
+                <span style="font-size:11px;color:var(--muted)">Остальные этапы сценария</span>
+              </div>
+
+              <div class="tcd-row" style="margin-bottom:12px">
+                <span class="tcd-label">Фон не зажатых кнопок:</span>
+                <div class="tcd-color-row">
+                  ${['rgba(255,255,255,0.92)', '#ffffff', 'rgba(255,255,255,0.75)', 'rgba(255,255,255,0.16)', '#f3f6f5', '#162332', '#102f44'].map(c => `
+                    <button type="button" class="tcd-color-swatch ${effStepInactiveBg===c?'selected':''}" style="background:${c}" data-construct-color="stepInactiveBg" data-val="${c}" title="${c}"></button>
+                  `).join('')}
+                  <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                    <span>Свой цвет:</span>
+                    <input type="color" data-construct-color-inp="stepInactiveBg" value="#ffffff" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                  </label>
+                  ${currentTheme.stepInactiveBg ? `
+                    <button type="button" class="quiet" data-construct-reset="stepInactiveBg" style="font-size:11px;padding:4px 8px;margin-left:8px;border-radius:6px" title="Сбросить к стандарту темы">↺ Сброс</button>
+                  ` : ''}
+                </div>
+              </div>
+
+              <div class="tcd-row">
+                <span class="tcd-label">Цвет шрифта не зажатых кнопок:</span>
+                <div class="tcd-color-row">
+                  ${textColors.map(c => `
+                    <button type="button" class="tcd-color-swatch ${effStepInactiveFg===c?'selected':''}" style="background:${c}" data-construct-color="stepInactiveFg" data-val="${c}" title="${c}"></button>
+                  `).join('')}
+                  <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:6px;cursor:pointer">
+                    <span>Свой цвет:</span>
+                    <input type="color" data-construct-color-inp="stepInactiveFg" value="${effStepInactiveFg&&/^#[0-9a-f]{6}$/i.test(effStepInactiveFg)?effStepInactiveFg:'#142026'}" style="width:34px;height:34px;border:0;border-radius:8px;cursor:pointer">
+                  </label>
+                </div>
+              </div>
+
+              <div style="margin-top:12px;padding:10px 14px;background:var(--surface);border-radius:8px;border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:12px;color:var(--muted)">Предпросмотр не зажатых кнопок:</span>
+                <div style="display:flex;gap:8px">
+                  <div style="background:${effStepInactiveBg};color:${effStepInactiveFg};border:1px solid var(--line);padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700">
+                    02 Повод звонка
+                  </div>
+                  <div style="background:${effStepInactiveBg};color:${effStepInactiveFg};border:1px solid var(--line);padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700">
+                    03 Программа встречи
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
           <!-- 8. LINES INSPECTOR CONTROLS -->
           ${activeConstructorBlock==='lines' ? `
             <div class="tcd-row" style="margin-bottom:14px">
@@ -5463,6 +5618,14 @@ body.auth-locked #auth-close{display:none!important}
       const b = constructReset.dataset.constructReset;
       if (b === 'stageHeadingColor') {
         delete currentTheme.stageHeadingColor;
+      }
+      if (b === 'stepActiveBg') {
+        delete currentTheme.stepActiveBg;
+        delete currentTheme.stepActiveFg;
+      }
+      if (b === 'stepInactiveBg') {
+        delete currentTheme.stepInactiveBg;
+        delete currentTheme.stepInactiveFg;
       }
       applyTheme(currentTheme, true);
       if (window.__rerenderDesign) window.__rerenderDesign();
