@@ -780,6 +780,11 @@ function createAppServer(options = {}) {
         if (method !== 'GET' && method !== 'HEAD') {
           return sendJson(res, 405, { error: 'Метод не поддерживается.' });
         }
+        if (pathname === '/health' || pathname === '/healthz' || pathname === '/ping' || pathname === '/api/health') {
+          res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('ok');
+          return;
+        }
         if (pathname === '/' || pathname === '/index.html') {
           const html = fs.readFileSync(htmlPath, 'utf8');
           res.writeHead(200, {
