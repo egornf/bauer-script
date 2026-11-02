@@ -216,7 +216,13 @@ function extractSeedFromIndexHtml(htmlPath = INDEX_PATH) {
 }
 
 function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefaultOwner = true) {
-  fs.mkdirSync(dataDir, { recursive: true });
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+  } catch (err) {
+    console.warn(`[server.js] Could not create dataDir "${dataDir}": ${err.message}. Using fallback in os.tmpdir()`);
+    dataDir = path.join(os.tmpdir(), 'bauer-data');
+    try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
+  }
   const files = {
     users: path.join(dataDir, 'users.json'),
     sessions: path.join(dataDir, 'sessions.json'),
