@@ -6402,7 +6402,7 @@ showScript=function(index=current,tab='script'){
   origShowScript(index,tab);
 };
 
-let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',roleDefaults={};
+let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],selectedDeptHeadId=null,empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',roleDefaults={};
 
 function formatAuditDetails(ev){
   if(!ev) return '';
@@ -6611,10 +6611,13 @@ async function loadOwnerData(){
       headsList=uRes.heads||usersList.filter(u=>u.role==='HEAD'||u.role==='OWNER').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,isOwner:u.role==='OWNER'}));
       roleDefaults=uRes.roleDefaults||roleDefaults;
     }));
-    if(canDeptScripts)tasks.push(api('/api/department/scripts').then(dsRes=>{
-      deptScriptsIds=dsRes.scriptIds||[];
-      allLayoutsList=(dsRes.layouts||[]).filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
-    }).catch(()=>{}));
+    if(canDeptScripts){
+      const q = selectedDeptHeadId ? ('?headId=' + encodeURIComponent(selectedDeptHeadId)) : '';
+      tasks.push(api('/api/department/scripts' + q).then(dsRes=>{
+        deptScriptsIds=dsRes.scriptIds||[];
+        allLayoutsList=(dsRes.layouts||[]).filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
+      }).catch(()=>{}));
+    }
     if(canSessions)tasks.push(api('/api/sessions').then(sRes=>{sessionsList=sRes.sessions||[];}));
     if(canAudit){
       const params=new URLSearchParams({limit:'300'});
@@ -6762,8 +6765,11 @@ function renderDepartmentScriptsSection(){
   const isHead=currentUser?.role==='HEAD';
   const canManageAll=isOwner||(currentUser?.permissions||[]).includes('users.manage');
 
-  let activeHead=currentUser;
   const availHeads=headsList.filter(h=>h.isOwner||h.role==='HEAD');
+  if(!selectedDeptHeadId || !availHeads.some(h=>h.id===selectedDeptHeadId)){
+    selectedDeptHeadId = (currentUser.role==='HEAD'||currentUser.role==='OWNER') ? currentUser.id : (availHeads[0]?.id || currentUser.id);
+  }
+  const activeHead=availHeads.find(h=>h.id===selectedDeptHeadId) || currentUser;
 
   return `<div class="owner-card">
     <div class="owner-card-head">
@@ -6781,7 +6787,7 @@ function renderDepartmentScriptsSection(){
     ${availHeads.length>1&&(isOwner||canManageAll)?`
       <div style="margin-bottom:14px">
         <label for="dept-scripts-head-select" style="font-size:12px;font-weight:700">Выбор отдела руководителя:</label>
-        <select id="dept-scripts-head-select" style="max-width:320px;height:38px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);font:inherit">
+        <select id="dept-scripts-head-select" style="max-width:340px;height:38px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);font:inherit;font-weight:700">
           ${availHeads.map(h=>`<option value="${E(h.id)}" ${h.id===activeHead.id?'selected':''}>${h.isOwner?'★ Отдел Мелентьев Е.А. (Владелец)':E('Отдел '+h.displayName+' (@'+h.login+')')}</option>`).join('')}
         </select>
       </div>
@@ -7580,15 +7586,18 @@ document.getElementById('header-style-btn')?.addEventListener('click',openStyleM
     return;
   }
 
-  const deptHeadSel=e.target.closest('#dept-scripts-head-select');
-  if(deptHeadSel){
-    // handled on change
-  }
-
   if(e.target.id==='dept-scripts-select-all'){
     document.querySelectorAll('#dept-script-grid input[type=checkbox]').forEach(cb=>{
       cb.checked=true;
-      cb.closest('.dept-script-item')?.classList.add('selected');
+      const item = cb.closest('.dept-script-item');
+      if (item) {
+        item.classList.add('selected');
+        const pill = item.querySelector('.status-pill');
+        if (pill) {
+          pill.classList.add('active');
+          pill.textContent = '✓ В отделе';
+        }
+      }
     });
     return;
   }
@@ -7596,36 +7605,49 @@ document.getElementById('header-style-btn')?.addEventListener('click',openStyleM
   if(e.target.id==='dept-scripts-clear'){
     document.querySelectorAll('#dept-script-grid input[type=checkbox]').forEach(cb=>{
       cb.checked=false;
-      cb.closest('.dept-script-item')?.classList.remove('selected');
+      const item = cb.closest('.dept-script-item');
+      if (item) {
+        item.classList.remove('selected');
+        const pill = item.querySelector('.status-pill');
+        if (pill) {
+          pill.classList.remove('active');
+          pill.textContent = 'Не выбран (скрыт, если есть выбор)';
+        }
+      }
     });
-    return;
-  }
-
-  if(e.target.closest('#dept-script-grid .dept-script-item')){
-    const item=e.target.closest('.dept-script-item');
-    const cb=item.querySelector('input[type=checkbox]');
-    if(e.target!==cb){cb.checked=!cb.checked;}
-    item.classList.toggle('selected',cb.checked);
     return;
   }
 
   if(e.target.id==='dept-scripts-save'){
     const btn=e.target;
     btn.disabled=true;
+    btn.textContent='Сохранение...';
     const selectedIds=[...document.querySelectorAll('#dept-script-grid input[type=checkbox]:checked')].map(cb=>cb.value);
-    const headId=document.getElementById('dept-scripts-head-select')?.value||currentUser.id;
+    const headId=document.getElementById('dept-scripts-head-select')?.value||selectedDeptHeadId||currentUser.id;
     try{
       await api('/api/department/scripts',{
         method:'PUT',
         body:JSON.stringify({scriptIds:selectedIds,headId})
       });
       deptScriptsIds=selectedIds;
+      selectedDeptHeadId=headId;
+      const h=headsList.find(x=>x.id===headId);
+      if(h){
+        h.departmentScripts=selectedIds;
+        h.departmentScriptsCount=selectedIds.length;
+      }
+      const u=usersList.find(x=>x.id===headId);
+      if(u)u.departmentScripts=selectedIds;
       if(currentUser.id===headId)currentUser.departmentScripts=selectedIds;
       toast(selectedIds.length?'Скрипты отдела сохранены (выбрано: '+selectedIds.length+')':'Скрипты отдела сброшены (сотрудникам доступны все скрипты)');
       dispatchEvent(new Event('layouts-changed'));
       renderOwnerView();
-    }catch(err){toast(err.message);}
-    finally{btn.disabled=false;}
+    }catch(err){
+      toast(err.message);
+    }finally{
+      btn.disabled=false;
+      btn.textContent='💾 Сохранить скрипты отдела';
+    }
     return;
   }
 
@@ -7912,6 +7934,24 @@ document.addEventListener('submit',async e=>{
         auditFilterDept = document.getElementById('audit-filter-dept')?.value || '';
         auditFilterAction = document.getElementById('audit-filter-action')?.value || '';
         loadOwnerData().then(() => { if (typeof renderOwnerView === 'function') renderOwnerView(); });
+      }
+    } else if (e.target.id === 'dept-scripts-head-select') {
+      selectedDeptHeadId = e.target.value;
+      const q = selectedDeptHeadId ? ('?headId=' + encodeURIComponent(selectedDeptHeadId)) : '';
+      api('/api/department/scripts' + q).then(dsRes => {
+        deptScriptsIds = dsRes.scriptIds || [];
+        if (typeof renderOwnerView === 'function') renderOwnerView();
+      }).catch(err => { toast(err.message); });
+    } else if (e.target.matches('#dept-script-grid input[type=checkbox]')) {
+      const cb = e.target;
+      const item = cb.closest('.dept-script-item');
+      if (item) {
+        item.classList.toggle('selected', cb.checked);
+        const pill = item.querySelector('.status-pill');
+        if (pill) {
+          pill.classList.toggle('active', cb.checked);
+          pill.textContent = cb.checked ? '✓ В отделе' : 'Не выбран (скрыт, если есть выбор)';
+        }
       }
     }
   });

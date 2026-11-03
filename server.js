@@ -1725,6 +1725,7 @@ function createAppServer(options = {}) {
               displayName: u.displayName || u.login,
               role: u.role,
               isOwner: u.role === 'OWNER',
+              departmentScripts: Array.isArray(u.departmentScripts) ? u.departmentScripts : [],
               departmentScriptsCount: Array.isArray(u.departmentScripts) ? u.departmentScripts.length : 0
             }));
           return sendJson(res, 200, { users: list, heads, availablePermissions: ALL_PERMISSIONS, roleDefaults: DEFAULT_ROLE_PERMISSIONS });
