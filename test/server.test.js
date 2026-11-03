@@ -790,4 +790,104 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.equal(resetRes.status, 200);
     assert.equal(resetRes.data.user.mustChangePassword, true);
   });
+
+  await t.test('14. ADMIN can switch departments and manage department scripts per HEAD, which correctly filter for assigned OPERATORs', async () => {
+    // 1. Admin login
+    const adminClient = createTestClient(baseUrl);
+    const loginRes = await adminClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'admin_full', password: 'AdminPass123' }
+    });
+    assert.equal(loginRes.status, 200);
+
+    // 2. Head (head_sergey) and Operator (op_dept_test) created in previous tests
+    // Check all available layouts
+    const allScriptsRes = await adminClient.request('/api/scripts');
+    assert.equal(allScriptsRes.status, 200);
+    const layouts = allScriptsRes.data.allLayouts;
+    assert.ok(layouts.length >= 2, 'Need at least 2 layouts for department testing');
+    const targetScript1 = layouts[0].id;
+    const targetScript2 = layouts[1].id;
+
+    // Get list of users to find head_sergey and owner
+    const usersRes = await adminClient.request('/api/users');
+    assert.equal(usersRes.status, 200);
+    const headSergey = usersRes.data.users.find(u => u.login === 'head_sergey');
+    const ownerUser = usersRes.data.users.find(u => u.role === 'OWNER');
+    assert.ok(headSergey, 'head_sergey must exist');
+    assert.ok(ownerUser, 'owner must exist');
+
+    // 3. Admin calls GET /api/department/scripts without headId -> defaults cleanly without error
+    const defaultDeptRes = await adminClient.request('/api/department/scripts');
+    assert.equal(defaultDeptRes.status, 200);
+    assert.ok(Array.isArray(defaultDeptRes.data.scriptIds));
+    assert.ok(Array.isArray(defaultDeptRes.data.layouts));
+
+    // 4. Admin queries specifically for head_sergey
+    const headDeptRes = await adminClient.request(`/api/department/scripts?headId=${headSergey.id}`);
+    assert.equal(headDeptRes.status, 200);
+    assert.equal(headDeptRes.data.headId, headSergey.id);
+    assert.equal(headDeptRes.data.headLogin, 'head_sergey');
+
+    // 5. Operator (op_dept_test) assigned to head_sergey logs in
+    const opClient = createTestClient(baseUrl);
+    await opClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'op_dept_test', password: 'Pass1234!' }
+    });
+
+    // 6. Admin assigns script1 and script2 to head_sergey's department
+    const saveRes = await adminClient.request('/api/department/scripts', {
+      method: 'PUT',
+      body: {
+        headId: headSergey.id,
+        scriptIds: [targetScript1, targetScript2]
+      }
+    });
+    assert.equal(saveRes.status, 200);
+    assert.equal(saveRes.data.headId, headSergey.id);
+    assert.deepEqual(saveRes.data.scriptIds.sort(), [targetScript1, targetScript2].sort());
+
+    // 7. Verify switching departments:
+    // When Admin asks for head_sergey, returns the 2 scripts
+    const verifyHeadDept = await adminClient.request(`/api/department/scripts?headId=${headSergey.id}`);
+    assert.equal(verifyHeadDept.status, 200);
+    assert.deepEqual(verifyHeadDept.data.scriptIds.sort(), [targetScript1, targetScript2].sort());
+
+    // When Admin switches to owner's department, returns owner's scripts (which is currently empty or different)
+    const verifyOwnerDept = await adminClient.request(`/api/department/scripts?headId=${ownerUser.id}`);
+    assert.equal(verifyOwnerDept.status, 200);
+    assert.equal(verifyOwnerDept.data.headId, ownerUser.id);
+    assert.notDeepEqual(verifyOwnerDept.data.scriptIds.sort(), [targetScript1, targetScript2].sort());
+
+    // 8. Operator under head_sergey MUST see exactly the 2 department scripts in /api/scripts
+    const opScriptsRes = await opClient.request('/api/scripts');
+    assert.equal(opScriptsRes.status, 200);
+    assert.equal(opScriptsRes.data.layouts.length, 2);
+    const opLayoutIds = opScriptsRes.data.layouts.map(l => l.id).sort();
+    assert.deepEqual(opLayoutIds, [targetScript1, targetScript2].sort());
+
+    // 9. Operator under Owner (op_owner_dept) should NOT be affected by head_sergey's scripts
+    const opOwnerClient = createTestClient(baseUrl);
+    await opOwnerClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'op_owner_dept', password: 'PassOwner123!' }
+    });
+    const opOwnerScriptsRes = await opOwnerClient.request('/api/scripts');
+    assert.equal(opOwnerScriptsRes.status, 200);
+    assert.equal(opOwnerScriptsRes.data.layouts.length, layouts.length);
+
+    // 10. Admin resets head_sergey's department scripts
+    const resetRes = await adminClient.request('/api/department/scripts', {
+      method: 'PUT',
+      body: { headId: headSergey.id, scriptIds: [] }
+    });
+    assert.equal(resetRes.status, 200);
+    assert.deepEqual(resetRes.data.scriptIds, []);
+
+    // Operator under head_sergey now sees all layouts again
+    const opResetScripts = await opClient.request('/api/scripts');
+    assert.equal(opResetScripts.status, 200);
+    assert.equal(opResetScripts.data.layouts.length, layouts.length);
+  });
 });

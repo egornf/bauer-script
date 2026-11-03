@@ -1252,9 +1252,10 @@ function createAppServer(options = {}) {
             mgr = auth.user;
           }
           if (mgr && Array.isArray(mgr.departmentScripts) && mgr.departmentScripts.length > 0) {
-            deptScripts = mgr.departmentScripts;
+            deptScripts = mgr.departmentScripts.map(String);
             if (auth.user.role === 'OPERATOR') {
-              const filtered = allLayouts.filter(l => deptScripts.includes(l.id));
+              const deptSet = new Set(deptScripts);
+              const filtered = allLayouts.filter(l => deptSet.has(String(l.id)));
               if (filtered.length > 0) {
                 resultLayouts = filtered;
               }
@@ -1384,10 +1385,12 @@ function createAppServer(options = {}) {
             targetHead = allUsers.find(u => u.id === requestedHeadId && (u.role === 'HEAD' || u.role === 'OWNER'));
           } else if (isHead || isOwner) {
             targetHead = auth.user;
+          } else if (isAdmin) {
+            targetHead = allUsers.find(u => u.role === 'OWNER') || allUsers.find(u => u.role === 'HEAD') || null;
           } else if (auth.user.role === 'OPERATOR' && auth.user.managerId) {
             targetHead = allUsers.find(u => u.id === auth.user.managerId && (u.role === 'HEAD' || u.role === 'OWNER'));
           }
-          const scriptIds = Array.isArray(targetHead?.departmentScripts) ? targetHead.departmentScripts : [];
+          const scriptIds = Array.isArray(targetHead?.departmentScripts) ? [...new Set(targetHead.departmentScripts.map(String))] : [];
           return sendJson(res, 200, {
             headId: targetHead?.id || null,
             headLogin: targetHead?.login || null,
@@ -1413,11 +1416,13 @@ function createAppServer(options = {}) {
             }
           } else if (isHead || isOwner) {
             targetHead = auth.user;
+          } else if (isAdmin) {
+            targetHead = allUsers.find(u => u.role === 'OWNER') || allUsers.find(u => u.role === 'HEAD') || null;
           }
           if (!targetHead) {
             return sendJson(res, 400, { error: 'Не указан руководитель отдела.' });
           }
-          const cleanIds = body.scriptIds.map(String).filter(Boolean);
+          const cleanIds = [...new Set(body.scriptIds.map(String).filter(Boolean))];
           targetHead.departmentScripts = cleanIds;
           targetHead.updatedAt = Date.now();
           store.saveUsers();

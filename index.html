@@ -3309,10 +3309,12 @@ async function api_local_vault(rawPath,options={}){
         targetHead=users.find(u=>u.id===reqHeadId&&(u.role==='HEAD'||u.role==='OWNER'));
       }else if(isHead||isOwner){
         targetHead=authUser;
+      }else if(isAdmin){
+        targetHead=users.find(u=>u.role==='OWNER')||users.find(u=>u.role==='HEAD')||null;
       }else if(authUser.role==='OPERATOR'&&authUser.managerId){
         targetHead=users.find(u=>u.id===authUser.managerId&&(u.role==='HEAD'||u.role==='OWNER'));
       }
-      const scriptIds=Array.isArray(targetHead?.departmentScripts)?targetHead.departmentScripts:[];
+      const scriptIds=Array.isArray(targetHead?.departmentScripts)?[...new Set(targetHead.departmentScripts.map(String))]:[];
       return {
         headId:targetHead?.id||null,
         headLogin:targetHead?.login||null,
@@ -3330,9 +3332,11 @@ async function api_local_vault(rawPath,options={}){
         if(!targetHead)throw fail('Указанный руководитель отдела не найден.',404);
       }else if(isHead||isOwner){
         targetHead=authUser;
+      }else if(isAdmin){
+        targetHead=users.find(u=>u.role==='OWNER')||users.find(u=>u.role==='HEAD')||null;
       }
       if(!targetHead)throw fail('Не указан руководитель отдела.',400);
-      targetHead.departmentScripts=body.scriptIds.map(String).filter(Boolean);
+      targetHead.departmentScripts=[...new Set(body.scriptIds.map(String).filter(Boolean))];
       targetHead.updatedAt=Date.now();
       await saveUsers();
       await logEvent({action:'department.scripts.update',actor:authUser,target:targetHead.login,details:{scriptIds:targetHead.departmentScripts}});
@@ -6614,8 +6618,11 @@ async function loadOwnerData(){
     if(canDeptScripts){
       const q = selectedDeptHeadId ? ('?headId=' + encodeURIComponent(selectedDeptHeadId)) : '';
       tasks.push(api('/api/department/scripts' + q).then(dsRes=>{
-        deptScriptsIds=dsRes.scriptIds||[];
+        deptScriptsIds=Array.isArray(dsRes.scriptIds)?dsRes.scriptIds:[];
         allLayoutsList=(dsRes.layouts||[]).filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
+        if(!selectedDeptHeadId && dsRes.headId){
+          selectedDeptHeadId = dsRes.headId;
+        }
       }).catch(()=>{}));
     }
     if(canSessions)tasks.push(api('/api/sessions').then(sRes=>{sessionsList=sRes.sessions||[];}));
@@ -7401,19 +7408,6 @@ document.getElementById('open-owner-recovery')?.addEventListener('click',()=>{
   dlg.showModal();
 });
 
-document.addEventListener('click',async e=>{
-  const closeBtn=e.target.closest('[data-close-modal]');
-  if(closeBtn){document.getElementById(closeBtn.dataset.closeModal)?.close();return;}
-
-  const tabBtn=e.target.closest('[data-owner-tab]');
-  if(tabBtn){
-    ownerTab=tabBtn.dataset.ownerTab;
-    renderOwnerView();
-    if(ownerTab!=='design'&&ownerTab!=='security'){await loadOwnerData();renderOwnerView();}
-    return;
-  }
-
-
 function openStyleModal(){
   const dlg=document.getElementById('style-modal');
   if(!dlg)return;
@@ -7577,6 +7571,20 @@ function openStyleModal(){
   dlg.showModal();
 }
 document.getElementById('header-style-btn')?.addEventListener('click',openStyleModal);
+
+document.addEventListener('click',async e=>{
+  const closeBtn=e.target.closest('[data-close-modal]');
+  if(closeBtn){document.getElementById(closeBtn.dataset.closeModal)?.close();return;}
+
+  const tabBtn=e.target.closest('[data-owner-tab]');
+  if(tabBtn){
+    ownerTab=tabBtn.dataset.ownerTab;
+    renderOwnerView();
+    if(ownerTab!=='design'&&ownerTab!=='security'){await loadOwnerData();renderOwnerView();}
+    return;
+  }
+
+
 
 
   const empFBtn=e.target.closest('[data-emp-filter]');
@@ -7827,6 +7835,45 @@ document.addEventListener('submit',async e=>{
     return;
   }
 });
+
+document.addEventListener('change', async (e) => {
+  if (e.target.id === 'dept-scripts-head-select') {
+    const headId = e.target.value;
+    selectedDeptHeadId = headId;
+    const foundHead = headsList.find(h => h.id === headId);
+    if (foundHead && Array.isArray(foundHead.departmentScripts)) {
+      deptScriptsIds = [...foundHead.departmentScripts];
+      renderOwnerView();
+    }
+    try {
+      const q = headId ? ('?headId=' + encodeURIComponent(headId)) : '';
+      const dsRes = await api('/api/department/scripts' + q);
+      deptScriptsIds = Array.isArray(dsRes.scriptIds) ? dsRes.scriptIds : [];
+      if (foundHead) foundHead.departmentScripts = deptScriptsIds;
+      renderOwnerView();
+    } catch (err) {
+      toast(err.message || 'Ошибка загрузки скриптов отдела');
+    }
+    return;
+  }
+  if (e.target.matches('#dept-script-grid input[type=checkbox]')) {
+    const cb = e.target;
+    const item = cb.closest('.dept-script-item');
+    if (item) {
+      item.classList.toggle('selected', cb.checked);
+      const pill = item.querySelector('.status-pill');
+      if (pill) {
+        pill.classList.toggle('active', cb.checked);
+        pill.textContent = cb.checked ? '✓ В отделе' : 'Не выбран (скрыт, если есть выбор)';
+      }
+    }
+    return;
+  }
+});
+
+window.renderOwnerView = renderOwnerView;
+window.loadOwnerData = loadOwnerData;
+
 })();
 </script>
 
@@ -7935,25 +7982,7 @@ document.addEventListener('submit',async e=>{
         auditFilterAction = document.getElementById('audit-filter-action')?.value || '';
         loadOwnerData().then(() => { if (typeof renderOwnerView === 'function') renderOwnerView(); });
       }
-    } else if (e.target.id === 'dept-scripts-head-select') {
-      selectedDeptHeadId = e.target.value;
-      const q = selectedDeptHeadId ? ('?headId=' + encodeURIComponent(selectedDeptHeadId)) : '';
-      api('/api/department/scripts' + q).then(dsRes => {
-        deptScriptsIds = dsRes.scriptIds || [];
-        if (typeof renderOwnerView === 'function') renderOwnerView();
-      }).catch(err => { toast(err.message); });
-    } else if (e.target.matches('#dept-script-grid input[type=checkbox]')) {
-      const cb = e.target;
-      const item = cb.closest('.dept-script-item');
-      if (item) {
-        item.classList.toggle('selected', cb.checked);
-        const pill = item.querySelector('.status-pill');
-        if (pill) {
-          pill.classList.toggle('active', cb.checked);
-          pill.textContent = cb.checked ? '✓ В отделе' : 'Не выбран (скрыт, если есть выбор)';
-        }
-      }
-    }
+
   });
 
   let searchDebounce = null;
