@@ -1289,9 +1289,10 @@ function createAppServer(options = {}) {
               if (isOwner || isAdmin) return true;
               const sender = allUsers.find(u => u.id === t.senderId);
               if (!sender) return true;
-              if (sender.role === 'OWNER' || sender.role === 'ADMIN') return true;
+              if (sender.role === 'OWNER' || sender.role === 'ADMIN' || sender.role === 'EDITOR') return true;
               if (sender.role === 'HEAD' && user.managerId === sender.id) return true;
               if (user.managerId && sender.managerId === user.managerId) return true;
+              if (!user.managerId && !sender.managerId) return true;
               if (isHead && sender.managerId === user.id) return true;
               return false;
             }
@@ -1344,7 +1345,7 @@ function createAppServer(options = {}) {
         const user = auth.user;
         const allUsers = store.getUsers();
         let colleagues = [];
-        if (user.role === 'OWNER' || user.role === 'ADMIN') {
+        if (user.role === 'OWNER' || user.role === 'ADMIN' || user.role === 'EDITOR') {
           colleagues = allUsers.filter(u => u.id !== user.id && !u.blocked);
         } else if (user.role === 'HEAD') {
           colleagues = allUsers.filter(u => u.id !== user.id && !u.blocked && (u.managerId === user.id || u.role === 'HEAD' || u.role === 'OWNER'));

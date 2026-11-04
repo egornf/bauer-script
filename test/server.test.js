@@ -890,4 +890,168 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.equal(opResetScripts.status, 200);
     assert.equal(opResetScripts.data.layouts.length, layouts.length);
   });
+
+  await t.test('15. Theme preferences persistence on every account type (OWNER, ADMIN, HEAD, EDITOR, OPERATOR) and transferring/sharing themes between employees', async () => {
+    // Clients for each role
+    const owner = createTestClient(baseUrl);
+    const ownerLoginRes = await owner.request('/api/admin/login', { method: 'POST', body: { login: ownerUser.login, password: '9999' } });
+    assert.equal(ownerLoginRes.status, 200, 'Owner login should succeed with password 9999');
+
+    const admin = createTestClient(baseUrl);
+    await admin.request('/api/admin/login', { method: 'POST', body: { login: 'admin_full', password: 'AdminPass123' } });
+
+    const head = createTestClient(baseUrl);
+    await head.request('/api/admin/login', { method: 'POST', body: { login: 'head_sergey', password: 'HeadPass123' } });
+
+    const editor = createTestClient(baseUrl);
+    await editor.request('/api/admin/login', { method: 'POST', body: { login: 'editor_olga', password: 'EditorPassword123!' } });
+
+    const op1 = createTestClient(baseUrl);
+    await op1.request('/api/admin/login', { method: 'POST', body: { login: 'op_dept_test', password: 'Pass1234!' } });
+
+    const op2 = createTestClient(baseUrl);
+    await op2.request('/api/admin/login', { method: 'POST', body: { login: 'op_owner_dept', password: 'PassOwner123!' } });
+
+    // Retrieve user profiles
+    const usersRes = await admin.request('/api/users');
+    const uOp1 = usersRes.data.users.find(u => u.login === 'op_dept_test');
+    const uOp2 = usersRes.data.users.find(u => u.login === 'op_owner_dept');
+    const uHead = usersRes.data.users.find(u => u.login === 'head_sergey');
+
+    // --- 1. Test Saving Themes on EVERY account type ---
+    const rolesToTest = [
+      { name: 'OWNER', client: owner, color: '#102f44' },
+      { name: 'ADMIN', client: admin, color: '#0d3832' },
+      { name: 'HEAD', client: head, color: '#0d0221' },
+      { name: 'EDITOR', client: editor, color: '#2a1a08' },
+      { name: 'OPERATOR', client: op1, color: '#070b18' }
+    ];
+
+    for (const r of rolesToTest) {
+      const myTheme = {
+        name: `Тема для ${r.name}`,
+        headerBg: r.color,
+        theme: 'dark',
+        accent: '#00f5d4',
+        cardStyle: 'glass',
+        updatedAt: Date.now()
+      };
+      const myCustomThemes = [
+        { id: `custom_${r.name.toLowerCase()}`, name: `Кастом ${r.name}`, headerBg: r.color, theme: 'dark' }
+      ];
+
+      // POST /api/user/preferences
+      const postPref = await r.client.request('/api/user/preferences', {
+        method: 'POST',
+        body: { theme: myTheme, customThemes: myCustomThemes }
+      });
+      assert.equal(postPref.status, 200, `POST /api/user/preferences should succeed for ${r.name}`);
+      assert.equal(postPref.data.theme.headerBg, r.color);
+      assert.equal(postPref.data.customThemes.length, 1);
+
+      // GET /api/user/preferences
+      const getPref = await r.client.request('/api/user/preferences');
+      assert.equal(getPref.status, 200, `GET /api/user/preferences should succeed for ${r.name}`);
+      assert.equal(getPref.data.theme.name, `Тема для ${r.name}`);
+      assert.equal(getPref.data.customThemes[0].id, `custom_${r.name.toLowerCase()}`);
+
+      // GET /api/admin/status (verifying user.theme and user.customThemes survive sanitizeUser across devices)
+      const getStatus = await r.client.request('/api/admin/status');
+      assert.equal(getStatus.status, 200);
+      assert.ok(getStatus.data.user, `User must be present in status for ${r.name}`);
+      assert.equal(getStatus.data.user.theme?.headerBg, r.color, `theme must be returned in status for ${r.name}`);
+      assert.equal(getStatus.data.user.customThemes?.length, 1, `customThemes must be returned in status for ${r.name}`);
+    }
+
+    // --- 2. Test Transferring / Sharing theme directly between employees ---
+    // op1 (op_dept_test) shares a theme directly with op2 (op_owner_dept)
+    const directThemePayload = {
+      theme: {
+        name: 'Супер-Неон от Оператора 1',
+        desc: 'Специальная тема',
+        headerBg: '#051923',
+        theme: 'dark',
+        accent: '#00f5d4',
+        cardStyle: 'neon'
+      },
+      targetUserId: uOp2.id,
+      targetUserName: 'Оператор 2'
+    };
+    const shareDirectRes = await op1.request('/api/themes/shared', {
+      method: 'POST',
+      body: directThemePayload
+    });
+    assert.equal(shareDirectRes.status, 201);
+    const sharedThemeId = shareDirectRes.data.theme.id;
+    assert.ok(sharedThemeId);
+
+    // op2 (target recipient) should see it
+    const op2SharedRes = await op2.request('/api/themes/shared');
+    assert.equal(op2SharedRes.status, 200);
+    const receivedDirect = op2SharedRes.data.sharedThemes.find(t => t.id === sharedThemeId);
+    assert.ok(receivedDirect, 'Target recipient (op2) must receive the shared theme');
+    assert.equal(receivedDirect.name, 'Супер-Неон от Оператора 1');
+
+    // head (not the target, and different user) should NOT see this direct 1-on-1 theme
+    const headSharedRes = await head.request('/api/themes/shared');
+    assert.equal(headSharedRes.status, 200);
+    const headSeesDirect = headSharedRes.data.sharedThemes.find(t => t.id === sharedThemeId);
+    assert.strictEqual(headSeesDirect, undefined, 'Head must not see a private theme directed to another user');
+
+    // --- 3. Test Department Theme Sharing (HEAD shares with department) ---
+    const deptThemePayload = {
+      theme: {
+        name: 'Корпоративная тема Отдела Сергея',
+        headerBg: '#1e3a8a',
+        theme: 'dark',
+        accent: '#3b82f6'
+      },
+      shareAll: true
+    };
+    const headShareRes = await head.request('/api/themes/shared', {
+      method: 'POST',
+      body: deptThemePayload
+    });
+    assert.equal(headShareRes.status, 201);
+    const headThemeId = headShareRes.data.theme.id;
+
+    // op1 (assigned to head_sergey) MUST see the department theme
+    const op1AfterHeadShare = await op1.request('/api/themes/shared');
+    assert.ok(op1AfterHeadShare.data.sharedThemes.some(t => t.id === headThemeId), 'Operator in department must see head shareAll theme');
+
+    // op2 (assigned to owner, not head_sergey) must NOT see head_sergey department theme
+    const op2AfterHeadShare = await op2.request('/api/themes/shared');
+    assert.ok(!op2AfterHeadShare.data.sharedThemes.some(t => t.id === headThemeId), 'Operator in another department must not see head_sergey theme');
+
+    // --- 4. Test Global Theme Sharing (OWNER shares with all) ---
+    const globalThemePayload = {
+      theme: {
+        name: 'Глобальная тема Владельца',
+        headerBg: '#042f2e',
+        theme: 'dark',
+        accent: '#14b8a6'
+      },
+      shareAll: true
+    };
+    const ownerShareRes = await owner.request('/api/themes/shared', {
+      method: 'POST',
+      body: globalThemePayload
+    });
+    assert.equal(ownerShareRes.status, 201);
+    const globalThemeId = ownerShareRes.data.theme.id;
+
+    // Everyone across the company should receive the owner's global theme
+    for (const cl of [admin, head, editor, op1, op2]) {
+      const listRes = await cl.request('/api/themes/shared');
+      assert.ok(listRes.data.sharedThemes.some(t => t.id === globalThemeId), 'All roles must receive owner shareAll theme');
+    }
+
+    // --- 5. Test Deleting Shared Themes ---
+    // op2 deletes the direct theme sent to them
+    const deleteRes = await op2.request(`/api/themes/shared?id=${sharedThemeId}`, { method: 'DELETE' });
+    assert.equal(deleteRes.status, 200);
+
+    const op2AfterDelete = await op2.request('/api/themes/shared');
+    assert.strictEqual(op2AfterDelete.data.sharedThemes.find(t => t.id === sharedThemeId), undefined, 'Theme must be removed after deletion');
+  });
 });

@@ -2739,6 +2739,8 @@ async function api_local_vault(rawPath,options={}){
       mustChangePassword:Boolean(u.mustChangePassword),
       blocked:isO?false:Boolean(u.blocked),
       permissions:isO?[...VAULT_ROLE_DEFAULTS.OWNER]:(Array.isArray(u.permissions)?u.permissions:[]),
+      theme:u.theme||null,
+      customThemes:Array.isArray(u.customThemes)?u.customThemes:[],
       createdAt:u.createdAt||0,
       updatedAt:u.updatedAt||0,
       lastLoginAt:u.lastLoginAt||null,
@@ -3456,6 +3458,7 @@ async function ensureAdmin(action){
     if(state.unlocked){
       adminUnlocked=true;
       if (typeof window.updateHeaderBadge === 'function') window.updateHeaderBadge();
+      if (typeof window.refreshUserTheme === 'function') window.refreshUserTheme();
       return await action();
     }
     adminUnlocked=false;afterAuth=action;authSetup=!state.configured;
@@ -4809,6 +4812,7 @@ body.auth-locked #auth-close{display:none!important}
     // Synchronous immediate save so reloads never lose state
     if (save) {
       try {
+        currentTheme.updatedAt = Date.now();
         const user = (typeof currentUser !== 'undefined' && currentUser && currentUser.login) ? currentUser.login : localStorage.getItem('bauer-current-login');
         if (user) {
           localStorage.setItem('bauer-current-login', user);
@@ -4816,6 +4820,7 @@ body.auth-locked #auth-close{display:none!important}
         }
         localStorage.setItem('bauer-color-theme', currentTheme.theme || 'light');
         if (typeof currentUser !== 'undefined' && currentUser) {
+          currentUser.theme = currentTheme;
           syncUserPreferencesToServer(currentTheme, null);
         }
       } catch (e) {}
@@ -4842,8 +4847,23 @@ body.auth-locked #auth-close{display:none!important}
         }
       }
       if (userObj.theme && typeof userObj.theme === 'object' && userObj.login) {
+        let shouldApplyServerTheme = false;
         const localRaw = localStorage.getItem('bauer-user-theme:' + userObj.login);
         if (!localRaw) {
+          shouldApplyServerTheme = true;
+        } else {
+          try {
+            const localTheme = JSON.parse(localRaw);
+            const serverTs = userObj.theme.updatedAt || 0;
+            const localTs = localTheme.updatedAt || 0;
+            if (serverTs && serverTs > localTs) {
+              shouldApplyServerTheme = true;
+            }
+          } catch (e) {
+            shouldApplyServerTheme = true;
+          }
+        }
+        if (shouldApplyServerTheme) {
           currentTheme = { ...userObj.theme };
           applyTheme(currentTheme, true);
         }
@@ -4851,9 +4871,23 @@ body.auth-locked #auth-close{display:none!important}
     } catch (e) {}
   }
 
-  function refreshUserTheme() {
+  async function refreshUserTheme() {
     if (typeof currentUser !== 'undefined' && currentUser) {
       syncServerThemesForUser(currentUser);
+      try {
+        if (typeof api === 'function') {
+          const prefRes = await api('/api/user/preferences');
+          if (prefRes && prefRes.ok) {
+            if (prefRes.theme || (prefRes.customThemes && prefRes.customThemes.length)) {
+              syncServerThemesForUser({
+                ...currentUser,
+                theme: prefRes.theme || currentUser.theme,
+                customThemes: prefRes.customThemes || currentUser.customThemes
+              });
+            }
+          }
+        }
+      } catch (e) {}
     }
     currentTheme = loadSavedTheme();
     applyTheme(currentTheme, false);
@@ -5939,9 +5973,15 @@ body.auth-locked #auth-close{display:none!important}
         return;
       }
 
-      // DELETE: Delete custom theme
+      // DELETE: Delete custom or shared theme
       if (act === 'delete') {
         if (window.confirm('Удалить тему «' + targetTheme.name + '»?')) {
+          if (targetTheme.shared) {
+            try {
+              await api('/api/themes/shared?id=' + encodeURIComponent(themeId), { method: 'DELETE' });
+            } catch (err) {}
+            serverSharedThemes = serverSharedThemes.filter(x => x.id !== themeId);
+          }
           let list = loadCustomThemes();
           list = list.filter(x => x.id !== themeId);
           storeCustomThemes(list);
@@ -6542,7 +6582,7 @@ async function performLogout(){
   }catch{}
   adminUnlocked=false;currentUser=null;
   try { localStorage.removeItem('bauer-current-login'); } catch (e) {}
-  if (typeof refreshUserTheme === 'function') refreshUserTheme();
+  if (typeof window.refreshUserTheme === 'function') window.refreshUserTheme();
   updateHeaderBadge();
   showScript();
   toast('Вы вышли из учётной записи');
@@ -6565,7 +6605,7 @@ api('/api/admin/status').then(st=>{
   } else {
     try { localStorage.removeItem('bauer-current-login'); } catch (e) {}
   }
-  if (typeof refreshUserTheme === 'function') refreshUserTheme();
+  if (typeof window.refreshUserTheme === 'function') window.refreshUserTheme();
   if(currentUser&&currentUser.mustChangePassword){
     showChangeTempPasswordModal();
     return;
@@ -6574,7 +6614,7 @@ api('/api/admin/status').then(st=>{
     ensureAdmin(()=>{updateHeaderBadge();});
   }
 }).catch(()=>{
-  if (typeof refreshUserTheme === 'function') refreshUserTheme();
+  if (typeof window.refreshUserTheme === 'function') window.refreshUserTheme();
   ensureAdmin(()=>{updateHeaderBadge();});
 });
 
