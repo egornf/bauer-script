@@ -482,22 +482,44 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 #whole-close{background:var(--custom-accent, var(--teal, #008578)) !important;color:var(--custom-accent-fg, #ffffff) !important;border:1px solid var(--custom-accent, var(--teal, #008578)) !important;border-radius:8px !important;padding:8px 18px !important;font-size:13px !important;font-weight:750 !important;cursor:pointer !important;transition:all .16s ease !important;box-shadow:0 4px 12px color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, transparent) !important}
 #whole-close:hover{opacity:0.92;transform:translateY(-1px)}
 
-.whole-content{overflow-y:auto;flex:1;min-height:0;padding:24px max(16px,calc((100vw - 1280px)/2)) 50px;scrollbar-gutter:stable}
-.whole-stage{background:var(--custom-card-bg, var(--surface, #ffffff)) !important;color:var(--custom-block-fg, var(--ink)) !important;border:1.5px solid var(--line) !important;border-radius:20px !important;padding:28px !important;margin-bottom:24px !important;box-shadow:0 8px 24px rgba(0,0,0,0.06) !important;transition:all .18s ease}
-.whole-stage h2{margin:0 0 20px !important;font-size:24px !important;font-weight:850 !important;color:var(--custom-accent, var(--teal, #008578)) !important;border-bottom:2px solid color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 25%, transparent) !important;padding-bottom:12px !important}
+.whole-body-layout{display:flex;flex:1;min-height:0;width:100%;overflow:hidden;position:relative}
+.whole-sidebar{width:260px;flex-shrink:0;display:flex;flex-direction:column;background:var(--custom-card-bg, var(--surface, #ffffff));border-right:1.5px solid var(--line);overflow-y:auto;padding:16px 12px;gap:6px;scrollbar-gutter:stable;transition:all .2s ease;z-index:2}
+.whole-sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:4px 8px 12px;margin-bottom:6px;border-bottom:1.5px solid var(--line)}
+.whole-sidebar-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.whole-sidebar-count{font-size:11px;font-weight:700;color:var(--muted);background:var(--surface-alt, rgba(0,0,0,0.06));padding:2px 7px;border-radius:10px}
+.whole-nav-list{display:flex;flex-direction:column;gap:6px;flex:1}
+.whole-nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;border:1.5px solid var(--custom-step-border, var(--line, rgba(0,0,0,0.1)));background:var(--custom-step-bg, var(--surface, #ffffff));color:var(--custom-step-fg, var(--ink));font:inherit;font-size:13px;font-weight:650;text-align:left;cursor:pointer;transition:all .16s ease;box-shadow:0 1px 3px rgba(0,0,0,0.04);width:100%;user-select:none}
+.whole-nav-item:hover{border-color:var(--custom-accent, var(--teal, #008578));background:var(--custom-step-hover, #ffffff);transform:translateX(2px)}
+.whole-nav-item.active{background:var(--custom-step-active-bg, var(--custom-accent, var(--teal, #008578))) !important;color:var(--custom-step-active-fg, var(--custom-accent-fg, #ffffff)) !important;border-color:var(--custom-step-active-bg, var(--custom-accent, var(--teal, #008578))) !important;box-shadow:0 4px 14px color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, transparent) !important;font-weight:750}
+.whole-nav-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:var(--custom-step-num-bg, rgba(0,0,0,0.06));color:var(--custom-step-fg, var(--ink));font-size:11px;font-weight:800;flex-shrink:0;border:1px solid var(--custom-step-border, rgba(0,0,0,0.1));transition:all .16s ease}
+.whole-nav-item.active .whole-nav-num{background:rgba(0,0,0,0.22) !important;color:var(--custom-step-active-fg, var(--custom-accent-fg, #ffffff)) !important;border-color:rgba(255,255,255,0.35) !important}
+.whole-nav-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.whole-content{overflow-y:auto;flex:1;min-height:0;padding:24px max(20px,calc((100% - 940px)/2)) 50px;scrollbar-gutter:stable;scroll-behavior:smooth}
+.whole-stage{background:var(--custom-card-bg, var(--surface, #ffffff)) !important;color:var(--custom-block-fg, var(--ink)) !important;border:1.5px solid var(--line) !important;border-radius:20px !important;padding:28px !important;margin-bottom:24px !important;box-shadow:0 8px 24px rgba(0,0,0,0.06) !important;transition:all .18s ease;scroll-margin-top:20px}
+.whole-stage-head-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:2px solid color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 25%, transparent);padding-bottom:12px;margin-bottom:20px}
+.whole-stage-head-row h2{margin:0 !important;border-bottom:none !important;padding-bottom:0 !important;font-size:24px !important;font-weight:850 !important;color:var(--custom-accent, var(--teal, #008578)) !important}
+.whole-stage-badge{font-size:12px;font-weight:700;color:var(--muted);background:var(--surface-alt, rgba(0,0,0,0.05));padding:4px 10px;border-radius:20px;white-space:nowrap}
 .whole-stage .line{font-size:var(--script-font-size,18px) !important;font-weight:var(--script-font-weight,400) !important;line-height:1.6 !important;margin-bottom:14px !important;padding:14px 18px !important;border-radius:12px !important}
 .whole-stage .tip{margin-top:14px !important;padding:12px 16px !important;border-radius:10px !important;background:var(--ui-soft, rgba(0,133,120,0.1)) !important;border-left:4px solid var(--custom-accent, var(--teal, #008578)) !important;color:var(--custom-block-fg, var(--ink)) !important;font-size:13px !important}
 
+:root[data-card-style="glass"] .whole-sidebar{background:var(--custom-card-bg, rgba(255,255,255,0.7)) !important;backdrop-filter:blur(var(--custom-card-blur, 10px)) !important;-webkit-backdrop-filter:blur(var(--custom-card-blur, 10px)) !important;border-right:1px solid rgba(255,255,255,0.28) !important}
+:root[data-card-style="glass"] .whole-nav-item:not(.active){background:rgba(255,255,255,0.4) !important;border-color:rgba(255,255,255,0.3) !important}
 :root[data-card-style="glass"] .whole-stage{background:var(--custom-card-bg, rgba(255,255,255,0.7)) !important;backdrop-filter:blur(var(--custom-card-blur, 10px)) !important;-webkit-backdrop-filter:blur(var(--custom-card-blur, 10px)) !important;border:1px solid rgba(255,255,255,0.28) !important;box-shadow:0 10px 35px rgba(0,0,0,0.12) !important}
 :root[data-card-style="glass"] .whole-stage .line{background:var(--custom-line-bg, rgba(255,255,255,0.22)) !important;color:var(--custom-line-fg, inherit) !important;text-shadow:var(--custom-line-shadow, none) !important;backdrop-filter:blur(var(--custom-line-blur, 4px)) !important;-webkit-backdrop-filter:blur(var(--custom-line-blur, 4px)) !important;border:1px solid var(--custom-line-border, rgba(255,255,255,0.25)) !important;box-shadow:0 2px 8px rgba(0,0,0,0.05) !important}
 
+:root[data-card-style="neon"] .whole-sidebar{background:rgba(10,16,26,0.92) !important;border-right:2px solid var(--custom-accent, #00f5d4) !important;box-shadow:0 0 25px color-mix(in srgb, var(--custom-accent, #00f5d4) 25%, transparent) !important}
+:root[data-card-style="neon"] .whole-nav-item:not(.active){background:rgba(12,20,32,0.85) !important;color:#ffffff !important;border-color:rgba(0,245,212,0.3) !important}
+:root[data-card-style="neon"] .whole-nav-item:not(.active) .whole-nav-num{background:rgba(0,245,212,0.12) !important;color:var(--custom-accent, #00f5d4) !important;border-color:rgba(0,245,212,0.3) !important}
+:root[data-card-style="neon"] .whole-nav-item.active{background:var(--custom-accent, #00f5d4) !important;color:#0a101a !important;box-shadow:0 0 15px color-mix(in srgb, var(--custom-accent, #00f5d4) 50%, transparent) !important}
+:root[data-card-style="neon"] .whole-nav-item.active .whole-nav-num{background:rgba(10,16,26,0.4) !important;color:#0a101a !important}
 :root[data-card-style="neon"] .whole-stage{background:rgba(10,16,26,0.88) !important;border:2px solid var(--custom-accent, #00f5d4) !important;box-shadow:0 0 25px color-mix(in srgb, var(--custom-accent, #00f5d4) 35%, transparent), 0 0 10px color-mix(in srgb, var(--custom-accent, #00f5d4) 20%, transparent) inset !important;backdrop-filter:blur(10px) !important;-webkit-backdrop-filter:blur(10px) !important;color:#e6f2f0 !important}
 :root[data-card-style="neon"] .whole-stage h2{color:var(--custom-accent, #00f5d4) !important;text-shadow:0 0 12px color-mix(in srgb, var(--custom-accent, #00f5d4) 50%, transparent) !important;border-bottom-color:rgba(0,245,212,0.35) !important}
 :root[data-card-style="neon"] .whole-stage .line{background:rgba(12,20,32,0.85) !important;color:#ffffff !important;border:1px solid rgba(0,245,212,0.3) !important;box-shadow:0 0 10px rgba(0,245,212,0.15) !important}
 
 .whole-stage .script-gift{border-radius:12px !important;border:1.5px dashed var(--custom-accent, var(--teal)) !important;background:color-mix(in srgb, var(--custom-accent, var(--teal)) 10%, var(--surface)) !important}
 
-@media(max-width:760px){.intro{flex-wrap:wrap}#whole-script{font-size:12px;padding:8px 12px}.whole-head{padding:10px 14px;flex-wrap:wrap}.whole-head button{font-size:12px;padding:6px 12px}.whole-stage{padding:18px}.whole-stage h2{font-size:20px}.whole-content{padding:12px}.bank-intro{flex-wrap:wrap}}
+@media(max-width:760px){.intro{flex-wrap:wrap}#whole-script{font-size:12px;padding:8px 12px}.whole-head{padding:10px 14px;flex-wrap:wrap}.whole-head button{font-size:12px;padding:6px 12px}.whole-body-layout{flex-direction:column}.whole-sidebar{width:100%;max-height:56px;flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:8px 10px;border-right:none;border-bottom:1.5px solid var(--line);white-space:nowrap;align-items:center}.whole-sidebar-header{display:none}.whole-nav-list{flex-direction:row;gap:8px}.whole-nav-item{width:auto;flex-shrink:0;padding:6px 12px;font-size:12px;transform:none !important}.whole-stage{padding:18px}.whole-stage h2{font-size:20px}.whole-content{padding:14px}.bank-intro{flex-wrap:wrap}}
 </style><style id="editor-v4-style">@media screen{
 .v4-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px}
 .v4-name{display:flex;align-items:center;gap:12px;flex:1;min-width:260px}
@@ -3879,9 +3901,120 @@ $('#addresses-view').addEventListener('toggle',e=>{const d=e.target;if(d.matches
 $('#address-dialog').addEventListener('click',e=>{if(e.target.id==='address-cancel')$('#address-dialog').close();});
 $('#address-dialog').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),old=smsSource.venues.find(v=>v.id===editingId);const v={...old,id:editingId||'venue-'+crypto.randomUUID()};for(const k of ['city','hall','address','route'])v[k]=String(f.get(k)||'').trim();if(['city','hall','address','route'].some(k=>!v[k])){$('#address-error').textContent='Заполните все четыре поля.';return;}if(smsSource.venues.some(x=>x.id!==v.id&&x.city.toLocaleLowerCase('ru')===v.city.toLocaleLowerCase('ru')&&x.hall.toLocaleLowerCase('ru')===v.hall.toLocaleLowerCase('ru'))){$('#address-error').textContent='Такой зал в этом городе уже есть.';return;}v.unavailable=f.has('unavailable');if(f.has('resolved')){v.conflict=false;v.note='';}try{await persist(old?smsSource.venues.map(x=>x.id===v.id?v:x):[...smsSource.venues,v]);$('#address-dialog').close();toast('Адрес сохранён');}catch(error){$('#address-error').textContent=error.message;}});
 let previousFocus=null;
-function closeWhole(){const view=$('#whole-view');view.hidden=true;document.querySelectorAll('[data-whole-inert]').forEach(el=>{el.inert=false;el.removeAttribute('data-whole-inert');});if(document.fullscreenElement===view)document.exitFullscreen().catch(()=>{});previousFocus?.focus();}
-$('#whole-script').addEventListener('click',()=>{previousFocus=document.activeElement;const view=$('#whole-view');view.innerHTML=`<header class="whole-head"><strong>Весь скрипт</strong><div><button id="whole-fullscreen">⛶ Полный экран</button> <button id="whole-close">Вернуться к этапам ×</button></div></header><div class="whole-content">${data.stages.filter(s=>!s.hidden).map((s,i)=>`<article class="whole-stage"><h2>${String(i+1).padStart(2,'0')} · ${escapeHTML(s.title)}</h2>${renderStageLines(s,true,data.gifts)}${operatorTipMarkup(s)}</article>`).join('')}</div>`;view.hidden=false;for(const el of document.body.children){if(el!==view&&!el.inert&&!['SCRIPT','STYLE'].includes(el.tagName)){el.inert=true;el.setAttribute('data-whole-inert','');}}$('#whole-close').focus();});
-$('#whole-view').addEventListener('click',e=>{if(e.target.id==='whole-close')closeWhole();if(e.target.id==='whole-fullscreen'){const v=$('#whole-view');if(document.fullscreenElement===v)document.exitFullscreen().catch(()=>{});else if(v.requestFullscreen)v.requestFullscreen().catch(()=>toast('Скрипт уже развёрнут на всю область страницы'));else toast('Скрипт уже развёрнут на всю область страницы');}});
+function closeWhole(){
+  const view=$('#whole-view');
+  view.hidden=true;
+  view.innerHTML='';
+  document.querySelectorAll('[data-whole-inert]').forEach(el=>{
+    el.inert=false;
+    el.removeAttribute('data-whole-inert');
+  });
+  if(document.fullscreenElement===view)document.exitFullscreen().catch(()=>{});
+  previousFocus?.focus();
+}
+$('#whole-script').addEventListener('click',()=>{
+  previousFocus=document.activeElement;
+  const view=$('#whole-view');
+  const stages=data.stages.filter(s=>!s.hidden);
+  view.innerHTML=`
+    <header class="whole-head">
+      <strong>Весь скрипт</strong>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button id="whole-fullscreen">⛶ Во весь экран</button>
+        <button id="whole-close">Вернуться к этапам ×</button>
+      </div>
+    </header>
+    <div class="whole-body-layout">
+      <nav class="whole-sidebar" aria-label="Быстрый переход по этапам">
+        <div class="whole-sidebar-header">
+          <span class="whole-sidebar-title">Быстрый переход</span>
+          <span class="whole-sidebar-count">${stages.length} эт.</span>
+        </div>
+        <div class="whole-nav-list" role="navigation">
+          ${stages.map((s,i)=>`
+            <button type="button" class="whole-nav-item ${i===0?'active':''}" data-stage-index="${i}" title="${escapeHTML(s.title)}">
+              <span class="whole-nav-num">${String(i+1).padStart(2,'0')}</span>
+              <span class="whole-nav-text">${escapeHTML(s.title)}</span>
+            </button>
+          `).join('')}
+        </div>
+      </nav>
+      <main class="whole-content">
+        ${stages.map((s,i)=>`
+          <article class="whole-stage" id="whole-stage-${i}" data-stage-index="${i}">
+            <div class="whole-stage-head-row">
+              <h2 class="whole-stage-title">${String(i+1).padStart(2,'0')} · ${escapeHTML(s.title)}</h2>
+              <span class="whole-stage-badge">Этап ${i+1} из ${stages.length}</span>
+            </div>
+            ${renderStageLines(s,true,data.gifts)}
+            ${operatorTipMarkup(s)}
+          </article>
+        `).join('')}
+      </main>
+    </div>
+  `;
+  view.hidden=false;
+  for(const el of document.body.children){
+    if(el!==view&&!el.inert&&!['SCRIPT','STYLE'].includes(el.tagName)){
+      el.inert=true;
+      el.setAttribute('data-whole-inert','');
+    }
+  }
+  const contentEl=view.querySelector('.whole-content');
+  const sidebarEl=view.querySelector('.whole-sidebar');
+  const stageEls=[...view.querySelectorAll('.whole-stage')];
+  const navItems=[...view.querySelectorAll('.whole-nav-item')];
+
+  sidebarEl.addEventListener('click',e=>{
+    const btn=e.target.closest('.whole-nav-item');
+    if(!btn)return;
+    const idx=parseInt(btn.dataset.stageIndex,10);
+    const target=view.querySelector(`#whole-stage-${idx}`);
+    if(target){
+      target.scrollIntoView({behavior:'smooth',block:'start'});
+      navItems.forEach((item,i)=>item.classList.toggle('active',i===idx));
+    }
+  });
+
+  let scrollTicking=false;
+  function updateActiveStage(){
+    if(!contentEl)return;
+    const contentRect=contentEl.getBoundingClientRect();
+    let currentActive=0;
+    for(let i=0;i<stageEls.length;i++){
+      const rect=stageEls[i].getBoundingClientRect();
+      if(rect.top-contentRect.top<=150){
+        currentActive=i;
+      }
+    }
+    navItems.forEach((btn,i)=>{
+      const isAct=(i===currentActive);
+      btn.classList.toggle('active',isAct);
+      if(isAct&&sidebarEl){
+        btn.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});
+      }
+    });
+    scrollTicking=false;
+  }
+
+  contentEl.addEventListener('scroll',()=>{
+    if(!scrollTicking){
+      requestAnimationFrame(updateActiveStage);
+      scrollTicking=true;
+    }
+  },{passive:true});
+
+  $('#whole-close').focus();
+});
+$('#whole-view').addEventListener('click',e=>{
+  if(e.target.closest('#whole-close'))closeWhole();
+  if(e.target.closest('#whole-fullscreen')){
+    const v=$('#whole-view');
+    if(document.fullscreenElement===v)document.exitFullscreen().catch(()=>{});
+    else if(v.requestFullscreen)v.requestFullscreen().catch(()=>toast('Скрипт уже развёрнут на всю область страницы'));
+    else toast('Скрипт уже развёрнут на всю область страницы');
+  }
+});
 document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Escape'){e.stopImmediatePropagation();e.preventDefault();closeWhole();}},true);
 })();
 </script><main id="addresses-view" class="objections-view" hidden=""></main><dialog id="address-dialog" aria-labelledby="address-title" hidden=""></dialog><section id="whole-view" hidden="" aria-label="Весь скрипт"></section><script id="editor-v4">

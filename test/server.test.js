@@ -1054,4 +1054,22 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     const op2AfterDelete = await op2.request('/api/themes/shared');
     assert.strictEqual(op2AfterDelete.data.sharedThemes.find(t => t.id === sharedThemeId), undefined, 'Theme must be removed after deletion');
   });
+
+  test('16. Whole script view (Весь скрипт) contains quick navigation side panel with jump items to all active stages', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const html = fs.readFileSync(path.resolve('index.html'), 'utf8');
+
+    // Verify side navigation structure & classes
+    assert.ok(html.includes('.whole-body-layout'), 'Must have .whole-body-layout');
+    assert.ok(html.includes('.whole-sidebar'), 'Must have .whole-sidebar');
+    assert.ok(html.includes('.whole-nav-item'), 'Must have .whole-nav-item');
+    assert.ok(html.includes('.whole-nav-num'), 'Must have .whole-nav-num');
+    assert.ok(html.includes('.whole-nav-text'), 'Must have .whole-nav-text');
+
+    // Verify quick transitions click handler and scroll tracking
+    assert.ok(html.includes('data-stage-index'), 'Stages must have data-stage-index');
+    assert.ok(html.includes('scrollIntoView'), 'Must support smooth scroll transitions');
+    assert.ok(html.includes('Быстрый переход'), 'Must have quick navigation title');
+  });
 });
