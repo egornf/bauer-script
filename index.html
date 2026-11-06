@@ -7354,7 +7354,7 @@ const ACTION_LABELS={
 
 const navTabs=document.querySelector('.switcher-tabs');
 if(navTabs&&!document.getElementById('plan-tab')){
-  navTabs.insertAdjacentHTML('beforeend','<button id="plan-tab" class="section-tab protected-tab" aria-pressed="false" hidden><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 8h14M7 2v4M13 2v4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span id="plan-tab-label">📅 План презентаций</span></button>');
+  navTabs.insertAdjacentHTML('beforeend','<button id="plan-tab" class="section-tab protected-tab" aria-pressed="false" hidden><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 8h14M7 2v4M13 2v4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span id="plan-tab-label">План презентаций</span></button>');
 }
 if(!document.getElementById('plan-view')){
   document.body.insertAdjacentHTML('beforeend','<main id="plan-view" class="plan-view" hidden></main>');
@@ -8974,7 +8974,7 @@ window.loadOwnerData = loadOwnerData;
         auditFilterAction = document.getElementById('audit-filter-action')?.value || '';
         loadOwnerData().then(() => { if (typeof renderOwnerView === 'function') renderOwnerView(); });
       }
-
+    }
   });
 
   let searchDebounce = null;
@@ -8990,6 +8990,19 @@ window.loadOwnerData = loadOwnerData;
   });
 
   
+
+
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushClicks();
+  });
+  window.addEventListener('beforeunload', () => {
+    flushClicks();
+  });
+})();
+</script>
+
+
+<script id="presentation-plan-module">
 // ==========================================
 // PRESENTATION PLAN WIZARD (4-STEP SYSTEM)
 // ==========================================
@@ -9077,9 +9090,12 @@ async function openPlanPanel() {
     $('#edit').hidden = true;
     $('#all-objections').hidden = true;
     setTab('plan');
+    const pv = document.getElementById('plan-view');
+    if (pv) pv.hidden = false;
     await loadPresentationPlan();
     initPlanDraft();
     renderPlanView();
+    if (pv) pv.hidden = false;
   });
 }
 document.getElementById('plan-tab')?.addEventListener('click', openPlanPanel);
@@ -9707,14 +9723,5 @@ document.addEventListener('input', e => {
 loadPresentationPlan().then(() => {
   try { renderCards(); } catch {}
 }).catch(() => {});
-
-  window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushClicks();
-  });
-  window.addEventListener('beforeunload', () => {
-    flushClicks();
-  });
-})();
 </script>
-
 </body></html>
