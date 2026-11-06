@@ -2391,16 +2391,16 @@ function unplacedGifts(stage,gifts){return [];}
 function inlineGiftPhoto(gift,readonly){const photo=cleanPhoto(gift?.photo);return `<div class="script-gift-photo">${photo?`<img src="${photo}" alt="${escapeHTML(gift?.title||'Подарок')}" ${readonly?'':`data-view-gift="${escapeHTML(gift.id)}" tabindex="0" role="button" aria-label="Увеличить фото: ${escapeHTML(gift.title)}"`}>`:'<div class="script-gift-photo-empty"><span aria-hidden="true">▧</span><strong>Фото подарка</strong></div>'}${!readonly&&!photo&&gift?`<button data-upload-gift="${escapeHTML(gift.id)}">+ Добавить фото</button>`:''}</div>`;}
 function currentVenue(){try{const v=JSON.parse(localStorage.getItem('bauer-venue')||'null');return v?(smsSource.venues.find(x=>x.id===v.hall&&x.city===v.city&&!x.unavailable)||null):null;}catch{return null;}}
 function currentSelectedCityName(){
-  const selEl=document.getElementById('venue-city');
-  if(selEl&&selEl.value)return selEl.value.trim();
   try{
     const sv=JSON.parse(localStorage.getItem('bauer-venue')||'null');
     if(sv&&sv.city)return String(sv.city).trim();
   }catch{}
+  const selEl=document.getElementById('venue-city');
+  if(selEl&&selEl.value)return selEl.value.trim();
   const v=currentVenue();
   if(v?.city)return v.city.trim();
   if(typeof smsValues!=='undefined'&&smsValues?.city)return String(smsValues.city).trim();
-  return '';
+  return 'Москва';
 }
 
 const BAUER_WEEK_DAYS = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс', 'Пн'];
@@ -2474,9 +2474,70 @@ function getBauerWeekDaysCalendar(weekNum = 44, year = BAUER_CALENDAR_YEAR) {
   });
 }
 
+function createInitialPresentationPlan() {
+  const weekNum = getCurrentBauerWeekNumber();
+  const weekStart = getBauerWeekStartTuesday(weekNum, BAUER_CALENDAR_YEAR);
+  const baseDays = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const baseTimes = ['10:00', '14:00', '18:00'];
+  const moscowHalls = [
+    {
+      hallName: 'ТК «Бухарест», 2 этаж',
+      days: [...baseDays],
+      times: [...baseTimes],
+      dayTimes: Object.fromEntries(baseDays.map(d => [d, [...baseTimes]]))
+    },
+    {
+      hallName: 'Отель Панорама',
+      days: [...baseDays],
+      times: ['10:30', '13:00', '14:00', '17:00', '18:00'],
+      dayTimes: {
+        'Вт': ['13:00', '17:00'],
+        'Ср': ['10:30', '14:00', '18:00'],
+        'Чт': ['13:00', '17:00'],
+        'Пт': ['13:00', '17:00'],
+        'Сб': ['10:30', '14:00', '18:00'],
+        'Вс': ['10:30', '14:00', '18:00']
+      }
+    }
+  ];
+  return {
+    calendarYear: BAUER_CALENDAR_YEAR,
+    weekNumber: weekNum,
+    weekStart,
+    autoDuplicateNextWeek: true,
+    weeklyPlans: {
+      [String(weekNum)]: {
+        weekNumber: weekNum,
+        weekStart,
+        cities: [
+          {
+            cityName: 'Москва',
+            halls: moscowHalls
+          }
+        ]
+      }
+    },
+    cities: [
+      {
+        cityName: 'Москва',
+        halls: moscowHalls
+      }
+    ]
+  };
+}
+
 let selectedPlanSlot = null;
 try { selectedPlanSlot = JSON.parse(localStorage.getItem('bauer-selected-plan-slot') || 'null'); } catch (e) { selectedPlanSlot = null; }
 let activePresentationPlan = null;
+try {
+  const saved = JSON.parse(localStorage.getItem('bauer-presentation-plan') || localStorage.getItem('bauer-presentation-plan-draft') || 'null');
+  if (saved && Array.isArray(saved.cities) && saved.cities.length) {
+    activePresentationPlan = saved;
+  }
+} catch (e) {}
+if (!activePresentationPlan || !Array.isArray(activePresentationPlan.cities) || !activePresentationPlan.cities.length) {
+  activePresentationPlan = createInitialPresentationPlan();
+}
 let cityScheduleActiveHall = 0;
 let scheduleViewingWeek = null;
 
@@ -2503,21 +2564,31 @@ function setScheduleViewingWeek(wn) {
 }
 
 function getActivePlanForViewingWeek(weekNum) {
-  if (!activePresentationPlan) return null;
   const wn = weekNum || getScheduleViewingWeek();
-  if (activePresentationPlan.weeklyPlans && activePresentationPlan.weeklyPlans[String(wn)]) {
-    const wp = activePresentationPlan.weeklyPlans[String(wn)];
+  let basePlan = activePresentationPlan;
+  if (!basePlan || !Array.isArray(basePlan.cities) || !basePlan.cities.length) {
+    try {
+      basePlan = JSON.parse(localStorage.getItem('bauer-presentation-plan') || localStorage.getItem('bauer-presentation-plan-draft') || 'null');
+    } catch {}
+  }
+  if (!basePlan || !Array.isArray(basePlan.cities) || !basePlan.cities.length) {
+    basePlan = createInitialPresentationPlan();
+    activePresentationPlan = basePlan;
+  }
+  if (basePlan.weeklyPlans && basePlan.weeklyPlans[String(wn)] && Array.isArray(basePlan.weeklyPlans[String(wn)].cities) && basePlan.weeklyPlans[String(wn)].cities.length) {
+    const wp = basePlan.weeklyPlans[String(wn)];
     return {
-      ...activePresentationPlan,
+      ...basePlan,
       weekNumber: wn,
-      weekStart: wp.weekStart || getBauerWeekStartTuesday(wn, activePresentationPlan.calendarYear || BAUER_CALENDAR_YEAR),
-      cities: wp.cities || activePresentationPlan.cities
+      weekStart: wp.weekStart || getBauerWeekStartTuesday(wn, basePlan.calendarYear || BAUER_CALENDAR_YEAR),
+      cities: wp.cities
     };
   }
   return {
-    ...activePresentationPlan,
+    ...basePlan,
     weekNumber: wn,
-    weekStart: getBauerWeekStartTuesday(wn, activePresentationPlan.calendarYear || BAUER_CALENDAR_YEAR)
+    weekStart: getBauerWeekStartTuesday(wn, basePlan.calendarYear || BAUER_CALENDAR_YEAR),
+    cities: basePlan.cities
   };
 }
 
@@ -2528,7 +2599,8 @@ function getAllAvailableCities() {
   const fromPlan = (activePresentationPlan && Array.isArray(activePresentationPlan.cities))
     ? activePresentationPlan.cities.map(c => c.cityName?.trim()).filter(Boolean)
     : [];
-  return [...new Set([...fromPlan, ...fromVenues])].sort((a,b) => a.localeCompare(b, 'ru'));
+  const defaultCities = ['Москва', 'Санкт-Петербург', 'Ростов', 'Севастополь', 'Симферополь', 'Краснодар'];
+  return [...new Set([...fromPlan, ...fromVenues, ...defaultCities])].sort((a,b) => a.localeCompare(b, 'ru'));
 }
 
 function renderScheduleWeekOptions(selectedWeek) {
@@ -5473,6 +5545,7 @@ lv.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-v4
 const KEY='bauer-venue',E=escapeHTML,after=document.getElementById('script-picker')?.closest('.script-picker');if(!after)return;
 document.querySelectorAll('.venue-picker').forEach(x=>x.remove());
 const box=document.createElement('div');box.className='venue-picker';
+box.style.display='none';
 box.innerHTML='<label><span>Город</span><select id="venue-city" aria-label="Город"></select></label><label><span>Зал</span><select id="venue-hall" aria-label="Зал"></select></label>';
 after.after(box);const city=box.querySelector('#venue-city'),hall=box.querySelector('#venue-hall');
 const saved=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'null')||{}}catch{return{}}};
@@ -5505,6 +5578,7 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 })();
 </script>
 <style id="plan-styles">@media screen{
+.venue-picker, .app-header .venue-picker, .workspace-pickers-bar .venue-picker{display:none !important}
 .plan-view{flex:1;min-height:0;overflow-y:auto;width:100%;max-width:1580px;margin:0 auto;padding:24px 28px 60px}
 .plan-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--line)}
 .plan-header h1{font-size:28px;font-weight:800;letter-spacing:-.03em;margin:4px 0 6px}
@@ -8065,8 +8139,10 @@ async function openOwnerPanel(){
 
 document.getElementById('owner-tab')?.addEventListener('click',openOwnerPanel);
 document.getElementById('header-user-btn')?.addEventListener('click',openOwnerPanel);
-document.getElementById('plan-tab')?.addEventListener('click',()=>{
+document.getElementById('plan-tab')?.addEventListener('click',(e)=>{
+  e.preventDefault();
   if(typeof window.openPlanPanel==='function')window.openPlanPanel();
+  else if(typeof openPlanPanel==='function')openPlanPanel();
 });
 
 async function loadOwnerData(){
@@ -9833,31 +9909,28 @@ function switchPlanWeek(targetWeekNum) {
 }
 
 async function openPlanPanel() {
-  const showAndRender = async () => {
+  try {
+    if ($('#drawer') && !$('#drawer').hidden) closeDrawer();
+    if (typeof closeWhole === 'function' && $('#whole-view') && !$('#whole-view').hidden) closeWhole();
+    for (const el of document.querySelectorAll('main')) el.hidden = true;
+    if ($('#edit')) $('#edit').hidden = true;
+    if ($('#all-objections')) $('#all-objections').hidden = true;
+    setTab('plan');
+    const pv = document.getElementById('plan-view');
+    if (pv) pv.hidden = false;
+    if (!planDraft) initPlanDraft();
+    renderPlanView();
     try {
-      if ($('#drawer') && !$('#drawer').hidden) closeDrawer();
-      if (typeof closeWhole === 'function' && $('#whole-view') && !$('#whole-view').hidden) closeWhole();
-      for (const el of document.querySelectorAll('main')) el.hidden = true;
-      if ($('#edit')) $('#edit').hidden = true;
-      if ($('#all-objections')) $('#all-objections').hidden = true;
-      setTab('plan');
-      const pv = document.getElementById('plan-view');
-      if (pv) pv.hidden = false;
-      if (!planDraft) initPlanDraft();
-      renderPlanView();
       await loadPresentationPlan();
       if (!planDraft) initPlanDraft();
       renderPlanView();
       if (pv) pv.hidden = false;
-    } catch (err) {
-      console.error('openPlanPanel error:', err);
-      toast('Ошибка открытия плана презентаций: ' + (err.message || err));
+    } catch (e) {
+      console.warn('loadPresentationPlan non-fatal error:', e);
     }
-  };
-  if (adminUnlocked && currentUser) {
-    await showAndRender();
-  } else {
-    await ensureAdmin(showAndRender);
+  } catch (err) {
+    console.error('openPlanPanel error:', err);
+    toast('Ошибка открытия плана презентаций: ' + (err.message || err));
   }
 }
 window.openPlanPanel = openPlanPanel;
@@ -10342,6 +10415,14 @@ async function savePresentationPlanToServer() {
 
 // Global Event Listeners for Presentation Plan View
 document.addEventListener('click', e => {
+  const planTabBtn = e.target.closest('#plan-tab');
+  if (planTabBtn) {
+    e.preventDefault();
+    if (typeof window.openPlanPanel === 'function') window.openPlanPanel();
+    else if (typeof openPlanPanel === 'function') openPlanPanel();
+    return;
+  }
+
   // Save buttons
   if (e.target.closest('#plan-save-top-btn') || e.target.closest('#plan-save-bottom-btn')) {
     savePresentationPlanToServer();
