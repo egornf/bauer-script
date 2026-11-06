@@ -1055,7 +1055,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.strictEqual(op2AfterDelete.data.sharedThemes.find(t => t.id === sharedThemeId), undefined, 'Theme must be removed after deletion');
   });
 
-  test('16. Whole script view (Весь скрипт) contains quick navigation side panel with jump items to all active stages', async () => {
+  await t.test('16. Whole script view (Весь скрипт) contains quick navigation side panel with jump items to all active stages', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const html = fs.readFileSync(path.resolve('index.html'), 'utf8');
@@ -1083,4 +1083,103 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.ok(html.includes('whole-sms-body'), 'Must have expandable SMS body');
     assert.ok(html.includes('w-sms-copy'), 'Must have copy button for SMS');
   });
+
+  await t.test('17. Presentation Plan: Melentyeva / HEAD / ADMIN can manage 4-step presentation plan, cities and halls, and operators get interactive time picker on stage «Выбор времени» with auto-filled date/time variables in script lines and SMS', async () => {
+    const unauthClient = createTestClient(baseUrl);
+
+    // 1. Unauthenticated GET returns 200 (null or plan), PUT returns 401
+    const unauthGet = await unauthClient.request('/api/presentation-plan');
+    assert.strictEqual(unauthGet.status, 200);
+
+    const unauthPut = await unauthClient.request('/api/presentation-plan', {
+      method: 'PUT',
+      body: { cities: [] }
+    });
+    assert.strictEqual(unauthPut.status, 401);
+
+    // 2. Non-manager (EDITOR without addresses.manage) cannot PUT (403 forbidden)
+    const editorPut = await editorClient.request('/api/presentation-plan', {
+      method: 'PUT',
+      body: { cities: [] }
+    });
+    assert.strictEqual(editorPut.status, 403);
+
+    // 3. OWNER / Melentyeva / HEAD can PUT plan with cities, halls, days, times
+    const testPlan = {
+      weekStart: '2026-11-09',
+      cities: [
+        {
+          cityName: 'Москва',
+          halls: [
+            {
+              hallName: 'Отель Панорама',
+              days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+              times: ['10:00', '14:00', '18:00']
+            },
+            {
+              hallName: 'ТК «Бухарест», 2 этаж',
+              days: ['Пн', 'Вт', 'Ср'],
+              times: ['11:00', '15:00', '19:00']
+            }
+          ]
+        },
+        {
+          cityName: 'Воронеж',
+          halls: [
+            {
+              hallName: 'Мартовские зайцы, 6 этаж',
+              days: ['Чт', 'Пт', 'Сб', 'Вс'],
+              times: ['10:00', '14:00', '18:00']
+            }
+          ]
+        }
+      ]
+    };
+
+    const ownerPut = await ownerClient.request('/api/presentation-plan', {
+      method: 'PUT',
+      body: testPlan
+    });
+    assert.strictEqual(ownerPut.status, 200);
+    const savedPlan = ownerPut.data;
+    assert.strictEqual(savedPlan.weekStart, '2026-11-09');
+    assert.strictEqual(savedPlan.cities.length, 2);
+    assert.strictEqual(savedPlan.cities[0].halls.length, 2);
+    assert.strictEqual(savedPlan.updatedByRole, 'OWNER');
+
+    // 4. GET returns saved plan
+    const getRes = await unauthClient.request('/api/presentation-plan');
+    assert.strictEqual(getRes.status, 200);
+    const fetchedPlan = getRes.data;
+    assert.strictEqual(fetchedPlan.weekStart, '2026-11-09');
+    assert.strictEqual(fetchedPlan.cities[0].cityName, 'Москва');
+
+    // 5. Verify index.html UI elements for Presentation Plan
+    const html = fs.readFileSync(path.resolve('index.html'), 'utf8');
+
+    // Top tab & container
+    assert.ok(html.includes('id="plan-tab"'), 'Must have #plan-tab in header');
+    assert.ok(html.includes('id="plan-view"'), 'Must have #plan-view container');
+
+    // Always working cities
+    const alwaysCities = ['Москва', 'Санкт-Петербург', 'Ростов', 'Севастополь', 'Симферополь', 'Краснодар'];
+    for (const c of alwaysCities) {
+      assert.ok(html.includes(c), `Must include always working city: ${c}`);
+    }
+
+    // 4-step wizard
+    assert.ok(html.includes('plan-stepper'), 'Must have stepper for wizard');
+    assert.ok(html.includes('planWizardStep'), 'Must track active wizard step');
+    assert.ok(html.includes('Второй зал в этом городе'), 'Step 2 must allow up to 2 halls with checkbox');
+    assert.ok(html.includes('data-plan-day-toggle'), 'Step 3 must allow day selection');
+    assert.ok(html.includes('data-plan-add-time'), 'Step 4 must allow time slots');
+
+    // Interactive time selection on stage «Выбор времени»
+    assert.ok(html.includes('presentationScheduleMarkup'), 'Must render presentation schedule markup');
+    assert.ok(html.includes('isTimeStage'), 'Must restrict schedule table strictly to time selection stage');
+    assert.ok(html.includes('data-plan-slot-select'), 'Time buttons must have data-plan-slot-select');
+    assert.ok(html.includes('fillPlanHtml'), 'Must replace {дата}, {время}, {день_недели}, {дата_время} dynamically');
+    assert.ok(html.includes('mark.plan-fill'), 'Must format selected time variables with plan-fill badge');
+  });
 });
+

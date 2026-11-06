@@ -3,6 +3,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script>
+window.updateHeaderBadge = window.updateHeaderBadge || function(){};
 (function(){
   try {
     const curLogin = localStorage.getItem("bauer-current-login");
@@ -2382,11 +2383,245 @@ function lineGiftId(kind){return kind==='gift-plus-one'?'thermos':kind==='gift-p
 function unplacedGifts(stage,gifts){return [];}
 function inlineGiftPhoto(gift,readonly){const photo=cleanPhoto(gift?.photo);return `<div class="script-gift-photo">${photo?`<img src="${photo}" alt="${escapeHTML(gift?.title||'Подарок')}" ${readonly?'':`data-view-gift="${escapeHTML(gift.id)}" tabindex="0" role="button" aria-label="Увеличить фото: ${escapeHTML(gift.title)}"`}>`:'<div class="script-gift-photo-empty"><span aria-hidden="true">▧</span><strong>Фото подарка</strong></div>'}${!readonly&&!photo&&gift?`<button data-upload-gift="${escapeHTML(gift.id)}">+ Добавить фото</button>`:''}</div>`;}
 function currentVenue(){try{const v=JSON.parse(localStorage.getItem('bauer-venue')||'null');return v?(smsSource.venues.find(x=>x.id===v.hall&&x.city===v.city&&!x.unavailable)||null):null;}catch{return null;}}
+let selectedPlanSlot = null;
+try { selectedPlanSlot = JSON.parse(localStorage.getItem('bauer-selected-plan-slot') || 'null'); } catch (e) { selectedPlanSlot = null; }
+let activePresentationPlan = null;
+let cityScheduleActiveHall = 0;
+
+function fillPlanHtml(html) {
+  if (!html) return '';
+  const slot = selectedPlanSlot;
+  const daysRu = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+  const monthsRu = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  let dateStr = '', dayName = '';
+  if (slot?.date) {
+    const parts = slot.date.split('-');
+    if (parts.length === 3) {
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      dayName = daysRu[d.getDay()] || '';
+      dateStr = `${d.getDate()} ${monthsRu[d.getMonth()]}`;
+    } else {
+      dateStr = slot.date;
+    }
+  }
+  if (!dayName && slot?.day) dayName = slot.day;
+  const timeStr = slot?.time || '';
+  const dateTimeStr = [dayName, dateStr, timeStr ? 'в ' + timeStr : ''].filter(Boolean).join(' ');
+
+  const map = {
+    'дата': dateStr,
+    'время': timeStr,
+    'время_презентации': timeStr,
+    'время презентации': timeStr,
+    'день': dayName,
+    'день_недели': dayName,
+    'день недели': dayName,
+    'дата_время': dateTimeStr,
+    'дата и время': dateTimeStr,
+    'дата_и_время': dateTimeStr
+  };
+
+  return html.replace(/\{(дата|время|время_презентации|время презентации|день|день_недели|день недели|дата_время|дата и время|дата_и_время)\}/giu, (m, k) => {
+    const key = k.toLowerCase();
+    const val = map[key];
+    if (val) {
+      return `<mark class="plan-fill" title="Зафиксировано из плана презентаций: ${escapeHTML(val)}">${escapeHTML(val)}</mark>`;
+    }
+    return `<mark class="plan-empty" title="Зафиксируйте время на этапе «Выбор времени»">[${escapeHTML(key)}: выберите время в блоке «Выбор времени»]</mark>`;
+  });
+}
+
+function isTimeStage(stage) {
+  if (!stage) return false;
+  const id = String(stage.id || '').toLowerCase();
+  const title = String(stage.title || '').toLowerCase();
+  return id === 'time' || title.includes('выбор времени') || id.includes('vrem') || id.includes('time');
+}
+
+function getCalculatedDateForDay(weekStart, dayName) {
+  if (!weekStart) return '';
+  const daysWeekOrder = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const idx = daysWeekOrder.indexOf(typeof dayName === 'string' ? dayName.slice(0, 2) : '');
+  if (idx === -1) return '';
+  try {
+    const parts = weekStart.split('-');
+    if (parts.length !== 3) return '';
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    d.setDate(d.getDate() + idx);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  } catch (e) {
+    return '';
+  }
+}
+
+function formatRuShortDate(isoDate) {
+  if (!isoDate) return '';
+  const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return isoDate;
+  return `${Number(parts[2])} ${months[Number(parts[1]) - 1] || ''}`;
+}
+
+function presentationScheduleMarkup(stage) {
+  const plan = activePresentationPlan;
+  const v = currentVenue();
+  const currentCity = v?.city || (typeof smsValues !== 'undefined' ? smsValues.city : '') || '';
+
+  const cityPlan = plan?.cities?.find(c => c.cityName?.trim().toLowerCase() === currentCity?.trim().toLowerCase());
+  const slot = selectedPlanSlot;
+  const hasSelected = slot && (!slot.city || slot.city.toLowerCase() === currentCity.toLowerCase());
+
+  let badgeHtml = '';
+  if (hasSelected && slot) {
+    const label = `${slot.day ? slot.day + (slot.date ? ' (' + formatRuShortDate(slot.date) + ')' : '') : (slot.date || '')} в ${slot.time}${slot.hall ? ' · ' + slot.hall : ''}`;
+    badgeHtml = `
+      <div class="psb-selected-badge">
+        <span>✓ Зафиксировано время: <strong>${escapeHTML(label)}</strong></span>
+        <button type="button" class="psb-clear-btn" data-plan-clear title="Сбросить зафиксированное время">✕</button>
+      </div>
+    `;
+  }
+
+  if (!plan || !Array.isArray(plan.cities) || !plan.cities.length) {
+    return `
+      <div class="presentation-schedule-box" id="presentation-schedule-box">
+        <div class="psb-header">
+          <div class="psb-title">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
+            <span>График презентаций на неделю</span>
+          </div>
+          ${badgeHtml}
+        </div>
+        <div class="psb-body">
+          <p class="psb-hint" style="margin:0">
+            📅 Руководитель ещё не заполнил план презентаций на эту неделю. Для бронирования выберите город и зал вверху, либо откройте вкладку <strong>«План презентаций»</strong> в панели управления.
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (!cityPlan || !cityPlan.halls || !cityPlan.halls.length) {
+    return `
+      <div class="presentation-schedule-box" id="presentation-schedule-box">
+        <div class="psb-header">
+          <div class="psb-title">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
+            <span>График презентаций · ${escapeHTML(currentCity || 'Город не выбран')}</span>
+          </div>
+          ${badgeHtml}
+        </div>
+        <div class="psb-body">
+          <p class="psb-hint" style="margin:0">
+            Для города <strong>${escapeHTML(currentCity || '—')}</strong> на этой неделе презентации не запланированы. Выберите другой город вверху либо настройте план в «Плане презентаций».
+          </p>
+        </div>
+      </div>
+    `;
+  }
+
+  const activeHallIdx = Math.min(cityScheduleActiveHall || 0, cityPlan.halls.length - 1);
+  const activeHall = cityPlan.halls[activeHallIdx] || cityPlan.halls[0];
+
+  let hallsTabHtml = '';
+  if (cityPlan.halls.length > 1) {
+    hallsTabHtml = `
+      <div class="psb-halls-tabs">
+        ${cityPlan.halls.map((h, hIdx) => `
+          <button type="button" class="psb-hall-tab ${hIdx === activeHallIdx ? 'active' : ''}" data-plan-hall-idx="${hIdx}">
+            Зал ${hIdx + 1}: ${escapeHTML(h.hallName || 'Площадка')}
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  const days = activeHall.days || [];
+  const times = activeHall.times || [];
+
+  if (!days.length || !times.length) {
+    return `
+      <div class="presentation-schedule-box" id="presentation-schedule-box">
+        <div class="psb-header">
+          <div class="psb-title">
+            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
+            <span>График презентаций · ${escapeHTML(currentCity)} · ${escapeHTML(activeHall.hallName || '')}</span>
+          </div>
+          ${badgeHtml}
+        </div>
+        <div class="psb-body">
+          ${hallsTabHtml}
+          <p class="psb-hint" style="margin:0">Для этого зала пока не заданы дни или времена в плане руководителя.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  const daysWeekOrder = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const sortedDays = [...days].sort((a,b) => {
+    const aName = typeof a === 'string' ? a : a.day;
+    const bName = typeof b === 'string' ? b : b.day;
+    const ia = daysWeekOrder.indexOf(aName?.slice(0, 2));
+    const ib = daysWeekOrder.indexOf(bName?.slice(0, 2));
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+
+  return `
+    <div class="presentation-schedule-box" id="presentation-schedule-box">
+      <div class="psb-header">
+        <div class="psb-title">
+          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
+          <span>График презентаций · ${escapeHTML(currentCity)}${activeHall.hallName ? ' (' + escapeHTML(activeHall.hallName) + ')' : ''}</span>
+        </div>
+        ${badgeHtml || '<span class="psb-hint">Нажмите на удобное время гостя, чтобы зафиксировать его в скрипте и SMS</span>'}
+      </div>
+      <div class="psb-body">
+        ${hallsTabHtml}
+        <div class="psb-grid">
+          ${sortedDays.map(dObj => {
+            const dayName = typeof dObj === 'string' ? dObj : dObj.day;
+            const dateStr = typeof dObj === 'object' && dObj.date ? dObj.date : getCalculatedDateForDay(plan.weekStart, dayName);
+            const isFullSelectedDay = slot?.day === dayName;
+            return `
+              <div class="psb-col">
+                <div class="psb-day-title">
+                  ${escapeHTML(dayName)}
+                  ${dateStr ? `<small>${escapeHTML(formatRuShortDate(dateStr))}</small>` : ''}
+                </div>
+                <div class="psb-times">
+                  ${times.map(t => {
+                    const isSelected = isFullSelectedDay && slot?.time === t;
+                    return `
+                      <button type="button" 
+                        class="psb-time-btn ${isSelected ? 'active' : ''}"
+                        data-plan-slot-select
+                        data-day="${escapeHTML(dayName)}"
+                        data-date="${escapeHTML(dateStr || '')}"
+                        data-time="${escapeHTML(t)}"
+                        data-city="${escapeHTML(currentCity)}"
+                        data-hall="${escapeHTML(activeHall.hallName || '')}">
+                        ${isSelected ? '✓ ' : ''}${escapeHTML(t)}
+                      </button>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function fillVenueHtml(html){
   const v=currentVenue(),val={'город':v?.city,'зал':v?.hall,'адрес':v?String(v.address||'').replace(/^(?:📍\s*)?Адрес\s*:\s*/iu,'').trim():'','ориентиры':v?String(v.route||'').trim():''};
   return html.replace(/\{(город|зал|адрес|ориентиры)\}/giu,(m,k)=>{const x=val[k.toLowerCase()];return x?`<mark class="addr-fill">${escapeHTML(x)}</mark>`:`<mark class="addr-empty">[${k.toLowerCase()}: выберите город и зал вверху]</mark>`;});
 }
-function addressLineHtml(text,fmt,bCss,attrs=''){const v=currentVenue();return `<div class="line line-address"${bCss?` style="${bCss}"`:''}${attrs}><div class="addr-tag">📍 АДРЕС${v?' · '+escapeHTML(v.city+', '+v.hall):' · выберите город и зал вверху'}</div><div>${fillVenueHtml(LayoutModel.renderText(text,fmt))}</div></div>`;}
+function addressLineHtml(text,fmt,bCss,attrs=''){const v=currentVenue();return `<div class="line line-address"${bCss?` style="${bCss}"`:''}${attrs}><div class="addr-tag">📍 АДРЕС${v?' · '+escapeHTML(v.city+', '+v.hall):' · выберите город и зал вверху'}</div><div>${fillPlanHtml(fillVenueHtml(LayoutModel.renderText(text,fmt)))}</div></div>`;}
 function renderStageLines(stage,readonly=false,gifts=data.gifts){
   let html='';
   stage.lines.forEach((line,n)=>{
@@ -2407,7 +2642,7 @@ function renderStageLines(stage,readonly=false,gifts=data.gifts){
     }
     const bCss=LayoutModel.blockCSS(stage.lineFormats?.[n]);
     if(kind==='address'){html+=addressLineHtml(line,stage.lineFormats?.[n],bCss);return;}
-    html+=`<p class="line"${bCss?` style="${bCss}"`:''}>${LayoutModel.renderText(line,stage.lineFormats?.[n])}</p>`;
+    html+=`<p class="line"${bCss?` style="${bCss}"`:''}>${fillPlanHtml(fillVenueHtml(LayoutModel.renderText(line,stage.lineFormats?.[n])))}</p>`;
   });
   return html;
 }
@@ -2415,7 +2650,7 @@ function operatorTipMarkup(stage){return stage.showTip===true&&stage.tip.trim()?
 function renderCards(){
   const indices=visibleIndices();if(!indices.includes(current))current=indices[0]??0;
   document.body.classList.toggle('editing',editing);$('#edit').textContent='Редактор';$('#edit').setAttribute('aria-pressed','false');
-  $('#track').innerHTML=indices.map((i,n)=>{const stage=data.stages[i];return `<section class="stage-card" data-stage-index="${i}" id="stage-${i}" aria-labelledby="stage-title-${i}" ${i!==current?'inert aria-hidden="true"':''}><div class="stage-heading"><div><div class="kicker">ЭТАП РАЗГОВОРА</div><h2 id="stage-title-${i}">${escapeHTML(stage.title)}</h2></div><div class="stage-count"><strong>${String(n+1).padStart(2,'0')}</strong> / ${String(indices.length).padStart(2,'0')}</div></div><div class="stage-body"><div class="script-pane">${unplacedGifts(stage,data.gifts).length?giftMarkup(unplacedGifts(stage,data.gifts)):''}<div class="pane-label">Реплики оператора</div>${renderStageLines(stage)}${operatorTipMarkup(stage)}${stage.showSms?smsMarkup():''}</div><aside class="objections-pane" aria-label="Возражения для этапа ${escapeHTML(stage.title)}"><h3>Частые возражения</h3><p class="sub">Подборка для этого этапа · нажмите на ответ гостя</p><div class="objection-list">${stageOptions(i)||'<p class="empty">В этом блоке пока нет возражений.</p>'}</div><p class="rail-foot">Отработка откроется рядом.<br>Вы вернётесь на тот же этап.</p></aside></div></section>`;}).join('');
+  $('#track').innerHTML=indices.map((i,n)=>{const stage=data.stages[i];return `<section class="stage-card" data-stage-index="${i}" id="stage-${i}" aria-labelledby="stage-title-${i}" ${i!==current?'inert aria-hidden="true"':''}><div class="stage-heading"><div><div class="kicker">ЭТАП РАЗГОВОРА</div><h2 id="stage-title-${i}">${escapeHTML(stage.title)}</h2></div><div class="stage-count"><strong>${String(n+1).padStart(2,'0')}</strong> / ${String(indices.length).padStart(2,'0')}</div></div><div class="stage-body"><div class="script-pane">${unplacedGifts(stage,data.gifts).length?giftMarkup(unplacedGifts(stage,data.gifts)):''}<div class="pane-label">Реплики оператора</div>${renderStageLines(stage)}${isTimeStage(stage)?presentationScheduleMarkup(stage):''}${operatorTipMarkup(stage)}${stage.showSms?smsMarkup():''}</div><aside class="objections-pane" aria-label="Возражения для этапа ${escapeHTML(stage.title)}"><h3>Частые возражения</h3><p class="sub">Подборка для этого этапа · нажмите на ответ гостя</p><div class="objection-list">${stageOptions(i)||'<p class="empty">В этом блоке пока нет возражений.</p>'}</div><p class="rail-foot">Отработка откроется рядом.<br>Вы вернётесь на тот же этап.</p></aside></div></section>`;}).join('');
   applySiteSettings();updatePosition(false);renderStepper();
 }
 function updatePosition(announce=true){
@@ -4814,6 +5049,71 @@ if(typeof applyVenues==='function'){const orig=applyVenues;applyVenues=function(
 api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{applyVenues(r.venues)}catch{smsSource.venues=r.venues;fill()}try{renderCards()}catch{}}}).catch(()=>{});
 })();
 </script>
+<style id="plan-styles">@media screen{
+.plan-view{flex:1;min-height:0;overflow-y:auto;width:100%;max-width:1580px;margin:0 auto;padding:24px 28px 60px}
+.plan-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.plan-header h1{font-size:28px;font-weight:800;letter-spacing:-.03em;margin:4px 0 6px}
+.plan-header p{margin:0;color:var(--muted);font-size:13px}
+.plan-week-bar{display:flex;align-items:center;gap:12px;margin:12px 0 0;flex-wrap:wrap}
+.plan-week-btn{padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid var(--line);background:var(--surface);cursor:pointer}
+.plan-week-btn.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.plan-stepper{display:flex;gap:8px;margin-bottom:22px;overflow-x:auto;padding-bottom:4px}
+.plan-step-tab{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s ease}
+.plan-step-tab:hover{border-color:var(--teal);color:var(--ink)}
+.plan-step-tab.active{border-color:var(--teal);background:color-mix(in srgb, var(--teal) 12%, var(--surface));color:var(--teal);box-shadow:0 2px 8px color-mix(in srgb, var(--teal) 20%, transparent)}
+.plan-step-tab.completed .plan-step-num{background:var(--teal);color:#fff;border-color:var(--teal)}
+.plan-step-num{width:24px;height:24px;border-radius:50%;display:inline-grid;place-items:center;font-size:11px;font-weight:800;background:var(--surface-alt);border:1px solid var(--line);color:var(--ink)}
+.plan-step-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px 30px;box-shadow:0 4px 18px rgba(0,0,0,0.04);margin-bottom:20px}
+.plan-step-title-row{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.plan-step-title-row h2{margin:0;font-size:20px;font-weight:800}
+.plan-step-title-row p{margin:4px 0 0;font-size:13px;color:var(--muted)}
+.plan-always-callout{background:color-mix(in srgb, var(--teal) 8%, var(--surface-alt));border:1.5px solid color-mix(in srgb, var(--teal) 35%, var(--line));border-radius:14px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.plan-always-tag{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;background:var(--teal);color:#fff;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.plan-city-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));gap:10px;margin-top:14px}
+.plan-city-card{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-alt);cursor:pointer;transition:all .15s ease;user-select:none}
+.plan-city-card:hover{border-color:var(--teal);background:var(--surface)}
+.plan-city-card.selected{border-color:var(--teal);background:color-mix(in srgb, var(--teal) 10%, var(--surface));color:var(--teal);font-weight:750;box-shadow:0 2px 6px color-mix(in srgb, var(--teal) 15%, transparent)}
+.plan-city-always-star{font-size:11px;color:#d97706;background:#fef3c7;padding:2px 6px;border-radius:6px;font-weight:800}
+.plan-card-section{margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.plan-card-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.plan-city-halls-grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:10px}
+.plan-hall-block{background:var(--surface-alt);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+.plan-hall-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.plan-days-chips{display:flex;gap:6px;flex-wrap:wrap}
+.plan-day-chip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;font-size:12px;font-weight:700;transition:all .15s ease}
+.plan-day-chip:has(input:checked){background:var(--teal);color:#fff;border-color:var(--teal)}
+.plan-times-chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.plan-time-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:var(--surface);border:1.5px solid var(--line);font-size:13px;font-weight:750}
+.plan-time-chip button{border:none;background:transparent;color:var(--muted);padding:0 2px;cursor:pointer;font-weight:800}
+.plan-time-chip button:hover{color:var(--purple)}
+.plan-actions-bar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:24px;flex-wrap:wrap}
+.plan-save-btn{background:var(--teal) !important;color:#fff !important;border:none !important;padding:12px 24px !important;border-radius:10px !important;font-weight:800 !important;font-size:14px !important;cursor:pointer !important;box-shadow:0 4px 14px color-mix(in srgb, var(--teal) 35%, transparent) !important}
+.plan-save-btn:hover{opacity:0.92;transform:translateY(-1px)}
+/* Interactive Schedule Table for Call Operators (Only on stage «Выбор времени») */
+.presentation-schedule-box{margin-top:22px;margin-bottom:20px;border:2px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 35%, var(--line));border-radius:18px;background:var(--custom-card-bg, var(--surface, #ffffff));box-shadow:0 6px 20px rgba(0,0,0,0.06);overflow:hidden;transition:all .2s ease}
+.psb-header{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;background:color-mix(in srgb, var(--custom-accent, var(--teal)) 8%, var(--surface-alt, #f8fafc));border-bottom:1.5px solid var(--line);gap:12px;flex-wrap:wrap}
+.psb-title{font-size:14px;font-weight:850;color:var(--ink);display:flex;align-items:center;gap:8px}
+.psb-selected-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:color-mix(in srgb, var(--teal) 15%, #daf5e4);color:var(--teal);border:1.5px solid color-mix(in srgb, var(--teal) 40%, transparent);font-size:12.5px;font-weight:750}
+.psb-clear-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;padding:0 4px;font-size:13px;font-weight:800}
+.psb-clear-btn:hover{color:var(--purple)}
+.psb-hint{font-size:12px;color:var(--muted);font-weight:600}
+.psb-body{padding:18px 22px}
+.psb-halls-tabs{display:flex;gap:8px;margin-bottom:14px}
+.psb-hall-tab{padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-size:12px;font-weight:700;cursor:pointer}
+.psb-hall-tab.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.psb-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:10px}
+.psb-col{background:var(--surface-alt, #f8fafc);border:1px solid var(--line);border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.psb-day-title{font-size:12px;font-weight:800;color:var(--ink);margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:6px;width:100%}
+.psb-day-title small{display:block;font-size:10.5px;color:var(--muted);font-weight:600}
+.psb-times{display:flex;flex-direction:column;gap:6px;width:100%}
+.psb-time-btn{width:100%;padding:8px 6px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface, #ffffff);font-size:13px;font-weight:750;color:var(--ink);cursor:pointer;transition:all .15s ease}
+.psb-time-btn:hover{border-color:var(--teal);background:color-mix(in srgb, var(--teal) 8%, var(--surface));color:var(--teal);transform:translateY(-1px)}
+.psb-time-btn.active{background:var(--teal) !important;color:#fff !important;border-color:var(--teal) !important;box-shadow:0 3px 10px color-mix(in srgb, var(--teal) 40%, transparent) !important}
+/* Highlight Marks for {дата} and {время} in script text */
+mark.plan-fill{background:color-mix(in srgb, var(--teal, #008578) 16%, #daf5e4) !important;color:var(--teal, #008578) !important;font-weight:750 !important;padding:2px 8px !important;border-radius:6px !important;border:1.5px solid color-mix(in srgb, var(--teal, #008578) 40%, transparent) !important;box-shadow:0 1px 4px rgba(0,0,0,0.06) !important}
+mark.plan-empty{background:#fff3e0 !important;color:#b45309 !important;font-style:italic !important;font-weight:650 !important;padding:2px 8px !important;border-radius:6px !important;border:1.5px dashed #f59e0b !important}
+}
+</style>
 <style id="owner-styles">@media screen{
 .owner-view{flex:1;min-height:0;overflow-y:auto;width:100%;max-width:1580px;margin:0 auto;padding:24px 28px 44px}
 .owner-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px}
@@ -7053,6 +7353,12 @@ const ACTION_LABELS={
 };
 
 const navTabs=document.querySelector('.switcher-tabs');
+if(navTabs&&!document.getElementById('plan-tab')){
+  navTabs.insertAdjacentHTML('beforeend','<button id="plan-tab" class="section-tab protected-tab" aria-pressed="false" hidden><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 8h14M7 2v4M13 2v4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span id="plan-tab-label">📅 План презентаций</span></button>');
+}
+if(!document.getElementById('plan-view')){
+  document.body.insertAdjacentHTML('beforeend','<main id="plan-view" class="plan-view" hidden></main>');
+}
 if(navTabs&&!document.getElementById('owner-tab')){
   navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">Владелец · Управление</span></button>');
 }
@@ -7075,12 +7381,16 @@ const origSetTab=setTab;
 setTab=function(name){
   const ov=document.getElementById('owner-view');
   if(ov)ov.hidden=name!=='owner';
+  const pv=document.getElementById('plan-view');
+  if(pv)pv.hidden=name!=='plan';
   origSetTab(name);
 };
 const origShowScript=showScript;
 showScript=function(index=current,tab='script'){
   const ov=document.getElementById('owner-view');
   if(ov)ov.hidden=true;
+  const pv=document.getElementById('plan-view');
+  if(pv)pv.hidden=true;
   origShowScript(index,tab);
 };
 
@@ -7183,7 +7493,11 @@ function updateHeaderBadge(){
     const isOwner=currentUser.role==='OWNER';
     btn.innerHTML=`${isOwner?'<span class="dot-owner"></span>':''}<span>${E(currentUser.login)} · ${E(ROLE_NAMES[currentUser.role]||currentUser.role)}</span>`;
     if(tabLbl)tabLbl.textContent=isOwner?'Владелец · Управление':currentUser.role==='ADMIN'?'Администрирование':currentUser.role==='HEAD'?'Мой отдел · Управление':'Профиль ('+(ROLE_NAMES[currentUser.role]||currentUser.role)+')';
+    const planTab=document.getElementById('plan-tab');
+    if(planTab)planTab.hidden=!(isOwner||currentUser.role==='ADMIN'||currentUser.role==='HEAD'||(currentUser.permissions&&currentUser.permissions.includes('addresses.manage')));
   }else{
+    const planTab=document.getElementById('plan-tab');
+    if(planTab)planTab.hidden=true;
     btn.hidden=true;
     if(outBtn)outBtn.hidden=true;
     if(tabLbl)tabLbl.textContent='Владелец · Управление';
@@ -8674,6 +8988,725 @@ window.loadOwnerData = loadOwnerData;
       }, 1200);
     }
   });
+
+  
+// ==========================================
+// PRESENTATION PLAN WIZARD (4-STEP SYSTEM)
+// ==========================================
+let planWizardStep = 1;
+let planDraft = null;
+const ALWAYS_WORKING_CITIES = ['Москва', 'Санкт-Петербург', 'Ростов', 'Севастополь', 'Симферополь', 'Краснодар'];
+
+function getNextMondayDate() {
+  const d = new Date();
+  const day = d.getDay(); // 0 is Sun, 1 is Mon
+  const diff = (day === 0 ? 1 : 8 - day); // next monday
+  d.setDate(d.getDate() + diff);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dt = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dt}`;
+}
+
+function getAllDatabaseCities() {
+  const list = [];
+  if (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues)) {
+    smsSource.venues.forEach(v => {
+      if (v.city && !list.includes(v.city)) list.push(v.city);
+    });
+  }
+  ALWAYS_WORKING_CITIES.forEach(c => {
+    if (!list.includes(c)) list.push(c);
+  });
+  return list.sort((a,b) => a.localeCompare(b, 'ru'));
+}
+
+function getDatabaseHallsForCity(cityName) {
+  if (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues)) {
+    return smsSource.venues.filter(v => v.city?.trim().toLowerCase() === cityName?.trim().toLowerCase());
+  }
+  return [];
+}
+
+async function loadPresentationPlan() {
+  try {
+    const res = await api('/api/presentation-plan');
+    if (res && Array.isArray(res.cities)) {
+      activePresentationPlan = res;
+    }
+  } catch (e) {
+    console.warn('Could not load plan from server:', e);
+  }
+  if (!activePresentationPlan) {
+    try {
+      activePresentationPlan = JSON.parse(localStorage.getItem('bauer-presentation-plan') || 'null');
+    } catch {}
+  }
+}
+
+function initPlanDraft() {
+  if (activePresentationPlan && Array.isArray(activePresentationPlan.cities) && activePresentationPlan.cities.length) {
+    planDraft = JSON.parse(JSON.stringify(activePresentationPlan));
+    if (!planDraft.weekStart) planDraft.weekStart = getNextMondayDate();
+  } else {
+    // Default draft: pre-fill the 6 always working cities
+    planDraft = {
+      weekStart: getNextMondayDate(),
+      cities: ALWAYS_WORKING_CITIES.map(c => {
+        const venues = getDatabaseHallsForCity(c);
+        const firstHall = venues[0]?.hall || 'Основной зал';
+        return {
+          cityName: c,
+          halls: [
+            {
+              hallName: firstHall,
+              days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+              times: ['10:00', '14:00', '18:00']
+            }
+          ]
+        };
+      })
+    };
+  }
+}
+
+async function openPlanPanel() {
+  await ensureAdmin(async () => {
+    if (!$('#drawer').hidden) closeDrawer();
+    for (const el of document.querySelectorAll('main')) el.hidden = true;
+    $('#edit').hidden = true;
+    $('#all-objections').hidden = true;
+    setTab('plan');
+    await loadPresentationPlan();
+    initPlanDraft();
+    renderPlanView();
+  });
+}
+document.getElementById('plan-tab')?.addEventListener('click', openPlanPanel);
+
+function renderPlanView() {
+  const container = document.getElementById('plan-view');
+  if (!container) return;
+  if (!planDraft) initPlanDraft();
+
+  const allCities = getAllDatabaseCities();
+  const selectedCount = planDraft.cities?.length || 0;
+  let totalHalls = 0;
+  let totalTimes = 0;
+  (planDraft.cities || []).forEach(c => {
+    (c.halls || []).forEach(h => {
+      totalHalls++;
+      totalTimes += (h.times || []).length;
+    });
+  });
+
+  const weekStartDate = planDraft.weekStart || getNextMondayDate();
+  const weekStartRu = formatRuShortDate(weekStartDate);
+
+  // Stepper tabs
+  const steps = [
+    { num: 1, title: 'Города на неделю', badge: `${selectedCount} гор.` },
+    { num: 2, title: 'Города и залы', badge: `${totalHalls} зал.` },
+    { num: 3, title: 'Дни работы', badge: 'Пн–Вс' },
+    { num: 4, title: 'Времена презентаций', badge: `${totalTimes} слотов` }
+  ];
+
+  let stepBodyHtml = '';
+
+  if (planWizardStep === 1) {
+    // ==========================================
+    // STEP 1: CITIES SELECTION
+    // ==========================================
+    stepBodyHtml = `
+      <div class="plan-step-card">
+        <div class="plan-step-title-row">
+          <div>
+            <h2>Этап 1: Города, которые работают на следующей неделе</h2>
+            <p>Выберите города, в которых будут проводиться презентации. Города с золотой звездой работают всегда.</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="plan-week-btn" id="plan-btn-select-always">★ Выбрать базовые 6</button>
+            <button type="button" class="plan-week-btn" id="plan-btn-select-all">Выбрать все (${allCities.length})</button>
+            <button type="button" class="plan-week-btn" id="plan-btn-reset-cities">Сбросить выбор</button>
+          </div>
+        </div>
+
+        <div class="plan-always-callout">
+          <span class="plan-always-tag">★ Базовые города</span>
+          <span>Города, которые работают <strong>всегда</strong> по умолчанию: <strong>Москва, Санкт-Петербург, Ростов, Севастополь, Симферополь, Краснодар</strong>.</span>
+        </div>
+
+        <div class="plan-city-grid">
+          ${allCities.map(cityName => {
+            const isAlways = ALWAYS_WORKING_CITIES.includes(cityName);
+            const isSelected = planDraft.cities.some(c => c.cityName === cityName);
+            return `
+              <div class="plan-city-card ${isSelected ? 'selected' : ''}" data-plan-toggle-city="${escapeHTML(cityName)}">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" ${isSelected ? 'checked' : ''} style="pointer-events:none">
+                  <span>${escapeHTML(cityName)}</span>
+                </div>
+                ${isAlways ? '<span class="plan-city-always-star" title="Работает всегда">★ Всегда</span>' : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  } else if (planWizardStep === 2) {
+    // ==========================================
+    // STEP 2: HALLS PER CITY (MAX 2 HALLS)
+    // ==========================================
+    stepBodyHtml = `
+      <div class="plan-step-card">
+        <div class="plan-step-title-row">
+          <div>
+            <h2>Этап 2: Города и залы, которые работают</h2>
+            <p>Для каждого выбранного города укажите 1 или 2 работающих зала. Для каждого зала можно будет настроить независимое расписание.</p>
+          </div>
+          <div class="psb-selected-badge">
+            Выбрано городов: ${selectedCount}
+          </div>
+        </div>
+
+        ${!selectedCount ? '<p class="psb-hint">Сначала выберите города на шаге 1.</p>' : ''}
+
+        <div class="plan-city-halls-grid">
+          ${planDraft.cities.map((cityObj, cIdx) => {
+            const dbVenues = getDatabaseHallsForCity(cityObj.cityName);
+            const halls = cityObj.halls || [];
+            const hasTwoHalls = halls.length >= 2;
+
+            return `
+              <div class="plan-hall-block">
+                <div class="plan-hall-head">
+                  <strong style="font-size:16px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer">
+                    <input type="checkbox" data-plan-toggle-two-halls="${cIdx}" ${hasTwoHalls ? 'checked' : ''}>
+                    <span>Второй зал в этом городе</span>
+                  </label>
+                </div>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:14px;margin-top:10px">
+                  <!-- Hall 1 -->
+                  <div style="background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:12px">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                      <span style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Зал 1 (Основной)</span>
+                    </div>
+                    ${dbVenues.length > 0 ? `
+                      <select class="whole-sms-input" data-plan-hall-select="${cIdx},0">
+                        ${dbVenues.map(v => `<option value="${escapeHTML(v.hall)}" ${(halls[0]?.hallName === v.hall) ? 'selected' : ''}>${escapeHTML(v.hall)}</option>`).join('')}
+                        <option value="__custom__" ${(!dbVenues.some(v => v.hall === halls[0]?.hallName)) ? 'selected' : ''}>+ Другой зал / адрес...</option>
+                      </select>
+                    ` : ''}
+                    <input type="text" class="whole-sms-input" style="margin-top:6px" placeholder="Название или адрес первого зала" data-plan-hall-name="${cIdx},0" value="${escapeHTML(halls[0]?.hallName || '')}">
+                  </div>
+
+                  <!-- Hall 2 (if enabled) -->
+                  ${hasTwoHalls ? `
+                    <div style="background:var(--surface);border:1.5px solid var(--teal);border-radius:10px;padding:12px">
+                      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                        <span style="font-size:11px;font-weight:800;color:var(--teal);text-transform:uppercase">Зал 2 (Дополнительный)</span>
+                        <button type="button" class="psb-clear-btn" data-plan-remove-hall="${cIdx},1" title="Отключить второй зал">✕</button>
+                      </div>
+                      ${dbVenues.length > 1 ? `
+                        <select class="whole-sms-input" data-plan-hall-select="${cIdx},1">
+                          ${dbVenues.map(v => `<option value="${escapeHTML(v.hall)}" ${(halls[1]?.hallName === v.hall) ? 'selected' : ''}>${escapeHTML(v.hall)}</option>`).join('')}
+                          <option value="__custom__" ${(!dbVenues.some(v => v.hall === halls[1]?.hallName)) ? 'selected' : ''}>+ Другой зал / адрес...</option>
+                        </select>
+                      ` : ''}
+                      <input type="text" class="whole-sms-input" style="margin-top:6px" placeholder="Название или адрес второго зала" data-plan-hall-name="${cIdx},1" value="${escapeHTML(halls[1]?.hallName || 'Зал 2')}">
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  } else if (planWizardStep === 3) {
+    // ==========================================
+    // STEP 3: DAYS OF WEEK PER HALL
+    // ==========================================
+    const allDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    stepBodyHtml = `
+      <div class="plan-step-card">
+        <div class="plan-step-title-row">
+          <div>
+            <h2>Этап 3: Дни, в которые работают выбранные залы</h2>
+            <p>Отметьте дни недели проведения презентаций для каждого зала. Доступны быстрые шаблоны.</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="plan-week-btn" id="plan-btn-apply-all-days">Применить «Пн–Вс (все дни)» ко всем</button>
+            <button type="button" class="plan-week-btn" id="plan-btn-apply-workdays">Применить «Будни (Пн–Пт)» ко всем</button>
+          </div>
+        </div>
+
+        <div class="plan-city-halls-grid">
+          ${planDraft.cities.map((cityObj, cIdx) => `
+            <div class="plan-hall-block">
+              <strong style="font-size:16px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
+              <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
+                ${(cityObj.halls || []).map((hall, hIdx) => {
+                  const hallDays = hall.days || [];
+                  return `
+                    <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+                        <strong>Зал ${hIdx + 1}: ${escapeHTML(hall.hallName || 'Основной')}</strong>
+                        <div style="display:flex;gap:4px">
+                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},all" style="padding:3px 8px;font-size:11px">Все 7</button>
+                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},work" style="padding:3px 8px;font-size:11px">Пн-Пт</button>
+                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},weekend" style="padding:3px 8px;font-size:11px">Сб-Вс</button>
+                        </div>
+                      </div>
+                      <div class="plan-days-chips">
+                        ${allDays.map(dayName => {
+                          const isChecked = hallDays.includes(dayName);
+                          const dateStr = getCalculatedDateForDay(planDraft.weekStart, dayName);
+                          return `
+                            <label class="plan-day-chip">
+                              <input type="checkbox" data-plan-day-toggle="${cIdx},${hIdx},${dayName}" ${isChecked ? 'checked' : ''} style="display:none">
+                              <span>${dayName}</span>
+                              ${dateStr ? `<small style="opacity:0.75;font-size:10px">${formatRuShortDate(dateStr)}</small>` : ''}
+                            </label>
+                          `;
+                        }).join('')}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } else if (planWizardStep === 4) {
+    // ==========================================
+    // STEP 4: PRESENTATION TIMES PER HALL
+    // ==========================================
+    stepBodyHtml = `
+      <div class="plan-step-card">
+        <div class="plan-step-title-row">
+          <div>
+            <h2>Этап 4: Времена презентаций по залам</h2>
+            <p>Заполните время начала презентаций для каждого зала. Для разных залов в одном городе можно задавать разные времена.</p>
+          </div>
+          <button type="button" class="plan-week-btn" id="plan-btn-apply-standard-times">Применить стандартные (10:00, 14:00, 18:00) ко всем залам</button>
+        </div>
+
+        <div class="plan-city-halls-grid">
+          ${planDraft.cities.map((cityObj, cIdx) => `
+            <div class="plan-hall-block">
+              <strong style="font-size:16px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
+              <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
+                ${(cityObj.halls || []).map((hall, hIdx) => {
+                  const times = hall.times || [];
+                  const daysStr = (hall.days || []).join(', ') || 'Дни не выбраны';
+                  return `
+                    <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px">
+                        <div>
+                          <strong>Зал ${hIdx + 1}: ${escapeHTML(hall.hallName || 'Основной')}</strong>
+                          <span style="font-size:12px;color:var(--muted);margin-left:8px">Дни: ${escapeHTML(daysStr)}</span>
+                        </div>
+                        <div style="display:flex;gap:4px">
+                          <button type="button" class="plan-week-btn" data-plan-preset-times="${cIdx},${hIdx},10-14-18" style="padding:3px 8px;font-size:11px">+ 10, 14, 18</button>
+                          <button type="button" class="plan-week-btn" data-plan-preset-times="${cIdx},${hIdx},11-15-19" style="padding:3px 8px;font-size:11px">+ 11, 15, 19</button>
+                        </div>
+                      </div>
+
+                      <div class="plan-times-chips">
+                        ${times.map((t, tIdx) => `
+                          <span class="plan-time-chip">
+                            ${escapeHTML(t)}
+                            <button type="button" data-plan-remove-time="${cIdx},${hIdx},${tIdx}" title="Удалить это время">×</button>
+                          </span>
+                        `).join('')}
+                      </div>
+
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
+                        <input type="text" placeholder="10:00" maxlength="5" style="width:90px" class="whole-sms-input" id="plan-add-time-input-${cIdx}-${hIdx}">
+                        <button type="button" class="plan-week-btn" data-plan-add-time="${cIdx},${hIdx}">+ Добавить время</button>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // Complete HTML with Header, Stepper, Step Card, and Actions Bar
+  container.innerHTML = `
+    <header class="plan-header">
+      <div>
+        <h1>📅 План презентаций BAUER</h1>
+        <p>Мастер формирования расписания презентаций по городам и залам для руководителей. Сохранённые слоты времени передаются операторам на этапе «Выбор времени».</p>
+        <div class="plan-week-bar">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+            <span>Начало недели (Понедельник):</span>
+            <input type="date" id="plan-week-start-input" class="whole-sms-input" style="width:auto;padding:4px 10px" value="${escapeHTML(weekStartDate)}">
+          </label>
+          ${activePresentationPlan?.updatedAt ? `
+            <span class="psb-hint">Последнее сохранение: ${new Date(activePresentationPlan.updatedAt).toLocaleString('ru')} (${escapeHTML(activePresentationPlan.updatedBy || 'Руководитель')})</span>
+          ` : ''}
+        </div>
+      </div>
+      <div>
+        <button type="button" class="plan-save-btn" id="plan-save-top-btn">💾 Сохранить план презентаций</button>
+      </div>
+    </header>
+
+    <!-- Stepper Navigation -->
+    <nav class="plan-stepper" aria-label="Этапы мастера плана">
+      ${steps.map(s => `
+        <button type="button" class="plan-step-tab ${s.num === planWizardStep ? 'active' : ''} ${s.num < planWizardStep ? 'completed' : ''}" data-plan-goto-step="${s.num}">
+          <span class="plan-step-num">${s.num}</span>
+          <span>${s.title}</span>
+          <span style="font-size:11px;opacity:0.8">(${s.badge})</span>
+        </button>
+      `).join('')}
+    </nav>
+
+    ${stepBodyHtml}
+
+    <div class="plan-actions-bar">
+      <div>
+        ${planWizardStep > 1 ? `
+          <button type="button" class="plan-week-btn" id="plan-btn-prev-step" style="padding:10px 18px;font-size:13px">← Назад: Шаг ${planWizardStep - 1}</button>
+        ` : ''}
+      </div>
+      <div style="display:flex;gap:12px;align-items:center">
+        ${planWizardStep < 4 ? `
+          <button type="button" class="plan-week-btn" id="plan-btn-next-step" style="background:var(--ink);color:#fff;border-color:var(--ink);padding:10px 18px;font-size:13px">
+            Следующий этап: ${steps[planWizardStep]?.title || 'Далее'} →
+          </button>
+        ` : ''}
+        <button type="button" class="plan-save-btn" id="plan-save-bottom-btn">💾 Сохранить план презентаций</button>
+      </div>
+    </div>
+  `;
+}
+
+async function savePresentationPlanToServer() {
+  if (!planDraft) return;
+  const weekStartEl = document.getElementById('plan-week-start-input');
+  if (weekStartEl && weekStartEl.value) {
+    planDraft.weekStart = weekStartEl.value;
+  }
+  try {
+    const saved = await api('/api/presentation-plan', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(planDraft)
+    });
+    activePresentationPlan = saved || planDraft;
+    try {
+      localStorage.setItem('bauer-presentation-plan', JSON.stringify(activePresentationPlan));
+    } catch {}
+    toast('✓ План презентаций успешно сохранён на сервере!');
+    renderPlanView();
+    renderCards();
+  } catch (e) {
+    toast('Ошибка сохранения плана: ' + (e.message || 'нет связи'));
+  }
+}
+
+// Global Event Listeners for Presentation Plan View
+document.addEventListener('click', e => {
+  // Save buttons
+  if (e.target.closest('#plan-save-top-btn') || e.target.closest('#plan-save-bottom-btn')) {
+    savePresentationPlanToServer();
+    return;
+  }
+
+  // Stepper navigation
+  const gotoStepBtn = e.target.closest('[data-plan-goto-step]');
+  if (gotoStepBtn) {
+    planWizardStep = Number(gotoStepBtn.dataset.planGotoStep);
+    renderPlanView();
+    return;
+  }
+  if (e.target.closest('#plan-btn-prev-step')) {
+    if (planWizardStep > 1) { planWizardStep--; renderPlanView(); }
+    return;
+  }
+  if (e.target.closest('#plan-btn-next-step')) {
+    if (planWizardStep < 4) { planWizardStep++; renderPlanView(); }
+    return;
+  }
+
+  // Step 1: City toggle
+  const cityCard = e.target.closest('[data-plan-toggle-city]');
+  if (cityCard && planDraft) {
+    const cName = cityCard.dataset.planToggleCity;
+    const existingIdx = planDraft.cities.findIndex(c => c.cityName === cName);
+    if (existingIdx >= 0) {
+      planDraft.cities.splice(existingIdx, 1);
+    } else {
+      const dbVenues = getDatabaseHallsForCity(cName);
+      planDraft.cities.push({
+        cityName: cName,
+        halls: [{
+          hallName: dbVenues[0]?.hall || 'Основной зал',
+          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+          times: ['10:00', '14:00', '18:00']
+        }]
+      });
+    }
+    renderPlanView();
+    return;
+  }
+
+  // Step 1: Bulk city buttons
+  if (e.target.closest('#plan-btn-select-always') && planDraft) {
+    ALWAYS_WORKING_CITIES.forEach(cName => {
+      if (!planDraft.cities.some(c => c.cityName === cName)) {
+        const dbVenues = getDatabaseHallsForCity(cName);
+        planDraft.cities.push({
+          cityName: cName,
+          halls: [{
+            hallName: dbVenues[0]?.hall || 'Основной зал',
+            days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+            times: ['10:00', '14:00', '18:00']
+          }]
+        });
+      }
+    });
+    renderPlanView();
+    return;
+  }
+  if (e.target.closest('#plan-btn-select-all') && planDraft) {
+    const all = getAllDatabaseCities();
+    all.forEach(cName => {
+      if (!planDraft.cities.some(c => c.cityName === cName)) {
+        const dbVenues = getDatabaseHallsForCity(cName);
+        planDraft.cities.push({
+          cityName: cName,
+          halls: [{
+            hallName: dbVenues[0]?.hall || 'Основной зал',
+            days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+            times: ['10:00', '14:00', '18:00']
+          }]
+        });
+      }
+    });
+    renderPlanView();
+    return;
+  }
+  if (e.target.closest('#plan-btn-reset-cities') && planDraft) {
+    planDraft.cities = [];
+    renderPlanView();
+    return;
+  }
+
+  // Step 2: Toggle 2 halls
+  const twoHallsCb = e.target.closest('[data-plan-toggle-two-halls]');
+  if (twoHallsCb && planDraft) {
+    const cIdx = Number(twoHallsCb.dataset.planToggleTwoHalls);
+    const city = planDraft.cities[cIdx];
+    if (city) {
+      if (city.halls.length >= 2) {
+        city.halls = [city.halls[0]];
+      } else {
+        const dbVenues = getDatabaseHallsForCity(city.cityName);
+        const secondVenue = dbVenues.find(v => v.hall !== city.halls[0]?.hallName) || dbVenues[1];
+        city.halls.push({
+          hallName: secondVenue?.hall || 'Зал 2',
+          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'],
+          times: ['11:00', '15:00', '19:00']
+        });
+      }
+    }
+    renderPlanView();
+    return;
+  }
+
+  // Step 2: Remove hall 2
+  const removeHallBtn = e.target.closest('[data-plan-remove-hall]');
+  if (removeHallBtn && planDraft) {
+    const [cIdx, hIdx] = removeHallBtn.dataset.planRemoveHall.split(',').map(Number);
+    if (planDraft.cities[cIdx]?.halls) {
+      planDraft.cities[cIdx].halls.splice(hIdx, 1);
+      renderPlanView();
+    }
+    return;
+  }
+
+  // Step 3: Presets for days
+  const presetDaysBtn = e.target.closest('[data-plan-preset-days]');
+  if (presetDaysBtn && planDraft) {
+    const [cIdx, hIdx, type] = presetDaysBtn.dataset.planPresetDays.split(',');
+    const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
+    if (hall) {
+      if (type === 'all') hall.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      if (type === 'work') hall.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'];
+      if (type === 'weekend') hall.days = ['Сб', 'Вс'];
+      renderPlanView();
+    }
+    return;
+  }
+  if (e.target.closest('#plan-btn-apply-all-days') && planDraft) {
+    planDraft.cities.forEach(c => (c.halls || []).forEach(h => {
+      h.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    }));
+    renderPlanView();
+    return;
+  }
+  if (e.target.closest('#plan-btn-apply-workdays') && planDraft) {
+    planDraft.cities.forEach(c => (c.halls || []).forEach(h => {
+      h.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'];
+    }));
+    renderPlanView();
+    return;
+  }
+
+  // Step 4: Time chips & presets
+  const removeTimeBtn = e.target.closest('[data-plan-remove-time]');
+  if (removeTimeBtn && planDraft) {
+    const [cIdx, hIdx, tIdx] = removeTimeBtn.dataset.planRemoveTime.split(',').map(Number);
+    planDraft.cities[cIdx]?.halls[hIdx]?.times?.splice(tIdx, 1);
+    renderPlanView();
+    return;
+  }
+  const presetTimesBtn = e.target.closest('[data-plan-preset-times]');
+  if (presetTimesBtn && planDraft) {
+    const [cIdx, hIdx, type] = presetTimesBtn.dataset.planPresetTimes.split(',');
+    const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
+    if (hall) {
+      if (!hall.times) hall.times = [];
+      const addList = (type === '10-14-18') ? ['10:00', '14:00', '18:00'] : ['11:00', '15:00', '19:00'];
+      addList.forEach(t => { if (!hall.times.includes(t)) hall.times.push(t); });
+      renderPlanView();
+    }
+    return;
+  }
+  const addTimeBtn = e.target.closest('[data-plan-add-time]');
+  if (addTimeBtn && planDraft) {
+    const [cIdx, hIdx, type] = addTimeBtn.dataset.planAddTime.split(',').map(Number);
+    const inp = document.getElementById(`plan-add-time-input-${cIdx}-${hIdx}`);
+    const val = (inp?.value || '').trim();
+    if (val) {
+      const hall = planDraft.cities[cIdx]?.halls[hIdx];
+      if (hall) {
+        if (!hall.times) hall.times = [];
+        if (!hall.times.includes(val)) hall.times.push(val);
+        renderPlanView();
+      }
+    }
+    return;
+  }
+  if (e.target.closest('#plan-btn-apply-standard-times') && planDraft) {
+    planDraft.cities.forEach(c => (c.halls || []).forEach(h => {
+      h.times = ['10:00', '14:00', '18:00'];
+    }));
+    renderPlanView();
+    return;
+  }
+
+  // OPERATOR / SCRIPT INTERACTIVE SCHEDULE CLICKS
+  const slotSelectBtn = e.target.closest('[data-plan-slot-select]');
+  if (slotSelectBtn) {
+    const day = slotSelectBtn.dataset.day || '';
+    const date = slotSelectBtn.dataset.date || '';
+    const time = slotSelectBtn.dataset.time || '';
+    const city = slotSelectBtn.dataset.city || '';
+    const hall = slotSelectBtn.dataset.hall || '';
+    selectedPlanSlot = { day, date, time, city, hall };
+    try {
+      localStorage.setItem('bauer-selected-plan-slot', JSON.stringify(selectedPlanSlot));
+    } catch {}
+
+    // Auto-update SMS constructor values
+    if (typeof smsValues !== 'undefined') {
+      if (date) smsValues.date = date;
+      if (time) smsValues.time = time;
+      if (city) smsValues.city = city;
+      if (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues)) {
+        const mv = smsSource.venues.find(v => v.city === city && (v.hall === hall || v.hall.includes(hall)));
+        if (mv) {
+          smsValues.hall = mv.id;
+          smsValues.route = mv.route || smsValues.route;
+        }
+      }
+    }
+    renderCards();
+    toast(`✓ Время зафиксировано: ${day} в ${time}`);
+    return;
+  }
+
+  const clearSlotBtn = e.target.closest('[data-plan-clear]');
+  if (clearSlotBtn) {
+    selectedPlanSlot = null;
+    try { localStorage.removeItem('bauer-selected-plan-slot'); } catch {}
+    renderCards();
+    toast('Выбор времени сброшен');
+    return;
+  }
+
+  const hallTabBtn = e.target.closest('[data-plan-hall-idx]');
+  if (hallTabBtn) {
+    cityScheduleActiveHall = Number(hallTabBtn.dataset.planHallIdx || 0);
+    renderCards();
+    return;
+  }
+});
+
+// Input and Change Listeners for Plan Draft
+document.addEventListener('change', e => {
+  if (e.target.matches('[data-plan-day-toggle]') && planDraft) {
+    const [cIdx, hIdx, dayName] = e.target.dataset.planDayToggle.split(',');
+    const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
+    if (hall) {
+      if (!hall.days) hall.days = [];
+      if (e.target.checked) {
+        if (!hall.days.includes(dayName)) hall.days.push(dayName);
+      } else {
+        hall.days = hall.days.filter(d => d !== dayName);
+      }
+    }
+    return;
+  }
+
+  if (e.target.matches('[data-plan-hall-select]') && planDraft) {
+    const [cIdx, hIdx] = e.target.dataset.planHallSelect.split(',').map(Number);
+    const hall = planDraft.cities[cIdx]?.halls[hIdx];
+    if (hall) {
+      if (e.target.value !== '__custom__') {
+        hall.hallName = e.target.value;
+        const txtInp = document.querySelector(`[data-plan-hall-name="${cIdx},${hIdx}"]`);
+        if (txtInp) txtInp.value = e.target.value;
+      }
+    }
+    return;
+  }
+
+  if (e.target.id === 'plan-week-start-input' && planDraft) {
+    planDraft.weekStart = e.target.value;
+    renderPlanView();
+    return;
+  }
+});
+
+document.addEventListener('input', e => {
+  if (e.target.matches('[data-plan-hall-name]') && planDraft) {
+    const [cIdx, hIdx] = e.target.dataset.planHallName.split(',').map(Number);
+    const hall = planDraft.cities[cIdx]?.halls[hIdx];
+    if (hall) {
+      hall.hallName = e.target.value;
+    }
+  }
+});
+
+// Load presentation plan on startup
+loadPresentationPlan().then(() => {
+  try { renderCards(); } catch {}
+}).catch(() => {});
 
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushClicks();

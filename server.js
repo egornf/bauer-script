@@ -818,7 +818,7 @@ function createAppServer(options = {}) {
         return;
       }
 
-      const needAppData = ['/api/content', '/api/scripts', '/api/giftbase', '/api/addresses', '/api/layouts', '/api/layouts-order'].some(
+      const needAppData = ['/api/content', '/api/scripts', '/api/giftbase', '/api/addresses', '/api/layouts', '/api/layouts-order', '/api/presentation-plan'].some(
         p => pathname === p || pathname.startsWith(p + '/')
       );
       await store.syncFromBlob({ needAppData });
@@ -1490,6 +1490,42 @@ function createAppServer(options = {}) {
             details: { venuesCount: body.venues.length, revision: rev }
           });
           return sendJson(res, 200, appData.addresses);
+        }
+      }
+
+      if (pathname === '/api/presentation-plan') {
+        if (method === 'GET') {
+          return sendJson(res, 200, appData.presentationPlan || null);
+        }
+        if (method === 'PUT') {
+          if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+          if (!['OWNER', 'ADMIN', 'HEAD'].includes(auth.user.role) && !hasPermission(auth.user, 'addresses.manage')) {
+            store.logEvent({ action: 'presentation_plan.update.denied', actor: auth.user, ip, userAgent, status: 'denied' });
+            return sendJson(res, 403, { error: 'Недостаточно прав для редактирования плана презентаций.' });
+          }
+          const body = await readBody(req);
+          if (!body || typeof body !== 'object') {
+            return sendJson(res, 400, { error: 'Некорректные данные плана презентаций.' });
+          }
+          const plan = {
+            ...body,
+            updatedAt: Date.now(),
+            updatedBy: auth.user.name || auth.user.username,
+            updatedByRole: auth.user.role
+          };
+          appData.presentationPlan = plan;
+          store.saveAppData();
+          store.logEvent({
+            action: 'presentation_plan.update',
+            actor: auth.user,
+            ip,
+            userAgent,
+            details: {
+              weekStart: plan.weekStart,
+              citiesCount: Array.isArray(plan.cities) ? plan.cities.length : 0
+            }
+          });
+          return sendJson(res, 200, appData.presentationPlan);
         }
       }
 
