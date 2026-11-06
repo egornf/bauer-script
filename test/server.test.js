@@ -1104,7 +1104,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     });
     assert.strictEqual(editorPut.status, 403);
 
-    // 3. OWNER / Melentyeva / HEAD can PUT plan with cities, halls, days, times
+    // 3. OWNER / Melentyeva / HEAD can PUT plan with cities, halls, days, times and per-day dayTimes
     const testPlan = {
       weekStart: '2026-11-09',
       cities: [
@@ -1114,12 +1114,26 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
             {
               hallName: 'Отель Панорама',
               days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-              times: ['10:00', '14:00', '18:00']
+              times: ['10:00', '12:00', '14:00', '18:00'],
+              dayTimes: {
+                'Пн': ['10:00', '14:00', '18:00'],
+                'Вт': ['12:00', '16:00'],
+                'Ср': ['10:00', '14:00', '18:00'],
+                'Чт': ['11:00', '15:00'],
+                'Пт': ['10:00', '14:00'],
+                'Сб': ['10:00', '13:00'],
+                'Вс': ['11:00', '14:00']
+              }
             },
             {
               hallName: 'ТК «Бухарест», 2 этаж',
               days: ['Пн', 'Вт', 'Ср'],
-              times: ['11:00', '15:00', '19:00']
+              times: ['11:00', '15:00', '19:00'],
+              dayTimes: {
+                'Пн': ['11:00', '15:00'],
+                'Вт': ['11:00', '15:00', '19:00'],
+                'Ср': ['15:00', '19:00']
+              }
             }
           ]
         },
@@ -1129,7 +1143,13 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
             {
               hallName: 'Мартовские зайцы, 6 этаж',
               days: ['Чт', 'Пт', 'Сб', 'Вс'],
-              times: ['10:00', '14:00', '18:00']
+              times: ['10:00', '14:00', '18:00'],
+              dayTimes: {
+                'Чт': ['14:00', '18:00'],
+                'Пт': ['10:00', '14:00', '18:00'],
+                'Сб': ['10:00', '14:00'],
+                'Вс': ['10:00', '14:00']
+              }
             }
           ]
         }
@@ -1145,6 +1165,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.strictEqual(savedPlan.weekStart, '2026-11-09');
     assert.strictEqual(savedPlan.cities.length, 2);
     assert.strictEqual(savedPlan.cities[0].halls.length, 2);
+    assert.deepStrictEqual(savedPlan.cities[0].halls[0].dayTimes['Вт'], ['12:00', '16:00']);
     assert.strictEqual(savedPlan.updatedByRole, 'OWNER');
 
     // 4. GET returns saved plan
@@ -1153,6 +1174,7 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     const fetchedPlan = getRes.data;
     assert.strictEqual(fetchedPlan.weekStart, '2026-11-09');
     assert.strictEqual(fetchedPlan.cities[0].cityName, 'Москва');
+    assert.deepStrictEqual(fetchedPlan.cities[0].halls[0].dayTimes['Сб'], ['10:00', '13:00']);
 
     // 5. Verify index.html UI elements for Presentation Plan
     const html = fs.readFileSync(path.resolve('index.html'), 'utf8');
@@ -1167,17 +1189,25 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
       assert.ok(html.includes(c), `Must include always working city: ${c}`);
     }
 
-    // 4-step wizard
+    // 4-step wizard + per-day times
     assert.ok(html.includes('plan-stepper'), 'Must have stepper for wizard');
     assert.ok(html.includes('planWizardStep'), 'Must track active wizard step');
     assert.ok(html.includes('Второй зал в этом городе'), 'Step 2 must allow up to 2 halls with checkbox');
     assert.ok(html.includes('data-plan-day-toggle'), 'Step 3 must allow day selection');
-    assert.ok(html.includes('data-plan-add-time'), 'Step 4 must allow time slots');
+    assert.ok(html.includes('data-plan-toggle-day-time'), 'Step 4 must allow toggling time slots per day');
+    assert.ok(html.includes('data-plan-add-day-time'), 'Step 4 must allow custom time slots per day');
+    assert.ok(html.includes('getHallTimesForDay'), 'Must support different presentation times on different days');
 
-    // Interactive time selection on stage «Выбор времени»
+    // Movable schedule block in Layout Editor (Макеты)
+    assert.ok(html.includes("schedule:'📅 График времени'"), 'Layout editor KINDS must include schedule');
+    assert.ok(html.includes('data-v4="addschedline"'), 'Layout editor must allow adding/moving schedule block');
+
+    // Interactive time selection on stage «Выбор времени» without scroll jump
     assert.ok(html.includes('presentationScheduleMarkup'), 'Must render presentation schedule markup');
-    assert.ok(html.includes('isTimeStage'), 'Must restrict schedule table strictly to time selection stage');
+    assert.ok(html.includes('isTimeStage'), 'Must restrict default schedule table to time selection stage');
     assert.ok(html.includes('data-plan-slot-select'), 'Time buttons must have data-plan-slot-select');
+    assert.ok(html.includes('refreshScheduleViewsWithoutScroll'), 'Must preserve scroll position when selecting a time slot');
+    assert.ok(html.includes('savedScrolls'), 'renderCards must save and restore scroll positions of script-pane and stage-body');
     assert.ok(html.includes('fillPlanHtml'), 'Must replace {дата}, {время}, {день_недели}, {дата_время} dynamically');
     assert.ok(html.includes('mark.plan-fill'), 'Must format selected time variables with plan-fill badge');
   });

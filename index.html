@@ -2183,7 +2183,7 @@ function upgrade(value){
     const rawKinds=(stage.lines||[]).map((l,n)=>
       !stage.guestGiftVersion&&stage.showGifts&&/термос/iu.test(l)?'gift-plus-one':
       !stage.guestGiftVersion&&stage.showGifts&&/вафельниц/iu.test(l)?'gift-plus-two':
-      ['speech','gift','gift-plus-one','gift-plus-two','address'].includes(stage.lineKinds?.[n])?stage.lineKinds[n]:
+      ['speech','gift','gift-plus-one','gift-plus-two','address','schedule'].includes(stage.lineKinds?.[n])?stage.lineKinds[n]:
       (/ЭТО СПЕЦИАЛЬНЫЙ ПОДАРОК-СЮРПРИЗ|^Руководство подготовило для вас особенный подарок/iu.test(l.trim())?'gift':'speech')
     );
     const lines=[],lineKinds=[],lineFormats=[],lineGifts=[];
@@ -2222,9 +2222,15 @@ function upgrade(value){
           if(g&&!g.script){g.script=l;g.scriptFormat=fmt;}
         }
         lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(gid);
+      }else if(k==='schedule'){
+        lines.push('');lineKinds.push('schedule');lineFormats.push(cleanFormat(stage.lineFormats?.[n],0));lineGifts.push('');
       }else{
         lines.push(l);lineKinds.push(k==='address'?'address':'speech');lineFormats.push(fmt);lineGifts.push('');
       }
+    }
+    const isTimeBlock=id==='time'||String(stage.title||'').toLowerCase().includes('выбор времени')||id.toLowerCase().includes('vrem')||id.toLowerCase().includes('time');
+    if(isTimeBlock&&!lineKinds.includes('schedule')&&!stage.scheduleRemoved){
+      lines.push('');lineKinds.push('schedule');lineFormats.push(cleanFormat(null,0));lineGifts.push('');
     }
     return {
       id,guestGiftVersion:2,giftPhoto:'',title:stage.title,showTip:stage.showTip===true,tip:stage.tip,
@@ -2232,6 +2238,7 @@ function upgrade(value){
       lines,lineKinds,lineFormats,lineGifts,
       objectionIds:[...new Set(stage.objectionIds||[])],
       hidden:stage.hidden===true,showGifts:false,showSms:old?i===7:stage.showSms===true,
+      scheduleRemoved:stage.scheduleRemoved===true,
       giftIds:[]
     };
   });
@@ -2252,7 +2259,7 @@ function normalize(value,now=Date.now()){
     if(!s||!text(s.title,200)||!s.title.trim()||!text(s.tip,3000)||!Array.isArray(s.lines)||s.lines.length>100||!s.lines.every(l=>text(l))||!Array.isArray(s.objectionIds)||!s.objectionIds.every(id=>Number.isInteger(id)&&id>=0&&id<value.objections.length))return null;
     if(value.schemaVersion>=4){if(!text(s.id,80)||!/^[A-Za-z0-9_-]{1,80}$/.test(s.id)||stageIds.has(s.id))return null;stageIds.add(s.id);}
     if(s.giftPhoto!==undefined&&(!text(s.giftPhoto,700000)||(s.giftPhoto&&!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(s.giftPhoto))))return null;
-    for(const key of ['hidden','showGifts','showSms','showTip'])if(s[key]!==undefined&&typeof s[key]!=='boolean')return null;
+    for(const key of ['hidden','showGifts','showSms','showTip','scheduleRemoved'])if(s[key]!==undefined&&typeof s[key]!=='boolean')return null;
   }
   if(!value.objections.every(o=>o&&text(o.title,300)&&text(o.text)&&(o.nextStageId===undefined||text(o.nextStageId,80))))return null;
   if(!visible(value).length)return null;
@@ -2465,10 +2472,20 @@ function formatRuShortDate(isoDate) {
   return `${Number(parts[2])} ${months[Number(parts[1]) - 1] || ''}`;
 }
 
-function presentationScheduleMarkup(stage) {
+function getHallTimesForDay(hall, dayName) {
+  if (!hall) return [];
+  const dKey = typeof dayName === 'string' ? dayName : dayName?.day;
+  if (hall.dayTimes && typeof hall.dayTimes === 'object' && dKey && Array.isArray(hall.dayTimes[dKey])) {
+    return hall.dayTimes[dKey];
+  }
+  return Array.isArray(hall.times) ? hall.times : [];
+}
+
+function presentationScheduleMarkup(stage, customStyle = '') {
   const plan = activePresentationPlan;
   const v = currentVenue();
   const currentCity = v?.city || (typeof smsValues !== 'undefined' ? smsValues.city : '') || '';
+  const boxStyleAttr = customStyle ? ` style="${customStyle}"` : '';
 
   const cityPlan = plan?.cities?.find(c => c.cityName?.trim().toLowerCase() === currentCity?.trim().toLowerCase());
   const slot = selectedPlanSlot;
@@ -2487,7 +2504,7 @@ function presentationScheduleMarkup(stage) {
 
   if (!plan || !Array.isArray(plan.cities) || !plan.cities.length) {
     return `
-      <div class="presentation-schedule-box" id="presentation-schedule-box">
+      <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
         <div class="psb-header">
           <div class="psb-title">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
@@ -2506,7 +2523,7 @@ function presentationScheduleMarkup(stage) {
 
   if (!cityPlan || !cityPlan.halls || !cityPlan.halls.length) {
     return `
-      <div class="presentation-schedule-box" id="presentation-schedule-box">
+      <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
         <div class="psb-header">
           <div class="psb-title">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
@@ -2540,11 +2557,11 @@ function presentationScheduleMarkup(stage) {
   }
 
   const days = activeHall.days || [];
-  const times = activeHall.times || [];
+  const hasAnyTimes = days.some(d => getHallTimesForDay(activeHall, typeof d === 'string' ? d : d.day).length > 0);
 
-  if (!days.length || !times.length) {
+  if (!days.length || !hasAnyTimes) {
     return `
-      <div class="presentation-schedule-box" id="presentation-schedule-box">
+      <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
         <div class="psb-header">
           <div class="psb-title">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
@@ -2570,7 +2587,7 @@ function presentationScheduleMarkup(stage) {
   });
 
   return `
-    <div class="presentation-schedule-box" id="presentation-schedule-box">
+    <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
       <div class="psb-header">
         <div class="psb-title">
           <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
@@ -2584,6 +2601,7 @@ function presentationScheduleMarkup(stage) {
           ${sortedDays.map(dObj => {
             const dayName = typeof dObj === 'string' ? dObj : dObj.day;
             const dateStr = typeof dObj === 'object' && dObj.date ? dObj.date : getCalculatedDateForDay(plan.weekStart, dayName);
+            const dayTimes = getHallTimesForDay(activeHall, dayName);
             const isFullSelectedDay = slot?.day === dayName;
             return `
               <div class="psb-col">
@@ -2592,8 +2610,8 @@ function presentationScheduleMarkup(stage) {
                   ${dateStr ? `<small>${escapeHTML(formatRuShortDate(dateStr))}</small>` : ''}
                 </div>
                 <div class="psb-times">
-                  ${times.map(t => {
-                    const isSelected = isFullSelectedDay && slot?.time === t;
+                  ${dayTimes.length ? dayTimes.map(t => {
+                    const isSelected = isFullSelectedDay && slot?.time === t && (!slot?.hall || !activeHall.hallName || slot.hall === activeHall.hallName);
                     return `
                       <button type="button" 
                         class="psb-time-btn ${isSelected ? 'active' : ''}"
@@ -2606,7 +2624,7 @@ function presentationScheduleMarkup(stage) {
                         ${isSelected ? '✓ ' : ''}${escapeHTML(t)}
                       </button>
                     `;
-                  }).join('')}
+                  }).join('') : '<span class="psb-hint" style="font-size:11px;text-align:center;padding:6px 0">Нет слотов</span>'}
                 </div>
               </div>
             `;
@@ -2641,6 +2659,7 @@ function renderStageLines(stage,readonly=false,gifts=data.gifts){
       return;
     }
     const bCss=LayoutModel.blockCSS(stage.lineFormats?.[n]);
+    if(kind==='schedule'){html+=presentationScheduleMarkup(stage,bCss);return;}
     if(kind==='address'){html+=addressLineHtml(line,stage.lineFormats?.[n],bCss);return;}
     html+=`<p class="line"${bCss?` style="${bCss}"`:''}>${fillPlanHtml(fillVenueHtml(LayoutModel.renderText(line,stage.lineFormats?.[n])))}</p>`;
   });
@@ -2648,10 +2667,32 @@ function renderStageLines(stage,readonly=false,gifts=data.gifts){
 }
 function operatorTipMarkup(stage){return stage.showTip===true&&stage.tip.trim()?`<div class="tip"><strong>ПОДСКАЗКА ОПЕРАТОРУ</strong><div>${LayoutModel.renderText(stage.tip,stage.tipFormat)}</div></div>`:'';}
 function renderCards(){
+  const savedScrolls=new Map();
+  document.querySelectorAll('#track .stage-card').forEach(card=>{
+    const idx=card.dataset.stageIndex;
+    const sp=card.querySelector('.script-pane');
+    const sb=card.querySelector('.stage-body');
+    const op=card.querySelector('.objections-pane');
+    savedScrolls.set(idx,{sp:sp?sp.scrollTop:0,sb:sb?sb.scrollTop:0,op:op?op.scrollTop:0});
+  });
+  const winScrollX=window.scrollX||0,winScrollY=window.scrollY||0;
   const indices=visibleIndices();if(!indices.includes(current))current=indices[0]??0;
   document.body.classList.toggle('editing',editing);$('#edit').textContent='Редактор';$('#edit').setAttribute('aria-pressed','false');
-  $('#track').innerHTML=indices.map((i,n)=>{const stage=data.stages[i];return `<section class="stage-card" data-stage-index="${i}" id="stage-${i}" aria-labelledby="stage-title-${i}" ${i!==current?'inert aria-hidden="true"':''}><div class="stage-heading"><div><div class="kicker">ЭТАП РАЗГОВОРА</div><h2 id="stage-title-${i}">${escapeHTML(stage.title)}</h2></div><div class="stage-count"><strong>${String(n+1).padStart(2,'0')}</strong> / ${String(indices.length).padStart(2,'0')}</div></div><div class="stage-body"><div class="script-pane">${unplacedGifts(stage,data.gifts).length?giftMarkup(unplacedGifts(stage,data.gifts)):''}<div class="pane-label">Реплики оператора</div>${renderStageLines(stage)}${isTimeStage(stage)?presentationScheduleMarkup(stage):''}${operatorTipMarkup(stage)}${stage.showSms?smsMarkup():''}</div><aside class="objections-pane" aria-label="Возражения для этапа ${escapeHTML(stage.title)}"><h3>Частые возражения</h3><p class="sub">Подборка для этого этапа · нажмите на ответ гостя</p><div class="objection-list">${stageOptions(i)||'<p class="empty">В этом блоке пока нет возражений.</p>'}</div><p class="rail-foot">Отработка откроется рядом.<br>Вы вернётесь на тот же этап.</p></aside></div></section>`;}).join('');
+  $('#track').innerHTML=indices.map((i,n)=>{const stage=data.stages[i];const hasInlineSchedule=Array.isArray(stage.lineKinds)&&stage.lineKinds.includes('schedule');const showFallbackSchedule=!hasInlineSchedule&&!stage.scheduleRemoved&&isTimeStage(stage);return `<section class="stage-card" data-stage-index="${i}" id="stage-${i}" aria-labelledby="stage-title-${i}" ${i!==current?'inert aria-hidden="true"':''}><div class="stage-heading"><div><div class="kicker">ЭТАП РАЗГОВОРА</div><h2 id="stage-title-${i}">${escapeHTML(stage.title)}</h2></div><div class="stage-count"><strong>${String(n+1).padStart(2,'0')}</strong> / ${String(indices.length).padStart(2,'0')}</div></div><div class="stage-body"><div class="script-pane">${unplacedGifts(stage,data.gifts).length?giftMarkup(unplacedGifts(stage,data.gifts)):''}<div class="pane-label">Реплики оператора</div>${renderStageLines(stage)}${showFallbackSchedule?presentationScheduleMarkup(stage):''}${operatorTipMarkup(stage)}${stage.showSms?smsMarkup():''}</div><aside class="objections-pane" aria-label="Возражения для этапа ${escapeHTML(stage.title)}"><h3>Частые возражения</h3><p class="sub">Подборка для этого этапа · нажмите на ответ гостя</p><div class="objection-list">${stageOptions(i)||'<p class="empty">В этом блоке пока нет возражений.</p>'}</div><p class="rail-foot">Отработка откроется рядом.<br>Вы вернётесь на тот же этап.</p></aside></div></section>`;}).join('');
   applySiteSettings();updatePosition(false);renderStepper();
+  document.querySelectorAll('#track .stage-card').forEach(card=>{
+    const saved=savedScrolls.get(card.dataset.stageIndex);
+    if(!saved)return;
+    const sp=card.querySelector('.script-pane');
+    const sb=card.querySelector('.stage-body');
+    const op=card.querySelector('.objections-pane');
+    if(sp&&saved.sp)sp.scrollTop=saved.sp;
+    if(sb&&saved.sb)sb.scrollTop=saved.sb;
+    if(op&&saved.op)op.scrollTop=saved.op;
+  });
+  if((window.scrollX||0)!==winScrollX||(window.scrollY||0)!==winScrollY){
+    try{window.scrollTo(winScrollX,winScrollY);}catch{}
+  }
 }
 function updatePosition(announce=true){
   const indices=visibleIndices(),position=indices.indexOf(current),last=position===indices.length-1;
@@ -4763,7 +4804,7 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 const lv=document.getElementById('layouts-view'),E=escapeHTML,q=(s)=>lv.querySelector(s);
 let tab='stage',edit=null,obSel=null,sel={s:1e9,e:1e9},start=null,timer=null,del=null;
 let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false;
-const KINDS={speech:'Речь',gift:'🎁 Подарок',address:'📍 Адрес'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
+const KINDS={speech:'Речь',gift:'🎁 Подарок',address:'📍 Адрес',schedule:'📅 График времени'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
 const TXT=['auto','#0b7a6e','#c0392b','#d68910','#1f5fbf','#7d3c98'],BG=['#fff3b0','#d5f5e3','#fadbd8','#d6eaf8','#e8daef','none'];
 const BLOCK_BG=[['#e2f3ef','Мятный'],['#daf5e4','Зелёный'],['#fff6de','Жёлтый'],['#fdeee8','Персиковый'],['#e6f0fa','Голубой'],['#f1edff','Лавандовый'],['#ffffff','Белый'],['none','Стандартный']];
 const st=()=>selectedEditorStage(),gid=()=>'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -4788,10 +4829,15 @@ function renderPickerOptions(i,curGiftId,queryStr){
 }
 
 function lineBlock(s,i){
-  const rawKind=s.lineKinds[i]||'speech',isGift=['gift','gift-plus-one','gift-plus-two'].includes(rawKind),kind=isGift?'gift':(rawKind==='address'?'address':'speech');
+  const rawKind=s.lineKinds[i]||'speech',isGift=['gift','gift-plus-one','gift-plus-two'].includes(rawKind),kind=isGift?'gift':(rawKind==='address'?'address':(rawKind==='schedule'?'schedule':'speech'));
   const isOp=currentUser&&currentUser.role==='OPERATOR';
-  const on=!isGift&&!isOp&&edit&&edit.t==='line'&&edit.i===i;
+  const on=!isGift&&kind!=='schedule'&&!isOp&&edit&&edit.t==='line'&&edit.i===i;
   const lineFmt=s.lineFormats?.[i]||LayoutModel.cleanFormat(null,0);
+  if(kind==='schedule'){
+    const curBg=lineFmt?.style?.blockBg||'';
+    const bStyle=LayoutModel.blockCSS(lineFmt);
+    return `<div class="v4-line is-schedule"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-tlbl" style="font-weight:700;color:var(--teal)">📅 График презентаций (перемещайте ↑ ↓)</span>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Переместить выше">↑</button><button data-v4="down" data-i="${i}" title="Переместить ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить блок графика">✕</button>`):''}</div>${presentationScheduleMarkup(s,bStyle)}</div>`;
+  }
   if(isGift){
     const curGiftId=s.lineGifts?.[i]||lineGiftId(rawKind)||(rawKind==='gift'?'surprise':'');
     const gift=editorDraft.gifts.find(g=>g.id===curGiftId);
@@ -4805,7 +4851,7 @@ function lineBlock(s,i){
   const dispFmt=lineFmt?.style?.blockBg?lineFmt:(i===0?{...lineFmt,style:{...(lineFmt?.style||{}),blockBg:'#e2f3ef'}}:lineFmt);
   return `<div class="v4-line"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Выше">↑</button><button data-v4="down" data-i="${i}" title="Ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить реплику">✕</button>`):''}</div>${on?editBox(s.lines[i],dispFmt):rawKind==='address'?addressLineHtml(s.lines[i],dispFmt,LayoutModel.blockCSS(dispFmt),` data-v4="edit" data-t="line" data-i="${i}" tabindex="0" title="Нажмите, чтобы изменить шаблон адреса"`).replace('class="line line-address"','class="line line-address v4-click"'):view('line',i,s.lines[i],dispFmt)}</div>`;
 }
-const view=(t,i,text,f)=>{const bs=t==='line'?LayoutModel.blockCSS(f):'';return `<p class="line v4-click" data-v4="edit" data-t="${t}" data-i="${i}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы изменить">${text.trim()?LayoutModel.renderText(text,f):'<span class="v4-empty">Пусто. Нажмите, чтобы написать</span>'}</p>`;};
+const view=(t,i,text,f)=>{const bs=t==='line'?LayoutModel.blockCSS(f):'';return `<p class="line v4-click" data-v4="edit" data-t="${t}" data-i="${i}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы изменить">${text.trim()?fillPlanHtml(fillVenueHtml(LayoutModel.renderText(text,f))):'<span class="v4-empty">Пусто. Нажмите, чтобы написать</span>'}</p>`;};
 function editBox(text,f){
   const isAddr=edit?.t==='line'&&st()?.lineKinds?.[edit.i]==='address';
   const sw=(k,v)=>{
@@ -4818,7 +4864,8 @@ function editBox(text,f){
   };
   const bsw=([v,lbl])=>`<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({blockBg:v})}' title="Заливка самого блока: ${lbl}" style="${v==='none'?'background:var(--surface-alt)':LayoutModel.blockCSS({style:{blockBg:v}})}">${v==='none'?'✕':''}</button>`;
   const bs=edit?.t==='tip'?'':LayoutModel.blockCSS(f);
-  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" title="Жирный"><b>Ж</b></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Текст:</span>${TXT.map(v=>sw('color',v)).join('')}<span class="v4-sep"></span><span class="v4-tlbl">Маркер:</span>${BG.map(v=>sw('background',v)).join('')}${edit?.t==='tip'?'':`<span class="v4-sep"></span><span class="v4-tlbl">Блок:</span>${BLOCK_BG.map(bsw).join('')}`}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><textarea data-v4-ta rows="${Math.max(3,Math.ceil(text.length/75))}">${E(text)}</textarea>${isAddr?`<div class="v4-ins">Вставить в текст: ${['город','зал','адрес','ориентиры'].map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="line" id="v4-live"${bs?` style="${bs}"`:''}>${isAddr?fillVenueHtml(LayoutModel.renderText(text,f)):LayoutModel.renderText(text,f)}</p><p class="v4-hint">Выделите слова и нажмите кнопку — оформится выделенное. «Блок» меняет заливку всей карточки реплики.</p></div>`;
+  const insVars=isAddr?['город','зал','адрес','ориентиры','дата','время','день_недели','дата_время']:['дата','время','день_недели','дата_время'];
+  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" title="Жирный"><b>Ж</b></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Текст:</span>${TXT.map(v=>sw('color',v)).join('')}<span class="v4-sep"></span><span class="v4-tlbl">Маркер:</span>${BG.map(v=>sw('background',v)).join('')}${edit?.t==='tip'?'':`<span class="v4-sep"></span><span class="v4-tlbl">Блок:</span>${BLOCK_BG.map(bsw).join('')}`}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><textarea data-v4-ta rows="${Math.max(3,Math.ceil(text.length/75))}">${E(text)}</textarea>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="line" id="v4-live"${bs?` style="${bs}"`:''}>${fillPlanHtml(fillVenueHtml(LayoutModel.renderText(text,f)))}</p><p class="v4-hint">Выделите слова и нажмите кнопку — оформится выделенное. «Блок» меняет заливку всей карточки реплики.</p></div>`;
 }
 function stageTab(s){
   const isOperator=currentUser&&currentUser.role==='OPERATOR';
@@ -4826,7 +4873,7 @@ function stageTab(s){
   const others=d.objections.map((o,i)=>[o,i]).filter(([,i])=>!s.objectionIds.includes(i));
   return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">ЭТАП ${String(ix+1).padStart(2,'0')} · РЕДАКТИРОВАНИЕ</div><input class="v4-title" data-v4-title maxlength="190" value="${E(s.title)}" aria-label="Название этапа"></div><div class="v4-stage-tools"><button data-v4="mvl" ${ix===0?'disabled':''} title="Сдвинуть влево">←</button><button data-v4="mvr" ${ix===d.stages.length-1?'disabled':''} title="Сдвинуть вправо">→</button><button data-v4="dup">Дублировать</button><button data-v4="hide">${s.hidden?'Показать на сайте':'Скрыть с сайта'}</button>${canDeleteContent()?'<button data-v4="rm">Удалить блок</button>':''}</div></div>
 ${isOperator?'<div class="v4-operator-banner">🎨 <b>Режим оформления для Менеджера обзвона:</b> вы можете настраивать размер шрифта, тему и цветовую заливку блоков. Текст реплик защищён от изменений.</div>':''}
-<div class="v4-body"><div class="v4-script"><div class="pane-label">Реплики оператора</div>${s.lines.map((_,i)=>lineBlock(s,i)).join('')}<div class="v4-add-row"><button data-v4="addline" data-i="${s.lines.length-1}">+ Добавить реплику</button><button class="v4-add-gift-btn" data-v4="addgiftline" data-i="${s.lines.length-1}">+ 🎁 Добавить подарок из базы</button><button class="v4-add-gift-btn" data-v4="addaddrline" data-i="${s.lines.length-1}">+ 📍 Добавить адрес</button></div>
+<div class="v4-body"><div class="v4-script"><div class="pane-label">Реплики оператора</div>${s.lines.map((_,i)=>lineBlock(s,i)).join('')}<div class="v4-add-row"><button data-v4="addline" data-i="${s.lines.length-1}">+ Добавить реплику</button><button class="v4-add-gift-btn" data-v4="addgiftline" data-i="${s.lines.length-1}">+ 🎁 Добавить подарок из базы</button><button class="v4-add-gift-btn" data-v4="addaddrline" data-i="${s.lines.length-1}">+ 📍 Добавить адрес</button><button class="v4-add-gift-btn" data-v4="addschedline" data-i="${s.lines.length-1}">+ 📅 Добавить график времени</button></div>
 <div class="v4-tipbox"><label class="v4-switch"><input type="checkbox" data-v4-tipshow ${s.showTip?'checked':''}> Показывать подсказку оператору</label><div class="tip"><strong>ПОДСКАЗКА ОПЕРАТОРУ</strong>${edit&&edit.t==='tip'?editBox(s.tip,s.tipFormat):view('tip',0,s.tip,s.tipFormat)}</div></div></div>
 <aside class="objections-pane v4-obj"><h3>Частые возражения</h3><p class="sub">Нажмите на возражение, чтобы изменить ответ</p><div class="objection-list">${s.objectionIds.map(id=>d.objections[id]?`<button class="objection-button ${obSel===id?'on':''}" data-v4="obsel" data-id="${id}"><span>${E(d.objections[id].title)}</span><span aria-hidden="true">✎</span></button>`:'').join('')||'<p class="empty">Пока нет возражений.</p>'}</div>
 ${ob?`<div class="v4-oed"><label>Возражение клиента</label><input data-v4-ob="title" maxlength="290" value="${E(ob.title)}"><label>Ответ оператора</label><textarea data-v4-ob="text" rows="7">${E(ob.text)}</textarea><label>После ответа вернуть к этапу</label><select data-v4-ob="next"><option value="">Остаться на этом этапе</option>${d.stages.map(x=>`<option value="${x.id}" ${x.id===ob.nextStageId?'selected':''}>${E(x.title)}</option>`).join('')}</select><button data-v4="obunlink">Убрать из этого блока</button></div>`:''}
@@ -4943,6 +4990,12 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
         s.lineKinds[idx]='gift';
         if(!s.lineGifts[idx]||!editorDraft.gifts.some(g=>g.id===s.lineGifts[idx]))s.lineGifts[idx]=editorDraft.gifts[0]?.id||'';
         edit=null;pickerOpen=idx;pickerQuery='';
+      }else if(val==='schedule'){
+        s.lineKinds[idx]='schedule';
+        s.lines[idx]='';
+        s.scheduleRemoved=false;
+        edit=null;
+        if(pickerOpen===idx)pickerOpen=null;
       }else{
         s.lineKinds[idx]=val==='address'?'address':'speech';
         if(!s.lines[idx]?.trim()||(val==='address'&&/^(Введите реплику оператора\.|Новая реплика)$/.test(s.lines[idx].trim())))s.lines[idx]=val==='address'?ADDR_TPL:'Введите реплику оператора.';
@@ -4985,10 +5038,11 @@ lv.addEventListener('click',async e=>{
     case 'up':case 'down':{const j=i+(a==='up'?-1:1);if(j<0||j>=s.lines.length)return;lineOp(()=>{for(const k of ['lines','lineKinds','lineFormats','lineGifts'])[s[k][i],s[k][j]]=[s[k][j],s[k][i]]});return}
     case 'ins':{const ta=q('[data-v4-ta]');if(!ta)return;ta.setRangeText('{'+b.dataset.k+'}',ta.selectionStart,ta.selectionEnd,'end');ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();return}
     case 'addaddrline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,ADDR_TPL);s.lineKinds.splice(j,0,'address');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
+    case 'addschedline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'');s.lineKinds.splice(j,0,'schedule');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');s.scheduleRemoved=false;edit=null;pickerOpen=null});return;
     case 'lmove':moveLayout(id,b.dataset.d);return;
     case 'addline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'Новая реплика');s.lineKinds.splice(j,0,'speech');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
     case 'addgiftline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'');s.lineKinds.splice(j,0,'gift');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,editorDraft.gifts[0]?.id||'');edit=null;pickerOpen=j;pickerQuery=''});return;
-    case 'delline':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление.');return;}lineOp(()=>['lines','lineKinds','lineFormats','lineGifts'].forEach(k=>s[k].splice(i,1)));return;
+    case 'delline':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление.');return;}lineOp(()=>{const wasSched=s.lineKinds[i]==='schedule';['lines','lineKinds','lineFormats','lineGifts'].forEach(k=>s[k].splice(i,1));if(wasSched&&!s.lineKinds.includes('schedule'))s.scheduleRemoved=true;});return;
     case 'mvl':case 'mvr':M(()=>{const k=editorDraft.stages.findIndex(x=>x.id===s.id);LayoutModel.moveStage(editorDraft,s.id,k+(a==='mvl'?-1:1))});return;
     case 'dup':M(()=>{const n=LayoutModel.duplicateStage(editorDraft,s.id);if(n)editorStageId=n.id;edit=null;pickerOpen=null});return;
     case 'hide':M(()=>LayoutModel.setHidden(editorDraft,s.id,!s.hidden));return;
@@ -9061,10 +9115,49 @@ async function loadPresentationPlan() {
   }
 }
 
+const QUICK_DAY_TIMES = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
+
+function sortTimesList(arr) {
+  return [...new Set((arr || []).map(x => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+function ensureHallDayTimes(hall) {
+  if (!hall) return;
+  const fallback = Array.isArray(hall.times) && hall.times.length ? [...hall.times] : ['10:00', '14:00', '18:00'];
+  if (!hall.dayTimes || typeof hall.dayTimes !== 'object' || Array.isArray(hall.dayTimes)) {
+    hall.dayTimes = {};
+  }
+  const days = Array.isArray(hall.days) ? hall.days : ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  days.forEach(d => {
+    const dName = typeof d === 'string' ? d : d.day;
+    if (dName && !Array.isArray(hall.dayTimes[dName])) {
+      hall.dayTimes[dName] = [...fallback];
+    }
+  });
+  syncHallFlatTimes(hall);
+}
+
+function syncHallFlatTimes(hall) {
+  if (!hall) return;
+  const all = new Set();
+  const days = Array.isArray(hall.days) ? hall.days : [];
+  days.forEach(d => {
+    const dName = typeof d === 'string' ? d : d.day;
+    const list = hall.dayTimes && Array.isArray(hall.dayTimes[dName]) ? hall.dayTimes[dName] : (hall.times || []);
+    list.forEach(t => all.add(t));
+  });
+  if (all.size > 0) {
+    hall.times = sortTimesList([...all]);
+  } else if (!Array.isArray(hall.times)) {
+    hall.times = [];
+  }
+}
+
 function initPlanDraft() {
   if (activePresentationPlan && Array.isArray(activePresentationPlan.cities) && activePresentationPlan.cities.length) {
     planDraft = JSON.parse(JSON.stringify(activePresentationPlan));
     if (!planDraft.weekStart) planDraft.weekStart = getNextMondayDate();
+    planDraft.cities.forEach(c => (c.halls || []).forEach(h => ensureHallDayTimes(h)));
   } else {
     // Default draft: pre-fill the 6 always working cities
     planDraft = {
@@ -9072,15 +9165,23 @@ function initPlanDraft() {
       cities: ALWAYS_WORKING_CITIES.map(c => {
         const venues = getDatabaseHallsForCity(c);
         const firstHall = venues[0]?.hall || 'Основной зал';
+        const hallObj = {
+          hallName: firstHall,
+          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+          times: ['10:00', '14:00', '18:00'],
+          dayTimes: {
+            'Пн': ['10:00', '14:00', '18:00'],
+            'Вт': ['10:00', '14:00', '18:00'],
+            'Ср': ['10:00', '14:00', '18:00'],
+            'Чт': ['10:00', '14:00', '18:00'],
+            'Пт': ['10:00', '14:00', '18:00'],
+            'Сб': ['10:00', '14:00', '18:00'],
+            'Вс': ['10:00', '14:00', '18:00']
+          }
+        };
         return {
           cityName: c,
-          halls: [
-            {
-              hallName: firstHall,
-              days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-              times: ['10:00', '14:00', '18:00']
-            }
-          ]
+          halls: [hallObj]
         };
       })
     };
@@ -9121,6 +9222,8 @@ function renderPlanView() {
   const container = document.getElementById('plan-view');
   if (!container) return;
   if (!planDraft) initPlanDraft();
+  const prevWinY = window.scrollY || 0;
+  const prevContainerScroll = container.scrollTop || 0;
 
   const allCities = getAllDatabaseCities();
   const selectedCount = planDraft.cities?.length || 0;
@@ -9128,8 +9231,12 @@ function renderPlanView() {
   let totalTimes = 0;
   (planDraft.cities || []).forEach(c => {
     (c.halls || []).forEach(h => {
+      ensureHallDayTimes(h);
       totalHalls++;
-      totalTimes += (h.times || []).length;
+      (h.days || []).forEach(d => {
+        const dName = typeof d === 'string' ? d : d.day;
+        totalTimes += (h.dayTimes?.[dName]?.length || 0);
+      });
     });
   });
 
@@ -9317,52 +9424,100 @@ function renderPlanView() {
     `;
   } else if (planWizardStep === 4) {
     // ==========================================
-    // STEP 4: PRESENTATION TIMES PER HALL
+    // STEP 4: PRESENTATION TIMES PER HALL AND PER DAY
     // ==========================================
+    const daysWeekOrder = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     stepBodyHtml = `
       <div class="plan-step-card">
         <div class="plan-step-title-row">
           <div>
-            <h2>Этап 4: Времена презентаций по залам</h2>
-            <p>Заполните время начала презентаций для каждого зала. Для разных залов в одном городе можно задавать разные времена.</p>
+            <h2>Этап 4: Времена презентаций по залам и дням недели</h2>
+            <p>Для каждого дня недели можно задать своё расписание презентаций (нажимайте на часы для быстрого включения/выключения слота в конкретный день или используйте шаблоны).</p>
           </div>
-          <button type="button" class="plan-week-btn" id="plan-btn-apply-standard-times">Применить стандартные (10:00, 14:00, 18:00) ко всем залам</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="plan-week-btn" id="plan-btn-apply-standard-times">Ко всем залам и дням: 10:00, 14:00, 18:00</button>
+          </div>
         </div>
 
         <div class="plan-city-halls-grid">
           ${planDraft.cities.map((cityObj, cIdx) => `
             <div class="plan-hall-block">
               <strong style="font-size:16px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
-              <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
+              <div style="display:flex;flex-direction:column;gap:14px;margin-top:10px">
                 ${(cityObj.halls || []).map((hall, hIdx) => {
-                  const times = hall.times || [];
-                  const daysStr = (hall.days || []).join(', ') || 'Дни не выбраны';
+                  ensureHallDayTimes(hall);
+                  const sortedDays = [...(hall.days || [])].map(d => typeof d === 'string' ? d : d.day).sort((a, b) => {
+                    const ia = daysWeekOrder.indexOf(a?.slice(0, 2));
+                    const ib = daysWeekOrder.indexOf(b?.slice(0, 2));
+                    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+                  });
                   return `
-                    <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px">
-                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px">
+                    <div style="background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:14px">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--line)">
                         <div>
-                          <strong>Зал ${hIdx + 1}: ${escapeHTML(hall.hallName || 'Основной')}</strong>
-                          <span style="font-size:12px;color:var(--muted);margin-left:8px">Дни: ${escapeHTML(daysStr)}</span>
+                          <strong style="font-size:14.5px">Зал ${hIdx + 1}: ${escapeHTML(hall.hallName || 'Основной')}</strong>
+                          <span style="font-size:12px;color:var(--muted);margin-left:8px">Рабочих дней: ${sortedDays.length}</span>
                         </div>
-                        <div style="display:flex;gap:4px">
-                          <button type="button" class="plan-week-btn" data-plan-preset-times="${cIdx},${hIdx},10-14-18" style="padding:3px 8px;font-size:11px">+ 10, 14, 18</button>
-                          <button type="button" class="plan-week-btn" data-plan-preset-times="${cIdx},${hIdx},11-15-19" style="padding:3px 8px;font-size:11px">+ 11, 15, 19</button>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                          <span style="font-size:11.5px;color:var(--muted);font-weight:600">Ко всем дням зала:</span>
+                          <button type="button" class="plan-week-btn" data-plan-hall-all-times="${cIdx},${hIdx},10-14-18" style="padding:4px 9px;font-size:11.5px">10:00, 14:00, 18:00</button>
+                          <button type="button" class="plan-week-btn" data-plan-hall-all-times="${cIdx},${hIdx},11-15-19" style="padding:4px 9px;font-size:11.5px">11:00, 15:00, 19:00</button>
                         </div>
                       </div>
 
-                      <div class="plan-times-chips">
-                        ${times.map((t, tIdx) => `
-                          <span class="plan-time-chip">
-                            ${escapeHTML(t)}
-                            <button type="button" data-plan-remove-time="${cIdx},${hIdx},${tIdx}" title="Удалить это время">×</button>
-                          </span>
-                        `).join('')}
-                      </div>
+                      ${!sortedDays.length ? '<p class="psb-hint" style="margin:0">Для этого зала не выбраны рабочие дни на Шаге 3.</p>' : `
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(235px, 1fr));gap:10px">
+                          ${sortedDays.map(dayName => {
+                            const dateStr = getCalculatedDateForDay(planDraft.weekStart, dayName);
+                            const dTimes = hall.dayTimes?.[dayName] || [];
+                            return `
+                              <div style="background:var(--surface-alt);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:4px">
+                                  <div>
+                                    <strong style="font-size:13.5px;color:var(--ink)">${escapeHTML(dayName)}</strong>
+                                    ${dateStr ? `<small style="color:var(--muted);margin-left:4px;font-weight:600">${escapeHTML(formatRuShortDate(dateStr))}</small>` : ''}
+                                  </div>
+                                  <div style="display:flex;gap:3px">
+                                    <button type="button" class="plan-week-btn" data-plan-day-preset="${cIdx},${hIdx},${escapeHTML(dayName)},10-14-18" style="padding:2px 6px;font-size:10.5px" title="Поставить 10:00, 14:00, 18:00 на ${escapeHTML(dayName)}">10/14/18</button>
+                                    <button type="button" class="plan-week-btn" data-plan-day-preset="${cIdx},${hIdx},${escapeHTML(dayName)},11-15-19" style="padding:2px 6px;font-size:10.5px" title="Поставить 11:00, 15:00, 19:00 на ${escapeHTML(dayName)}">11/15/19</button>
+                                  </div>
+                                </div>
 
-                      <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
-                        <input type="text" placeholder="10:00" maxlength="5" style="width:90px" class="whole-sms-input" id="plan-add-time-input-${cIdx}-${hIdx}">
-                        <button type="button" class="plan-week-btn" data-plan-add-time="${cIdx},${hIdx}">+ Добавить время</button>
-                      </div>
+                                <!-- Быстрые кнопки выбора часов для этого дня -->
+                                <div style="display:flex;flex-wrap:wrap;gap:4px">
+                                  ${QUICK_DAY_TIMES.map(qt => {
+                                    const active = dTimes.includes(qt);
+                                    return `
+                                      <button type="button"
+                                        data-plan-toggle-day-time="${cIdx},${hIdx},${escapeHTML(dayName)},${qt}"
+                                        style="padding:3px 7px;font-size:11.5px;font-weight:700;border-radius:6px;cursor:pointer;border:1px solid ${active ? 'var(--teal)' : 'var(--line)'};background:${active ? 'var(--teal)' : 'var(--surface)'};color:${active ? '#fff' : 'var(--ink)'};transition:0.12s"
+                                        title="${active ? 'Убрать ' + qt : 'Добавить ' + qt}">
+                                        ${qt}
+                                      </button>
+                                    `;
+                                  }).join('')}
+                                </div>
+
+                                <!-- Активные слоты дня -->
+                                <div class="plan-times-chips" style="margin-top:2px;min-height:26px">
+                                  ${dTimes.length ? dTimes.map((t, tIdx) => `
+                                    <span class="plan-time-chip" style="padding:3px 8px;font-size:12px">
+                                      ${escapeHTML(t)}
+                                      <button type="button" data-plan-remove-day-time="${cIdx},${hIdx},${escapeHTML(dayName)},${tIdx}" title="Удалить время ${escapeHTML(t)}">×</button>
+                                    </span>
+                                  `).join('') : '<span class="psb-hint" style="font-size:11px">Время не выбрано</span>'}
+                                </div>
+
+                                <!-- Своё время для этого дня -->
+                                <div style="display:flex;align-items:center;gap:4px;margin-top:auto">
+                                  <input type="text" placeholder="ЧЧ:ММ" maxlength="5" style="width:74px;padding:4px 8px;font-size:12px" class="whole-sms-input" id="plan-add-day-time-${cIdx}-${hIdx}-${escapeHTML(dayName)}">
+                                  <button type="button" class="plan-week-btn" style="padding:4px 8px;font-size:11.5px" data-plan-add-day-time="${cIdx},${hIdx},${escapeHTML(dayName)}">+ Своё</button>
+                                </div>
+                              </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      `}
                     </div>
                   `;
                 }).join('')}
@@ -9424,6 +9579,38 @@ function renderPlanView() {
       </div>
     </div>
   `;
+  if (prevContainerScroll) container.scrollTop = prevContainerScroll;
+  if ((window.scrollY || 0) !== prevWinY) {
+    try { window.scrollTo(window.scrollX || 0, prevWinY); } catch {}
+  }
+}
+
+function refreshScheduleViewsWithoutScroll() {
+  renderCards();
+  const wv = document.getElementById('whole-view');
+  if (wv && !wv.hidden) {
+    const wc = wv.querySelector('.whole-content');
+    const prevScroll = wc ? wc.scrollTop : 0;
+    const visStages = data.stages.filter(s => !s.hidden);
+    wv.querySelectorAll('.whole-stage').forEach((art, idx) => {
+      const stg = visStages[idx];
+      if (!stg) return;
+      const headRow = art.querySelector('.whole-stage-head-row');
+      const headHtml = headRow ? headRow.outerHTML : '';
+      art.innerHTML = `${headHtml}${renderStageLines(stg, true, data.gifts)}${operatorTipMarkup(stg)}`;
+    });
+    if (selectedPlanSlot) {
+      const wDate = wv.querySelector('#w-sms-date');
+      const wTime = wv.querySelector('#w-sms-time');
+      if (wDate && selectedPlanSlot.date) { wDate.value = selectedPlanSlot.date; wDate.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (wTime && selectedPlanSlot.time) { wTime.value = selectedPlanSlot.time; wTime.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+    if (wc) wc.scrollTop = prevScroll;
+  }
+  const lv = document.getElementById('layouts-view');
+  if (lv && !lv.hidden && typeof renderLayouts === 'function') {
+    try { renderLayouts(); } catch {}
+  }
 }
 
 async function savePresentationPlanToServer() {
@@ -9432,6 +9619,7 @@ async function savePresentationPlanToServer() {
   if (weekStartEl && weekStartEl.value) {
     planDraft.weekStart = weekStartEl.value;
   }
+  (planDraft.cities || []).forEach(c => (c.halls || []).forEach(h => ensureHallDayTimes(h)));
   try {
     const saved = await api('/api/presentation-plan', {
       method: 'PUT',
@@ -9444,7 +9632,7 @@ async function savePresentationPlanToServer() {
     } catch {}
     toast('✓ План презентаций успешно сохранён на сервере!');
     renderPlanView();
-    renderCards();
+    refreshScheduleViewsWithoutScroll();
   } catch (e) {
     toast('Ошибка сохранения плана: ' + (e.message || 'нет связи'));
   }
@@ -9483,13 +9671,15 @@ document.addEventListener('click', e => {
       planDraft.cities.splice(existingIdx, 1);
     } else {
       const dbVenues = getDatabaseHallsForCity(cName);
+      const newHall = {
+        hallName: dbVenues[0]?.hall || 'Основной зал',
+        days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+        times: ['10:00', '14:00', '18:00']
+      };
+      ensureHallDayTimes(newHall);
       planDraft.cities.push({
         cityName: cName,
-        halls: [{
-          hallName: dbVenues[0]?.hall || 'Основной зал',
-          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-          times: ['10:00', '14:00', '18:00']
-        }]
+        halls: [newHall]
       });
     }
     renderPlanView();
@@ -9501,13 +9691,15 @@ document.addEventListener('click', e => {
     ALWAYS_WORKING_CITIES.forEach(cName => {
       if (!planDraft.cities.some(c => c.cityName === cName)) {
         const dbVenues = getDatabaseHallsForCity(cName);
+        const newHall = {
+          hallName: dbVenues[0]?.hall || 'Основной зал',
+          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+          times: ['10:00', '14:00', '18:00']
+        };
+        ensureHallDayTimes(newHall);
         planDraft.cities.push({
           cityName: cName,
-          halls: [{
-            hallName: dbVenues[0]?.hall || 'Основной зал',
-            days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-            times: ['10:00', '14:00', '18:00']
-          }]
+          halls: [newHall]
         });
       }
     });
@@ -9519,13 +9711,15 @@ document.addEventListener('click', e => {
     all.forEach(cName => {
       if (!planDraft.cities.some(c => c.cityName === cName)) {
         const dbVenues = getDatabaseHallsForCity(cName);
+        const newHall = {
+          hallName: dbVenues[0]?.hall || 'Основной зал',
+          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+          times: ['10:00', '14:00', '18:00']
+        };
+        ensureHallDayTimes(newHall);
         planDraft.cities.push({
           cityName: cName,
-          halls: [{
-            hallName: dbVenues[0]?.hall || 'Основной зал',
-            days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-            times: ['10:00', '14:00', '18:00']
-          }]
+          halls: [newHall]
         });
       }
     });
@@ -9549,11 +9743,13 @@ document.addEventListener('click', e => {
       } else {
         const dbVenues = getDatabaseHallsForCity(city.cityName);
         const secondVenue = dbVenues.find(v => v.hall !== city.halls[0]?.hallName) || dbVenues[1];
-        city.halls.push({
+        const secondHall = {
           hallName: secondVenue?.hall || 'Зал 2',
           days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'],
           times: ['11:00', '15:00', '19:00']
-        });
+        };
+        ensureHallDayTimes(secondHall);
+        city.halls.push(secondHall);
       }
     }
     renderPlanView();
@@ -9580,6 +9776,7 @@ document.addEventListener('click', e => {
       if (type === 'all') hall.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
       if (type === 'work') hall.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'];
       if (type === 'weekend') hall.days = ['Сб', 'Вс'];
+      ensureHallDayTimes(hall);
       renderPlanView();
     }
     return;
@@ -9587,6 +9784,7 @@ document.addEventListener('click', e => {
   if (e.target.closest('#plan-btn-apply-all-days') && planDraft) {
     planDraft.cities.forEach(c => (c.halls || []).forEach(h => {
       h.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      ensureHallDayTimes(h);
     }));
     renderPlanView();
     return;
@@ -9594,49 +9792,104 @@ document.addEventListener('click', e => {
   if (e.target.closest('#plan-btn-apply-workdays') && planDraft) {
     planDraft.cities.forEach(c => (c.halls || []).forEach(h => {
       h.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'];
+      ensureHallDayTimes(h);
     }));
     renderPlanView();
     return;
   }
 
-  // Step 4: Time chips & presets
-  const removeTimeBtn = e.target.closest('[data-plan-remove-time]');
-  if (removeTimeBtn && planDraft) {
-    const [cIdx, hIdx, tIdx] = removeTimeBtn.dataset.planRemoveTime.split(',').map(Number);
-    planDraft.cities[cIdx]?.halls[hIdx]?.times?.splice(tIdx, 1);
-    renderPlanView();
-    return;
-  }
-  const presetTimesBtn = e.target.closest('[data-plan-preset-times]');
-  if (presetTimesBtn && planDraft) {
-    const [cIdx, hIdx, type] = presetTimesBtn.dataset.planPresetTimes.split(',');
+  // Step 4: Per-day time toggles, chips & presets
+  const toggleDayTimeBtn = e.target.closest('[data-plan-toggle-day-time]');
+  if (toggleDayTimeBtn && planDraft) {
+    const [cIdx, hIdx, dayName, timeVal] = toggleDayTimeBtn.dataset.planToggleDayTime.split(',');
     const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
-    if (hall) {
-      if (!hall.times) hall.times = [];
-      const addList = (type === '10-14-18') ? ['10:00', '14:00', '18:00'] : ['11:00', '15:00', '19:00'];
-      addList.forEach(t => { if (!hall.times.includes(t)) hall.times.push(t); });
+    if (hall && dayName && timeVal) {
+      ensureHallDayTimes(hall);
+      const list = hall.dayTimes[dayName] || [];
+      if (list.includes(timeVal)) {
+        hall.dayTimes[dayName] = list.filter(t => t !== timeVal);
+      } else {
+        hall.dayTimes[dayName] = sortTimesList([...list, timeVal]);
+      }
+      syncHallFlatTimes(hall);
       renderPlanView();
     }
     return;
   }
-  const addTimeBtn = e.target.closest('[data-plan-add-time]');
-  if (addTimeBtn && planDraft) {
-    const [cIdx, hIdx, type] = addTimeBtn.dataset.planAddTime.split(',').map(Number);
-    const inp = document.getElementById(`plan-add-time-input-${cIdx}-${hIdx}`);
+
+  const removeDayTimeBtn = e.target.closest('[data-plan-remove-day-time]');
+  if (removeDayTimeBtn && planDraft) {
+    const [cIdx, hIdx, dayName, tIdx] = removeDayTimeBtn.dataset.planRemoveDayTime.split(',');
+    const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
+    if (hall && dayName) {
+      ensureHallDayTimes(hall);
+      hall.dayTimes[dayName]?.splice(Number(tIdx), 1);
+      syncHallFlatTimes(hall);
+      renderPlanView();
+    }
+    return;
+  }
+
+  const dayPresetBtn = e.target.closest('[data-plan-day-preset]');
+  if (dayPresetBtn && planDraft) {
+    const [cIdx, hIdx, dayName, type] = dayPresetBtn.dataset.planDayPreset.split(',');
+    const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
+    if (hall && dayName) {
+      ensureHallDayTimes(hall);
+      hall.dayTimes[dayName] = (type === '10-14-18') ? ['10:00', '14:00', '18:00'] : ['11:00', '15:00', '19:00'];
+      syncHallFlatTimes(hall);
+      renderPlanView();
+    }
+    return;
+  }
+
+  const addDayTimeBtn = e.target.closest('[data-plan-add-day-time]');
+  if (addDayTimeBtn && planDraft) {
+    const [cIdx, hIdx, dayName] = addDayTimeBtn.dataset.planAddDayTime.split(',');
+    const inp = document.getElementById(`plan-add-day-time-${cIdx}-${hIdx}-${dayName}`);
     const val = (inp?.value || '').trim();
-    if (val) {
-      const hall = planDraft.cities[cIdx]?.halls[hIdx];
+    if (val && dayName) {
+      const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
       if (hall) {
-        if (!hall.times) hall.times = [];
-        if (!hall.times.includes(val)) hall.times.push(val);
+        ensureHallDayTimes(hall);
+        const list = hall.dayTimes[dayName] || [];
+        if (!list.includes(val)) {
+          hall.dayTimes[dayName] = sortTimesList([...list, val]);
+        }
+        syncHallFlatTimes(hall);
         renderPlanView();
       }
     }
     return;
   }
+
+  const hallAllTimesBtn = e.target.closest('[data-plan-hall-all-times]');
+  if (hallAllTimesBtn && planDraft) {
+    const [cIdx, hIdx, type] = hallAllTimesBtn.dataset.planHallAllTimes.split(',');
+    const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
+    if (hall) {
+      ensureHallDayTimes(hall);
+      const preset = (type === '10-14-18') ? ['10:00', '14:00', '18:00'] : ['11:00', '15:00', '19:00'];
+      hall.times = [...preset];
+      (hall.days || []).forEach(d => {
+        const dName = typeof d === 'string' ? d : d.day;
+        hall.dayTimes[dName] = [...preset];
+      });
+      syncHallFlatTimes(hall);
+      renderPlanView();
+    }
+    return;
+  }
+
   if (e.target.closest('#plan-btn-apply-standard-times') && planDraft) {
     planDraft.cities.forEach(c => (c.halls || []).forEach(h => {
+      ensureHallDayTimes(h);
       h.times = ['10:00', '14:00', '18:00'];
+      (h.days || []).forEach(d => {
+        const dName = typeof d === 'string' ? d : d.day;
+        h.dayTimes[dName] = ['10:00', '14:00', '18:00'];
+      });
+      syncHallFlatTimes(h);
     }));
     renderPlanView();
     return;
@@ -9645,6 +9898,7 @@ document.addEventListener('click', e => {
   // OPERATOR / SCRIPT INTERACTIVE SCHEDULE CLICKS
   const slotSelectBtn = e.target.closest('[data-plan-slot-select]');
   if (slotSelectBtn) {
+    e.preventDefault();
     const day = slotSelectBtn.dataset.day || '';
     const date = slotSelectBtn.dataset.date || '';
     const time = slotSelectBtn.dataset.time || '';
@@ -9668,24 +9922,26 @@ document.addEventListener('click', e => {
         }
       }
     }
-    renderCards();
+    refreshScheduleViewsWithoutScroll();
     toast(`✓ Время зафиксировано: ${day} в ${time}`);
     return;
   }
 
   const clearSlotBtn = e.target.closest('[data-plan-clear]');
   if (clearSlotBtn) {
+    e.preventDefault();
     selectedPlanSlot = null;
     try { localStorage.removeItem('bauer-selected-plan-slot'); } catch {}
-    renderCards();
+    refreshScheduleViewsWithoutScroll();
     toast('Выбор времени сброшен');
     return;
   }
 
   const hallTabBtn = e.target.closest('[data-plan-hall-idx]');
   if (hallTabBtn) {
+    e.preventDefault();
     cityScheduleActiveHall = Number(hallTabBtn.dataset.planHallIdx || 0);
-    renderCards();
+    refreshScheduleViewsWithoutScroll();
     return;
   }
 });
@@ -9699,8 +9955,10 @@ document.addEventListener('change', e => {
       if (!hall.days) hall.days = [];
       if (e.target.checked) {
         if (!hall.days.includes(dayName)) hall.days.push(dayName);
+        ensureHallDayTimes(hall);
       } else {
         hall.days = hall.days.filter(d => d !== dayName);
+        syncHallFlatTimes(hall);
       }
     }
     return;
@@ -9733,6 +9991,14 @@ document.addEventListener('input', e => {
     if (hall) {
       hall.hallName = e.target.value;
     }
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id && e.target.id.startsWith('plan-add-day-time-')) {
+    e.preventDefault();
+    const btn = e.target.parentElement?.querySelector('[data-plan-add-day-time]');
+    if (btn) btn.click();
   }
 });
 

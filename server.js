@@ -1512,7 +1512,7 @@ function createAppServer(options = {}) {
           const plan = {
             ...body,
             updatedAt: Date.now(),
-            updatedBy: auth.user.name || auth.user.username,
+            updatedBy: auth.user.displayName || auth.user.login || auth.user.name || auth.user.username,
             updatedByRole: auth.user.role
           };
           appData.presentationPlan = plan;
