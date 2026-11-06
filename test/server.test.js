@@ -1070,6 +1070,17 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     // Verify quick transitions click handler and scroll tracking
     assert.ok(html.includes('data-stage-index'), 'Stages must have data-stage-index');
     assert.ok(html.includes('scrollIntoView'), 'Must support smooth scroll transitions');
-    assert.ok(html.includes('Быстрый переход'), 'Must have quick navigation title');
+
+    // Verify dynamic objections block in left sidebar
+    assert.ok(html.includes('whole-sidebar-ob-section'), 'Must have objections section in whole sidebar');
+    assert.ok(html.includes('whole-ob-list'), 'Must have whole-ob-list');
+    assert.ok(html.includes('whole-ob-answer-box'), 'Must have whole-ob-answer-box for active objection responses');
+    assert.ok(html.includes('renderObjectionsForStage'), 'Must have function to update objections dynamically on stage change');
+
+    // Verify SMS constructor at the end of whole script
+    assert.ok(html.includes('whole-sms-card'), 'Must have whole-sms-card at the end of whole script');
+    assert.ok(html.includes('whole-sms-toggle-btn'), 'Must have toggle button to expand SMS builder downwards');
+    assert.ok(html.includes('whole-sms-body'), 'Must have expandable SMS body');
+    assert.ok(html.includes('w-sms-copy'), 'Must have copy button for SMS');
   });
 });
