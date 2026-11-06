@@ -10782,10 +10782,10 @@ document.addEventListener('click', e => {
     return;
   }
 
-  const weekNavBtn = e.target.closest('[data-plan-schedule-week-nav]');
-  if (weekNavBtn) {
+  const schedWeekNavBtn = e.target.closest('[data-plan-schedule-week-nav]');
+  if (schedWeekNavBtn) {
     e.preventDefault();
-    const delta = Number(weekNavBtn.dataset.planScheduleWeekNav || 0);
+    const delta = Number(schedWeekNavBtn.dataset.planScheduleWeekNav || 0);
     const curW = getScheduleViewingWeek();
     setScheduleViewingWeek(curW + delta);
     refreshScheduleViewsWithoutScroll();
