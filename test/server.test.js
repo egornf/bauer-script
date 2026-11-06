@@ -1214,6 +1214,14 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.ok(html.includes('savedScrolls'), 'renderCards must save and restore scroll positions of script-pane and stage-body');
     assert.ok(html.includes('fillPlanHtml'), 'Must replace {дата}, {время}, {день_недели}, {дата_время} dynamically');
     assert.ok(html.includes('mark.plan-fill'), 'Must format selected time variables with plan-fill badge');
+
+    // City and Hall moved into schedule block + week navigation + invitation constructor sync with edit freedom
+    assert.ok(html.includes('data-plan-schedule-city'), 'Must have City selector in schedule toolbar');
+    assert.ok(html.includes('data-plan-schedule-hall-select'), 'Must have Hall selector in schedule toolbar');
+    assert.ok(html.includes('data-plan-schedule-week-nav'), 'Must have week flipper buttons (prev/next) in schedule toolbar');
+    assert.ok(html.includes('data-plan-schedule-week-select'), 'Must have week dropdown in schedule toolbar');
+    assert.ok(html.includes('getScheduleViewingWeek'), 'Must support flipping and viewing any week in schedule');
+    assert.ok(html.includes('duplicateSlotToConstructors'), 'Must sync selected slot into invitation constructors');
   });
 });
 

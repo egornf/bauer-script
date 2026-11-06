@@ -2478,6 +2478,203 @@ let selectedPlanSlot = null;
 try { selectedPlanSlot = JSON.parse(localStorage.getItem('bauer-selected-plan-slot') || 'null'); } catch (e) { selectedPlanSlot = null; }
 let activePresentationPlan = null;
 let cityScheduleActiveHall = 0;
+let scheduleViewingWeek = null;
+
+function getScheduleViewingWeek() {
+  if (scheduleViewingWeek && scheduleViewingWeek >= 1 && scheduleViewingWeek <= 52) {
+    return scheduleViewingWeek;
+  }
+  try {
+    const sw = Number(localStorage.getItem('bauer-schedule-viewing-week'));
+    if (sw >= 1 && sw <= 52) {
+      scheduleViewingWeek = sw;
+      return sw;
+    }
+  } catch {}
+  return activePresentationPlan?.weekNumber || getCurrentBauerWeekNumber();
+}
+
+function setScheduleViewingWeek(wn) {
+  const num = Math.max(1, Math.min(52, Number(wn) || getCurrentBauerWeekNumber()));
+  scheduleViewingWeek = num;
+  try {
+    localStorage.setItem('bauer-schedule-viewing-week', String(num));
+  } catch {}
+}
+
+function getActivePlanForViewingWeek(weekNum) {
+  if (!activePresentationPlan) return null;
+  const wn = weekNum || getScheduleViewingWeek();
+  if (activePresentationPlan.weeklyPlans && activePresentationPlan.weeklyPlans[String(wn)]) {
+    const wp = activePresentationPlan.weeklyPlans[String(wn)];
+    return {
+      ...activePresentationPlan,
+      weekNumber: wn,
+      weekStart: wp.weekStart || getBauerWeekStartTuesday(wn, activePresentationPlan.calendarYear || BAUER_CALENDAR_YEAR),
+      cities: wp.cities || activePresentationPlan.cities
+    };
+  }
+  return {
+    ...activePresentationPlan,
+    weekNumber: wn,
+    weekStart: getBauerWeekStartTuesday(wn, activePresentationPlan.calendarYear || BAUER_CALENDAR_YEAR)
+  };
+}
+
+function getAllAvailableCities() {
+  const fromVenues = (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues))
+    ? smsSource.venues.filter(x => !x.unavailable).map(x => x.city?.trim()).filter(Boolean)
+    : [];
+  const fromPlan = (activePresentationPlan && Array.isArray(activePresentationPlan.cities))
+    ? activePresentationPlan.cities.map(c => c.cityName?.trim()).filter(Boolean)
+    : [];
+  return [...new Set([...fromPlan, ...fromVenues])].sort((a,b) => a.localeCompare(b, 'ru'));
+}
+
+function renderScheduleWeekOptions(selectedWeek) {
+  const currentWeek = getCurrentBauerWeekNumber();
+  const months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+  const opts = [];
+  for (let w = 1; w <= 52; w++) {
+    const startTue = getBauerWeekStartTuesday(w, BAUER_CALENDAR_YEAR);
+    const parts = startTue.split('-').map(Number);
+    const endMon = new Date(parts[0], parts[1] - 1, parts[2] + 6);
+    const startStr = `${parts[2]} ${months[parts[1] - 1]}`;
+    const endStr = `${endMon.getDate()} ${months[endMon.getMonth()]}`;
+    const isCurr = w === currentWeek;
+    opts.push(`<option value="${w}" ${w === selectedWeek ? 'selected' : ''}>${w}-я нед. (${startStr} – ${endStr})${isCurr ? ' ★ ТЕКУЩАЯ' : ''}</option>`);
+  }
+  return opts.join('');
+}
+
+function findVenueForCityAndHall(cityName, hallName) {
+  if (typeof smsSource === 'undefined' || !Array.isArray(smsSource.venues)) return null;
+  const cn = String(cityName || '').trim().toLowerCase();
+  const hn = String(hallName || '').trim().toLowerCase();
+  if (!cn) return null;
+  const cityVenues = smsSource.venues.filter(v => String(v.city || '').trim().toLowerCase() === cn && !v.unavailable);
+  if (!cityVenues.length) return null;
+  if (!hn) return cityVenues[0];
+  const exact = cityVenues.find(v => String(v.hall || '').trim().toLowerCase() === hn);
+  if (exact) return exact;
+  const substr = cityVenues.find(v => String(v.hall || '').trim().toLowerCase().includes(hn) || hn.includes(String(v.hall || '').trim().toLowerCase()));
+  if (substr) return substr;
+  return cityVenues[0];
+}
+
+function syncActiveScheduleHallToVenue(hIdx) {
+  const currentCity = currentSelectedCityName();
+  const plan = getActivePlanForViewingWeek();
+  const cityPlan = getCityPlanForCity(currentCity, plan);
+  if (!cityPlan || !cityPlan.halls || !cityPlan.halls[hIdx]) return;
+  const hallName = cityPlan.halls[hIdx].hallName || '';
+  const venue = findVenueForCityAndHall(currentCity, hallName);
+  try {
+    localStorage.setItem('bauer-venue', JSON.stringify({ city: currentCity, hall: venue ? venue.id : '' }));
+  } catch {}
+  const vHall = document.getElementById('venue-hall');
+  if (vHall && venue) vHall.value = venue.id;
+}
+
+function duplicateSlotToConstructors(slot) {
+  if (!slot) return;
+  const { day, date, time, city, hall } = slot;
+  const venue = findVenueForCityAndHall(city, hall);
+
+  // 1. Сохраняем выбранную площадку в bauer-venue и синхронизируем шапку
+  try {
+    localStorage.setItem('bauer-venue', JSON.stringify({ city: city, hall: venue ? venue.id : '' }));
+  } catch {}
+  const vCity = document.getElementById('venue-city');
+  const vHall = document.getElementById('venue-hall');
+  if (vCity && vCity.value !== city) vCity.value = city;
+  if (vHall && venue && vHall.value !== venue.id) vHall.value = venue.id;
+
+  // 2. Дублируем в «Помощник СМС»
+  if (typeof smsValues !== 'undefined') {
+    if (city) smsValues.city = city;
+    if (date) smsValues.date = date;
+    if (time) smsValues.time = time;
+    if (venue) {
+      smsValues.hall = venue.id;
+      smsValues.route = venue.route || smsValues.route || '';
+    }
+    const smsView = document.getElementById('sms-view');
+    if (smsView) {
+      const sCity = smsView.querySelector('#sms-city');
+      const sHall = smsView.querySelector('#sms-hall');
+      const sDate = smsView.querySelector('#sms-date');
+      const sTime = smsView.querySelector('#sms-time');
+      if (sCity && city) sCity.value = city;
+      if (sHall && venue) {
+        if (typeof smsHallOptions === 'function') {
+          sHall.innerHTML = smsHallOptions();
+        }
+        sHall.value = venue.id;
+      }
+      if (sDate && date) sDate.value = date;
+      if (sTime && time) sTime.value = time;
+      if (typeof updateSmsPreview === 'function') updateSmsPreview();
+      if (typeof updateSmsStatus === 'function') updateSmsStatus();
+    }
+  }
+
+  // 3. Дублируем в конструктор SMS внизу «Весь скрипт»
+  if (typeof wSmsValues !== 'undefined') {
+    if (city) wSmsValues.city = city;
+    if (date) wSmsValues.date = date;
+    if (time) wSmsValues.time = time;
+    if (venue) {
+      wSmsValues.hall = venue.id;
+      wSmsValues.route = venue.route || wSmsValues.route || '';
+    }
+  }
+  const wv = document.getElementById('whole-view');
+  if (wv) {
+    const wCity = wv.querySelector('#w-sms-city');
+    const wHall = wv.querySelector('#w-sms-hall');
+    const wDate = wv.querySelector('#w-sms-date');
+    const wTime = wv.querySelector('#w-sms-time');
+    if (wCity && city) wCity.value = city;
+    if (wHall && venue) {
+      const venues = (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues))
+        ? smsSource.venues.filter(v => v.city === city && !v.unavailable)
+        : [];
+      wHall.innerHTML = '<option value="">Выберите площадку</option>' +
+        venues.map(v => `<option value="${escapeHTML(v.id)}" ${v.id === venue.id ? 'selected' : ''}>${escapeHTML(v.hall)}</option>`).join('');
+      wHall.disabled = !venues.length;
+      wHall.value = venue.id;
+    }
+    if (wDate && date) wDate.value = date;
+    if (wTime && time) wTime.value = time;
+    const placeInfo = wv.querySelector('#w-sms-place-info');
+    if (placeInfo && venue) {
+      placeInfo.hidden = false;
+      placeInfo.innerHTML = `<strong>📍 ${escapeHTML(venue.address)}</strong>${venue.route ? `<p style="margin:4px 0 0;font-size:12px;color:var(--muted)">${escapeHTML(venue.route)}</p>` : ''}`;
+    }
+    const smsText = wv.querySelector('#w-sms-text');
+    const smsLen = wv.querySelector('#w-sms-len');
+    const smsVal = wv.querySelector('#w-sms-val');
+    const smsCopy = wv.querySelector('#w-sms-copy');
+    if (smsText && typeof SmsModel !== 'undefined' && typeof smsSource !== 'undefined') {
+      const gen = SmsModel.buildSms(wSmsValues, smsSource);
+      smsText.value = gen;
+      if (smsLen) smsLen.textContent = gen.length + ' зн.';
+      if (smsVal && smsCopy) {
+        const missing = SmsModel.smsMissing(wSmsValues, smsSource);
+        if (missing.length) {
+          smsVal.textContent = 'Осталось заполнить: ' + missing.join(', ') + '.';
+          smsVal.classList.remove('is-ready');
+          smsCopy.disabled = true;
+        } else {
+          smsVal.textContent = '✓ Всё готово. Проверьте текст перед отправкой.';
+          smsVal.classList.add('is-ready');
+          smsCopy.disabled = !gen.trim();
+        }
+      }
+    }
+  }
+}
 
 function getCityPlanForCity(cityName, plan = activePresentationPlan) {
   if (!cityName || !plan || !Array.isArray(plan.cities)) return null;
@@ -2501,10 +2698,9 @@ function getValidSelectedSlotForCurrentCity() {
     if (selectedPlanSlot.city && selectedPlanSlot.city.trim().toLowerCase() !== currentCity.toLowerCase()) {
       return null;
     }
-    // Пересчитываем актуальную дату по текущему календарю недели плана, чтобы не оставались старые числа
-    const weekRef = activePresentationPlan?.weekNumber
-      ? getBauerWeekStartTuesday(activePresentationPlan.weekNumber, activePresentationPlan.calendarYear || BAUER_CALENDAR_YEAR)
-      : (activePresentationPlan?.weekStart || getBauerWeekStartTuesday(getCurrentBauerWeekNumber()));
+    // Пересчитываем актуальную дату по текущему календарю недели плана слота, чтобы не оставались старые числа
+    const slotWeek = selectedPlanSlot.weekNumber || activePresentationPlan?.weekNumber || getCurrentBauerWeekNumber();
+    const weekRef = getBauerWeekStartTuesday(slotWeek, activePresentationPlan?.calendarYear || BAUER_CALENDAR_YEAR);
     const freshDate = selectedPlanSlot.day ? getCalculatedDateForDay(weekRef, selectedPlanSlot.day) : selectedPlanSlot.date;
     return {
       ...selectedPlanSlot,
@@ -2622,8 +2818,10 @@ function getHallTimesForDay(hall, dayName) {
 }
 
 function presentationScheduleMarkup(stage, customStyle = '') {
-  const plan = activePresentationPlan;
+  const viewingWeek = getScheduleViewingWeek();
+  const plan = getActivePlanForViewingWeek(viewingWeek);
   const currentCity = currentSelectedCityName();
+  const availableCities = getAllAvailableCities();
   const boxStyleAttr = customStyle ? ` style="${customStyle}"` : '';
 
   const cityPlan = plan?.cities?.find(c => c.cityName?.trim().toLowerCase() === currentCity?.trim().toLowerCase());
@@ -2641,109 +2839,118 @@ function presentationScheduleMarkup(stage, customStyle = '') {
     `;
   }
 
-  const weekNum = plan?.weekNumber || (plan?.weekStart ? getBauerWeekNumberFromDate(plan.weekStart) : getCurrentBauerWeekNumber());
-  const weekStartTuesday = plan?.weekNumber
-    ? getBauerWeekStartTuesday(plan.weekNumber, plan.calendarYear || BAUER_CALENDAR_YEAR)
-    : (plan?.weekStart || getBauerWeekStartTuesday(weekNum, BAUER_CALENDAR_YEAR));
+  const weekNum = viewingWeek;
+  const weekStartTuesday = getBauerWeekStartTuesday(weekNum, plan?.calendarYear || BAUER_CALENDAR_YEAR);
 
-  if (!plan || !Array.isArray(plan.cities) || !plan.cities.length) {
-    return `
-      <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
-        <div class="psb-header">
-          <div class="psb-title">
-            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
-            <span>График презентаций на неделю (${weekNum}-я нед. ${BAUER_CALENDAR_YEAR})</span>
+  const activeHallIdx = cityPlan?.halls?.length ? Math.min(cityScheduleActiveHall || 0, cityPlan.halls.length - 1) : 0;
+  const activeHall = cityPlan?.halls?.[activeHallIdx] || null;
+
+  // Тулбар управления графиком: выбор города, выбор зала и перелистывание недель прямо в карточке
+  const toolbarHtml = `
+    <div class="psb-toolbar">
+      <div class="psb-toolbar-left">
+        <div class="psb-tool-field">
+          <label class="psb-tool-label">📍 Город:</label>
+          <select class="psb-select psb-city-select" data-plan-schedule-city aria-label="Выбор города для графика презентаций">
+            <option value="">Выберите город…</option>
+            ${availableCities.map(c => `
+              <option value="${escapeHTML(c)}" ${c.trim().toLowerCase() === currentCity.trim().toLowerCase() ? 'selected' : ''}>
+                ${escapeHTML(c)}${getCityPlanForCity(c, plan) ? '' : ' (нет плана)'}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+
+        ${cityPlan?.halls?.length ? `
+          <div class="psb-tool-field">
+            <label class="psb-tool-label">🏛 Зал:</label>
+            <select class="psb-select psb-hall-select" data-plan-schedule-hall-select aria-label="Выбор зала">
+              ${cityPlan.halls.map((h, hIdx) => `
+                <option value="${hIdx}" ${hIdx === activeHallIdx ? 'selected' : ''}>
+                  Зал ${hIdx + 1}: ${escapeHTML(h.hallName || 'Площадка')}
+                </option>
+              `).join('')}
+            </select>
           </div>
-          ${badgeHtml}
-        </div>
-        <div class="psb-body">
-          <p class="psb-hint" style="margin:0">
-            📅 Руководитель ещё не заполнил план презентаций на эту неделю. Для бронирования выберите город и зал вверху, либо откройте вкладку <strong>«План презентаций»</strong> в панели управления.
-          </p>
-        </div>
-      </div>
-    `;
-  }
+        ` : ''}
 
-  if (!cityPlan || !cityPlan.halls || !cityPlan.halls.length) {
-    return `
-      <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
-        <div class="psb-header">
-          <div class="psb-title">
-            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
-            <span>График презентаций · ${escapeHTML(currentCity || 'Город не выбран')} (${weekNum}-я нед. ${BAUER_CALENDAR_YEAR})</span>
+        <div class="psb-tool-field psb-week-nav-field">
+          <label class="psb-tool-label">📅 Неделя:</label>
+          <div class="psb-week-nav-wrap">
+            <button type="button" class="psb-nav-arrow" data-plan-schedule-week-nav="-1" title="Предыдущая неделя" ${weekNum <= 1 ? 'disabled' : ''}>◀</button>
+            <select class="psb-select psb-week-select" data-plan-schedule-week-select aria-label="Выбор недели презентаций">
+              ${renderScheduleWeekOptions(weekNum)}
+            </select>
+            <button type="button" class="psb-nav-arrow" data-plan-schedule-week-nav="1" title="Следующая неделя" ${weekNum >= 52 ? 'disabled' : ''}>▶</button>
           </div>
-        </div>
-        <div class="psb-body">
-          <p class="psb-hint" style="margin:0">
-            Для города <strong>${escapeHTML(currentCity || '—')}</strong> на этой неделе презентации не запланированы (план не построен руководителем). Выберите другой город вверху либо настройте план в «Плане презентаций».
-          </p>
+          ${weekNum !== getCurrentBauerWeekNumber() ? `
+            <button type="button" class="psb-btn-current-week" data-plan-schedule-curr-week title="Вернуться к текущей неделе">Текущая (${getCurrentBauerWeekNumber()}-я)</button>
+          ` : ''}
         </div>
       </div>
+
+      <div class="psb-toolbar-right">
+        ${badgeHtml || '<span class="psb-hint">Нажмите на удобное время гостя для фиксации</span>'}
+      </div>
+    </div>
+  `;
+
+  // Формируем основное тело графика
+  let bodyHtml = '';
+  if (!currentCity) {
+    bodyHtml = `
+      <p class="psb-hint" style="margin:6px 0;padding:14px 16px;background:var(--surface-alt);border-radius:12px">
+        📍 <strong>Выберите город</strong> в селекторе выше, чтобы открыть график презентаций и свободные времена.
+      </p>
     `;
-  }
-
-  const activeHallIdx = Math.min(cityScheduleActiveHall || 0, cityPlan.halls.length - 1);
-  const activeHall = cityPlan.halls[activeHallIdx] || cityPlan.halls[0];
-
-  let hallsTabHtml = '';
-  if (cityPlan.halls.length > 1) {
-    hallsTabHtml = `
-      <div class="psb-halls-tabs">
-        ${cityPlan.halls.map((h, hIdx) => `
-          <button type="button" class="psb-hall-tab ${hIdx === activeHallIdx ? 'active' : ''}" data-plan-hall-idx="${hIdx}">
-            Зал ${hIdx + 1}: ${escapeHTML(h.hallName || 'Площадка')}
-          </button>
-        `).join('')}
-      </div>
+  } else if (!cityPlan || !cityPlan.halls || !cityPlan.halls.length) {
+    bodyHtml = `
+      <p class="psb-hint" style="margin:6px 0;padding:14px 16px;background:var(--surface-alt);border-radius:12px">
+        Для города <strong>${escapeHTML(currentCity)}</strong> на <strong>${weekNum}-й неделе ${BAUER_CALENDAR_YEAR}</strong> график презентаций ещё не построен руководителем. Выберите другой город в меню выше либо настройте расписание во вкладке <strong>«План презентаций»</strong>.
+      </p>
     `;
-  }
-
-  const days = activeHall.days || [];
-  const hasAnyTimes = days.some(d => getHallTimesForDay(activeHall, typeof d === 'string' ? d : d.day).length > 0);
-
-  if (!days.length || !hasAnyTimes) {
-    return `
-      <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
-        <div class="psb-header">
-          <div class="psb-title">
-            <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
-            <span>График презентаций · ${escapeHTML(currentCity)} · ${escapeHTML(activeHall.hallName || '')}</span>
-          </div>
+  } else {
+    // Вкладки залов (если в городе больше 1 зала)
+    let hallsTabHtml = '';
+    if (cityPlan.halls.length > 1) {
+      hallsTabHtml = `
+        <div class="psb-halls-tabs">
+          ${cityPlan.halls.map((h, hIdx) => `
+            <button type="button" class="psb-hall-tab ${hIdx === activeHallIdx ? 'active' : ''}" data-plan-hall-idx="${hIdx}">
+              Зал ${hIdx + 1}: ${escapeHTML(h.hallName || 'Площадка')}
+            </button>
+          `).join('')}
         </div>
-        <div class="psb-body">
-          ${hallsTabHtml}
-          <p class="psb-hint" style="margin:0">Для этого зала пока не заданы дни или времена в плане руководителя.</p>
-        </div>
-      </div>
-    `;
-  }
+      `;
+    }
 
-  const sortedDays = [...days].sort((a,b) => {
-    const aName = typeof a === 'string' ? a : a.day;
-    const bName = typeof b === 'string' ? b : b.day;
-    const ia = BAUER_WEEK_DAYS.indexOf(aName?.slice(0, 2));
-    const ib = BAUER_WEEK_DAYS.indexOf(bName?.slice(0, 2));
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-  });
+    const days = activeHall?.days || [];
+    const hasAnyTimes = days.some(d => getHallTimesForDay(activeHall, typeof d === 'string' ? d : d.day).length > 0);
 
-  return `
-    <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
-      <div class="psb-header">
-        <div class="psb-title">
-          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
-          <span>График презентаций · ${escapeHTML(currentCity)}${activeHall.hallName ? ' (' + escapeHTML(activeHall.hallName) + ')' : ''} · ${weekNum}-я нед. ${BAUER_CALENDAR_YEAR}</span>
-        </div>
-        ${badgeHtml || '<span class="psb-hint">Нажмите на удобное время гостя, чтобы зафиксировать его в скрипте и SMS</span>'}
-      </div>
-      <div class="psb-body">
+    if (!days.length || !hasAnyTimes) {
+      bodyHtml = `
+        ${hallsTabHtml}
+        <p class="psb-hint" style="margin:6px 0;padding:14px 16px;background:var(--surface-alt);border-radius:12px">
+          Для зала <strong>${escapeHTML(activeHall?.hallName || '—')}</strong> пока не заданы дни или времена в плане руководителя.
+        </p>
+      `;
+    } else {
+      const sortedDays = [...days].sort((a,b) => {
+        const aName = typeof a === 'string' ? a : a.day;
+        const bName = typeof b === 'string' ? b : b.day;
+        const ia = BAUER_WEEK_DAYS.indexOf(aName?.slice(0, 2));
+        const ib = BAUER_WEEK_DAYS.indexOf(bName?.slice(0, 2));
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+
+      bodyHtml = `
         ${hallsTabHtml}
         <div class="psb-grid">
           ${sortedDays.map(dObj => {
             const dayName = typeof dObj === 'string' ? dObj : dObj.day;
-            const dateStr = typeof dObj === 'object' && dObj.date ? dObj.date : getCalculatedDateForDay(weekStartTuesday, dayName);
+            const dateStr = getCalculatedDateForDay(weekStartTuesday, dayName);
             const dayTimes = getHallTimesForDay(activeHall, dayName);
-            const isFullSelectedDay = validSlot?.day === dayName;
+            const isFullSelectedDay = validSlot?.day === dayName && (!validSlot?.date || validSlot.date === dateStr);
             return `
               <div class="psb-col">
                 <div class="psb-day-title">
@@ -2761,7 +2968,8 @@ function presentationScheduleMarkup(stage, customStyle = '') {
                         data-date="${escapeHTML(dateStr || '')}"
                         data-time="${escapeHTML(t)}"
                         data-city="${escapeHTML(currentCity)}"
-                        data-hall="${escapeHTML(activeHall.hallName || '')}">
+                        data-hall="${escapeHTML(activeHall.hallName || '')}"
+                        data-week="${weekNum}">
                         ${isSelected ? '✓ ' : ''}${escapeHTML(t)}
                       </button>
                     `;
@@ -2771,6 +2979,21 @@ function presentationScheduleMarkup(stage, customStyle = '') {
             `;
           }).join('')}
         </div>
+      `;
+    }
+  }
+
+  return `
+    <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
+      <div class="psb-header">
+        <div class="psb-title">
+          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
+          <span>График презентаций · ${escapeHTML(currentCity || 'Город не выбран')}${activeHall?.hallName ? ' (' + escapeHTML(activeHall.hallName) + ')' : ''} · ${weekNum}-я нед. ${BAUER_CALENDAR_YEAR}</span>
+        </div>
+      </div>
+      ${toolbarHtml}
+      <div class="psb-body">
+        ${bodyHtml}
       </div>
     </div>
   `;
@@ -5323,16 +5546,31 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .plan-save-btn:hover{opacity:0.92;transform:translateY(-1px)}
 /* Interactive Schedule Table for Call Operators (Only on stage «Выбор времени») */
 .presentation-schedule-box{margin-top:22px;margin-bottom:20px;border:2px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 35%, var(--line));border-radius:18px;background:var(--custom-card-bg, var(--surface, #ffffff));box-shadow:0 6px 20px rgba(0,0,0,0.06);overflow:hidden;transition:all .2s ease}
-.psb-header{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;background:color-mix(in srgb, var(--custom-accent, var(--teal)) 8%, var(--surface-alt, #f8fafc));border-bottom:1.5px solid var(--line);gap:12px;flex-wrap:wrap}
+.psb-header{display:flex;justify-content:space-between;align-items:center;padding:14px 22px;background:color-mix(in srgb, var(--custom-accent, var(--teal)) 8%, var(--surface-alt, #f8fafc));border-bottom:1.5px solid var(--line);gap:12px;flex-wrap:wrap}
 .psb-title{font-size:14px;font-weight:850;color:var(--ink);display:flex;align-items:center;gap:8px}
+.psb-toolbar{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;background:color-mix(in srgb, var(--custom-accent, var(--teal)) 4%, var(--surface-alt, #f8fafc));border-bottom:1.5px solid var(--line);gap:14px;flex-wrap:wrap}
+.psb-toolbar-left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.psb-toolbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto}
+.psb-tool-field{display:inline-flex;align-items:center;gap:6px}
+.psb-tool-label{font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
+.psb-select{height:36px;padding:0 28px 0 10px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface, #fff);font-size:12.5px;font-weight:750;color:var(--ink);cursor:pointer;outline:none;transition:border-color .15s ease}
+.psb-select:focus,.psb-select:hover{border-color:var(--teal)}
+.psb-week-nav-wrap{display:inline-flex;align-items:center;gap:2px;background:var(--surface, #fff);border:1.5px solid var(--line);border-radius:10px;padding:2px 4px}
+.psb-nav-arrow{width:28px;height:28px;display:inline-grid;place-items:center;border:none;background:transparent;border-radius:6px;cursor:pointer;font-size:11px;font-weight:800;color:var(--ink);transition:all .15s ease}
+.psb-nav-arrow:hover:not(:disabled){background:color-mix(in srgb, var(--teal) 15%, var(--surface));color:var(--teal)}
+.psb-nav-arrow:disabled{opacity:0.3;cursor:not-allowed}
+.psb-week-nav-wrap .psb-select{border:none;height:28px;padding:0 22px 0 6px;font-size:12px}
+.psb-btn-current-week{padding:5px 12px;border-radius:8px;font-size:11.5px;font-weight:750;border:1px solid color-mix(in srgb, var(--teal) 35%, var(--line));background:color-mix(in srgb, var(--teal) 10%, var(--surface));color:var(--teal);cursor:pointer;transition:all .15s ease}
+.psb-btn-current-week:hover{background:var(--teal);color:#fff}
 .psb-selected-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:color-mix(in srgb, var(--teal) 15%, #daf5e4);color:var(--teal);border:1.5px solid color-mix(in srgb, var(--teal) 40%, transparent);font-size:12.5px;font-weight:750}
 .psb-clear-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;padding:0 4px;font-size:13px;font-weight:800}
 .psb-clear-btn:hover{color:var(--purple)}
 .psb-hint{font-size:12px;color:var(--muted);font-weight:600}
 .psb-body{padding:18px 22px}
-.psb-halls-tabs{display:flex;gap:8px;margin-bottom:14px}
-.psb-hall-tab{padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-size:12px;font-weight:700;cursor:pointer}
-.psb-hall-tab.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.psb-halls-tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.psb-hall-tab{padding:8px 16px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface, #fff);font-size:12.5px;font-weight:750;color:var(--ink);cursor:pointer;transition:all .15s ease}
+.psb-hall-tab:hover{border-color:var(--teal);color:var(--teal)}
+.psb-hall-tab.active{background:var(--teal) !important;color:#fff !important;border-color:var(--teal) !important;box-shadow:0 2px 8px color-mix(in srgb, var(--teal) 25%, transparent)}
 .psb-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:10px}
 .psb-col{background:var(--surface-alt, #f8fafc);border:1px solid var(--line);border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;text-align:center}
 .psb-day-title{font-size:12px;font-weight:800;color:var(--ink);margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:6px;width:100%}
@@ -5341,6 +5579,12 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .psb-time-btn{width:100%;padding:8px 6px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface, #ffffff);font-size:13px;font-weight:750;color:var(--ink);cursor:pointer;transition:all .15s ease}
 .psb-time-btn:hover{border-color:var(--teal);background:color-mix(in srgb, var(--teal) 8%, var(--surface));color:var(--teal);transform:translateY(-1px)}
 .psb-time-btn.active{background:var(--teal) !important;color:#fff !important;border-color:var(--teal) !important;box-shadow:0 3px 10px color-mix(in srgb, var(--teal) 40%, transparent) !important}
+/* Dark & Neon Theme Overrides for Schedule Component */
+:root[data-theme="dark"] .psb-select, :root[data-page-dark="1"] .psb-select, :root[data-card-style="neon"] .psb-select{background:rgba(12,20,32,0.85);color:#fff}
+:root[data-theme="dark"] .psb-week-nav-wrap, :root[data-page-dark="1"] .psb-week-nav-wrap, :root[data-card-style="neon"] .psb-week-nav-wrap{background:rgba(12,20,32,0.85)}
+:root[data-theme="dark"] .psb-nav-arrow, :root[data-page-dark="1"] .psb-nav-arrow, :root[data-card-style="neon"] .psb-nav-arrow{color:#fff}
+:root[data-theme="dark"] .psb-hall-tab, :root[data-page-dark="1"] .psb-hall-tab, :root[data-card-style="neon"] .psb-hall-tab{background:rgba(12,20,32,0.85);color:#fff}
+:root[data-theme="dark"] .psb-time-btn, :root[data-page-dark="1"] .psb-time-btn, :root[data-card-style="neon"] .psb-time-btn{background:rgba(12,20,32,0.85);color:#fff}
 /* Highlight Marks for {дата} and {время} in script text */
 mark.plan-fill{background:color-mix(in srgb, var(--teal, #008578) 16%, #daf5e4) !important;color:var(--teal, #008578) !important;font-weight:750 !important;padding:2px 8px !important;border-radius:6px !important;border:1.5px solid color-mix(in srgb, var(--teal, #008578) 40%, transparent) !important;box-shadow:0 1px 4px rgba(0,0,0,0.06) !important}
 mark.plan-empty{background:#fff3e0 !important;color:#b45309 !important;font-style:italic !important;font-weight:650 !important;padding:2px 8px !important;border-radius:6px !important;border:1.5px dashed #f59e0b !important}
@@ -10017,13 +10261,6 @@ function refreshScheduleViewsWithoutScroll() {
       const headHtml = headRow ? headRow.outerHTML : '';
       art.innerHTML = `${headHtml}${renderStageLines(stg, true, data.gifts)}${operatorTipMarkup(stg)}`;
     });
-    const validSlot = getValidSelectedSlotForCurrentCity();
-    if (validSlot) {
-      const wDate = wv.querySelector('#w-sms-date');
-      const wTime = wv.querySelector('#w-sms-time');
-      if (wDate && validSlot.date) { wDate.value = validSlot.date; wDate.dispatchEvent(new Event('input', { bubbles: true })); }
-      if (wTime && validSlot.time) { wTime.value = validSlot.time; wTime.dispatchEvent(new Event('input', { bubbles: true })); }
-    }
     if (wc) wc.scrollTop = prevScroll;
   }
   const lv = document.getElementById('layouts-view');
@@ -10441,24 +10678,14 @@ document.addEventListener('click', e => {
     const time = slotSelectBtn.dataset.time || '';
     const city = slotSelectBtn.dataset.city || '';
     const hall = slotSelectBtn.dataset.hall || '';
-    selectedPlanSlot = { day, date, time, city, hall };
+    const weekNumber = Number(slotSelectBtn.dataset.week || getScheduleViewingWeek());
+    selectedPlanSlot = { day, date, time, city, hall, weekNumber };
     try {
       localStorage.setItem('bauer-selected-plan-slot', JSON.stringify(selectedPlanSlot));
     } catch {}
 
-    // Auto-update SMS constructor values
-    if (typeof smsValues !== 'undefined') {
-      if (date) smsValues.date = date;
-      if (time) smsValues.time = time;
-      if (city) smsValues.city = city;
-      if (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues)) {
-        const mv = smsSource.venues.find(v => v.city === city && (v.hall === hall || v.hall.includes(hall)));
-        if (mv) {
-          smsValues.hall = mv.id;
-          smsValues.route = mv.route || smsValues.route;
-        }
-      }
-    }
+    // Дублируем выбранный слот в оба конструктора приглашений (Помощник СМС и Весь скрипт)
+    duplicateSlotToConstructors(selectedPlanSlot);
     refreshScheduleViewsWithoutScroll();
     toast(`✓ Время зафиксировано: ${day} (${formatRuShortDate(date)}) в ${time}`);
     return;
@@ -10474,17 +10701,73 @@ document.addEventListener('click', e => {
     return;
   }
 
+  const weekNavBtn = e.target.closest('[data-plan-schedule-week-nav]');
+  if (weekNavBtn) {
+    e.preventDefault();
+    const delta = Number(weekNavBtn.dataset.planScheduleWeekNav || 0);
+    const curW = getScheduleViewingWeek();
+    setScheduleViewingWeek(curW + delta);
+    refreshScheduleViewsWithoutScroll();
+    return;
+  }
+
+  const currWeekBtn = e.target.closest('[data-plan-schedule-curr-week]');
+  if (currWeekBtn) {
+    e.preventDefault();
+    setScheduleViewingWeek(getCurrentBauerWeekNumber());
+    refreshScheduleViewsWithoutScroll();
+    return;
+  }
+
   const hallTabBtn = e.target.closest('[data-plan-hall-idx]');
   if (hallTabBtn) {
     e.preventDefault();
     cityScheduleActiveHall = Number(hallTabBtn.dataset.planHallIdx || 0);
+    syncActiveScheduleHallToVenue(cityScheduleActiveHall);
     refreshScheduleViewsWithoutScroll();
     return;
   }
 });
 
-// Input and Change Listeners for Plan Draft
+// Input and Change Listeners for Plan Draft & Schedule Toolbar
 document.addEventListener('change', e => {
+  if (e.target.matches('[data-plan-schedule-city]')) {
+    const newCity = e.target.value.trim();
+    const vCity = document.getElementById('venue-city');
+    if (vCity) {
+      vCity.value = newCity;
+      vCity.dispatchEvent(new Event('change', { bubbles: true }));
+    } else {
+      try {
+        const sv = JSON.parse(localStorage.getItem('bauer-venue') || '{}');
+        sv.city = newCity;
+        sv.hall = '';
+        localStorage.setItem('bauer-venue', JSON.stringify(sv));
+      } catch {}
+    }
+    cityScheduleActiveHall = 0;
+    if (selectedPlanSlot && selectedPlanSlot.city && selectedPlanSlot.city.trim().toLowerCase() !== newCity.toLowerCase()) {
+      selectedPlanSlot = null;
+      try { localStorage.removeItem('bauer-selected-plan-slot'); } catch {}
+    }
+    refreshScheduleViewsWithoutScroll();
+    return;
+  }
+
+  if (e.target.matches('[data-plan-schedule-hall-select]')) {
+    const hIdx = Number(e.target.value || 0);
+    cityScheduleActiveHall = hIdx;
+    syncActiveScheduleHallToVenue(hIdx);
+    refreshScheduleViewsWithoutScroll();
+    return;
+  }
+
+  if (e.target.matches('[data-plan-schedule-week-select]')) {
+    const newW = Number(e.target.value);
+    setScheduleViewingWeek(newW);
+    refreshScheduleViewsWithoutScroll();
+    return;
+  }
   if (e.target.matches('[data-plan-day-toggle]') && planDraft) {
     const [cIdx, hIdx, dayName] = e.target.dataset.planDayToggle.split(',');
     const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
