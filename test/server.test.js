@@ -1189,14 +1189,18 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
       assert.ok(html.includes(c), `Must include always working city: ${c}`);
     }
 
-    // 4-step wizard + per-day times
+    // Stepper wizard + per-day times + built-in 2026 calendar
     assert.ok(html.includes('plan-stepper'), 'Must have stepper for wizard');
     assert.ok(html.includes('planWizardStep'), 'Must track active wizard step');
-    assert.ok(html.includes('Второй зал в этом городе'), 'Step 2 must allow up to 2 halls with checkbox');
+    assert.ok(html.includes('data-plan-add-hall'), 'Must allow unlimited halls with + Добавить зал');
     assert.ok(html.includes('data-plan-day-toggle'), 'Step 3 must allow day selection');
-    assert.ok(html.includes('data-plan-toggle-day-time'), 'Step 4 must allow toggling time slots per day');
-    assert.ok(html.includes('data-plan-add-day-time'), 'Step 4 must allow custom time slots per day');
+    assert.ok(html.includes('data-plan-toggle-day-time'), 'Must allow toggling time slots per day');
+    assert.ok(html.includes('data-plan-add-day-time'), 'Must allow custom time slots per day');
     assert.ok(html.includes('getHallTimesForDay'), 'Must support different presentation times on different days');
+    assert.ok(html.includes('BAUER_WEEK_DAYS'), 'Must support Вт, Ср, Чт, Пт, Сб, Вс, Пн cycle');
+    assert.ok(html.includes('getBauerWeekDaysCalendar'), 'Must have built-in 2026 week calendar');
+    assert.ok(html.includes('api_local_vault'), 'Must have local vault fallback');
+    assert.ok(html.includes('pathname===\'/api/presentation-plan\''), 'Local vault must handle presentation-plan to avoid route not found');
 
     // Movable schedule block in Layout Editor (Макеты)
     assert.ok(html.includes("schedule:'📅 График времени'"), 'Layout editor KINDS must include schedule');

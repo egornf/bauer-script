@@ -2390,14 +2390,142 @@ function lineGiftId(kind){return kind==='gift-plus-one'?'thermos':kind==='gift-p
 function unplacedGifts(stage,gifts){return [];}
 function inlineGiftPhoto(gift,readonly){const photo=cleanPhoto(gift?.photo);return `<div class="script-gift-photo">${photo?`<img src="${photo}" alt="${escapeHTML(gift?.title||'Подарок')}" ${readonly?'':`data-view-gift="${escapeHTML(gift.id)}" tabindex="0" role="button" aria-label="Увеличить фото: ${escapeHTML(gift.title)}"`}>`:'<div class="script-gift-photo-empty"><span aria-hidden="true">▧</span><strong>Фото подарка</strong></div>'}${!readonly&&!photo&&gift?`<button data-upload-gift="${escapeHTML(gift.id)}">+ Добавить фото</button>`:''}</div>`;}
 function currentVenue(){try{const v=JSON.parse(localStorage.getItem('bauer-venue')||'null');return v?(smsSource.venues.find(x=>x.id===v.hall&&x.city===v.city&&!x.unavailable)||null):null;}catch{return null;}}
+function currentSelectedCityName(){
+  const selEl=document.getElementById('venue-city');
+  if(selEl&&selEl.value)return selEl.value.trim();
+  try{
+    const sv=JSON.parse(localStorage.getItem('bauer-venue')||'null');
+    if(sv&&sv.city)return String(sv.city).trim();
+  }catch{}
+  const v=currentVenue();
+  if(v?.city)return v.city.trim();
+  if(typeof smsValues!=='undefined'&&smsValues?.city)return String(smsValues.city).trim();
+  return '';
+}
+
+const BAUER_WEEK_DAYS = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс', 'Пн'];
+const BAUER_CALENDAR_YEAR = 2026;
+
+// Встроенный календарь недель 2026 года (неделя презентаций строится по дням: Вт, Ср, Чт, Пт, Сб, Вс, Пн; 44-я неделя 2026 = 03.11.2026 – 09.11.2026)
+function getBauerWeekStartTuesday(weekNum = 44, year = BAUER_CALENDAR_YEAR) {
+  const wn = Math.max(1, Math.min(53, Number(weekNum) || 44));
+  // В 2026 году 1-й вторник года — 6 января 2026 (44-я неделя начинается во вторник 3 ноября 2026)
+  const jan1 = new Date(year, 0, 1);
+  const jan1Day = jan1.getDay(); // 0=Вс..4=Чт
+  const firstMondayOffset = jan1Day === 1 ? 0 : (jan1Day === 0 ? 1 : 8 - jan1Day);
+  const firstTuesdayDate = 1 + firstMondayOffset + 1; // 6 января 2026
+  const d = new Date(year, 0, firstTuesdayDate + (wn - 1) * 7);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dt = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dt}`;
+}
+
+function getBauerWeekNumberFromDate(dateInput) {
+  let d;
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+    const [y, m, dt] = dateInput.trim().split('-').map(Number);
+    d = new Date(y, m - 1, dt);
+  } else if (dateInput instanceof Date && !isNaN(dateInput.getTime())) {
+    d = new Date(dateInput.getFullYear(), dateInput.getMonth(), dateInput.getDate());
+  } else {
+    const now = new Date();
+    d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+  // Для 2026 года считаем номер недели по циклу Вт–Пн (где Неделя 44 = 03.11.2026 – 09.11.2026)
+  const refTue = new Date(BAUER_CALENDAR_YEAR, 0, 6); // Вт 06.01.2026 — старт 1-й недели
+  const targetIn2026 = new Date(BAUER_CALENDAR_YEAR, d.getMonth(), d.getDate());
+  const diffDays = Math.floor((targetIn2026.getTime() - refTue.getTime()) / 86400000);
+  if (diffDays < 0) return 1;
+  const wn = Math.floor(diffDays / 7) + 1;
+  return Math.max(1, Math.min(52, wn));
+}
+
+function getCurrentBauerWeekNumber() {
+  const wn = getBauerWeekNumberFromDate(new Date());
+  return wn || 44;
+}
+
+function getBauerWeekDaysCalendar(weekNum = 44, year = BAUER_CALENDAR_YEAR) {
+  const tueIso = getBauerWeekStartTuesday(weekNum, year);
+  const [y, m, dt] = tueIso.split('-').map(Number);
+  const fullNames = {
+    'Вт': 'Вторник',
+    'Ср': 'Среда',
+    'Чт': 'Четверг',
+    'Пт': 'Пятница',
+    'Сб': 'Суббота',
+    'Вс': 'Воскресенье',
+    'Пн': 'Понедельник'
+  };
+  return BAUER_WEEK_DAYS.map((dayCode, idx) => {
+    const d = new Date(y, m - 1, dt + idx);
+    const dy = d.getFullYear();
+    const dm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const iso = `${dy}-${dm}-${dd}`;
+    return {
+      day: dayCode,
+      fullDay: fullNames[dayCode] || dayCode,
+      iso,
+      shortRu: formatRuShortDate(iso),
+      dmy: `${dd}.${dm}.${dy}`
+    };
+  });
+}
+
 let selectedPlanSlot = null;
 try { selectedPlanSlot = JSON.parse(localStorage.getItem('bauer-selected-plan-slot') || 'null'); } catch (e) { selectedPlanSlot = null; }
 let activePresentationPlan = null;
 let cityScheduleActiveHall = 0;
 
+function getCityPlanForCity(cityName, plan = activePresentationPlan) {
+  if (!cityName || !plan || !Array.isArray(plan.cities)) return null;
+  const norm = String(cityName).trim().toLowerCase();
+  const cp = plan.cities.find(c => c && String(c.cityName || '').trim().toLowerCase() === norm);
+  if (!cp || !Array.isArray(cp.halls) || !cp.halls.length) return null;
+  const hasAnyTimes = cp.halls.some(h => {
+    const days = Array.isArray(h?.days) ? h.days : [];
+    return days.some(d => getHallTimesForDay(h, typeof d === 'string' ? d : d?.day).length > 0);
+  });
+  return hasAnyTimes ? cp : null;
+}
+
+function getValidSelectedSlotForCurrentCity() {
+  if (!selectedPlanSlot || !selectedPlanSlot.time) return null;
+  const currentCity = currentSelectedCityName();
+  // Если город выбран, но для него нет плана презентаций — НЕ возвращаем старые/чужие даты и время!
+  if (currentCity) {
+    const cp = getCityPlanForCity(currentCity, activePresentationPlan);
+    if (!cp) return null;
+    if (selectedPlanSlot.city && selectedPlanSlot.city.trim().toLowerCase() !== currentCity.toLowerCase()) {
+      return null;
+    }
+    // Пересчитываем актуальную дату по текущему календарю недели плана, чтобы не оставались старые числа
+    const weekRef = activePresentationPlan?.weekNumber
+      ? getBauerWeekStartTuesday(activePresentationPlan.weekNumber, activePresentationPlan.calendarYear || BAUER_CALENDAR_YEAR)
+      : (activePresentationPlan?.weekStart || getBauerWeekStartTuesday(getCurrentBauerWeekNumber()));
+    const freshDate = selectedPlanSlot.day ? getCalculatedDateForDay(weekRef, selectedPlanSlot.day) : selectedPlanSlot.date;
+    return {
+      ...selectedPlanSlot,
+      date: freshDate || selectedPlanSlot.date
+    };
+  }
+  // Если город вообще не выбран, проверяем, есть ли план хотя бы для города из самого слота
+  if (selectedPlanSlot.city) {
+    const cp = getCityPlanForCity(selectedPlanSlot.city, activePresentationPlan);
+    if (!cp) return null;
+  } else if (!activePresentationPlan || !Array.isArray(activePresentationPlan.cities) || !activePresentationPlan.cities.length) {
+    return null;
+  }
+  return selectedPlanSlot;
+}
+
 function fillPlanHtml(html) {
   if (!html) return '';
-  const slot = selectedPlanSlot;
+  const slot = getValidSelectedSlotForCurrentCity();
+  const currentCity = currentSelectedCityName();
+  const hasPlanForCity = currentCity ? Boolean(getCityPlanForCity(currentCity, activePresentationPlan)) : Boolean(activePresentationPlan?.cities?.length);
   const daysRu = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
   const monthsRu = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   let dateStr = '', dayName = '';
@@ -2434,6 +2562,9 @@ function fillPlanHtml(html) {
     if (val) {
       return `<mark class="plan-fill" title="Зафиксировано из плана презентаций: ${escapeHTML(val)}">${escapeHTML(val)}</mark>`;
     }
+    if (currentCity && !hasPlanForCity) {
+      return `<mark class="plan-empty" title="Для города ${escapeHTML(currentCity)} руководитель ещё не построил план презентаций">[${escapeHTML(key)}: нет плана презентаций для г. ${escapeHTML(currentCity)}]</mark>`;
+    }
     return `<mark class="plan-empty" title="Зафиксируйте время на этапе «Выбор времени»">[${escapeHTML(key)}: выберите время в блоке «Выбор времени»]</mark>`;
   });
 }
@@ -2446,14 +2577,23 @@ function isTimeStage(stage) {
 }
 
 function getCalculatedDateForDay(weekStart, dayName) {
-  if (!weekStart) return '';
-  const daysWeekOrder = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-  const idx = daysWeekOrder.indexOf(typeof dayName === 'string' ? dayName.slice(0, 2) : '');
+  const shortDay = typeof dayName === 'string' ? dayName.trim().slice(0, 2) : '';
+  const idx = BAUER_WEEK_DAYS.indexOf(shortDay);
   if (idx === -1) return '';
   try {
-    const parts = weekStart.split('-');
+    let baseIso = weekStart;
+    if (!baseIso || !/^\d{4}-\d{2}-\d{2}$/.test(String(baseIso).trim())) {
+      const wn = activePresentationPlan?.weekNumber || getCurrentBauerWeekNumber();
+      baseIso = getBauerWeekStartTuesday(wn, BAUER_CALENDAR_YEAR);
+    }
+    const parts = String(baseIso).trim().split('-').map(Number);
     if (parts.length !== 3) return '';
-    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    // Если weekStart был указан как понедельник (день недели = 1), сдвигаем старт презентационной недели на вторник (+1 день),
+    // чтобы цикл Вт -> Ср -> Чт -> Пт -> Сб -> Вс -> Пн всегда строился со вторника по понедельник
+    if (d.getDay() === 1) {
+      d.setDate(d.getDate() + 1);
+    }
     d.setDate(d.getDate() + idx);
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -2483,17 +2623,16 @@ function getHallTimesForDay(hall, dayName) {
 
 function presentationScheduleMarkup(stage, customStyle = '') {
   const plan = activePresentationPlan;
-  const v = currentVenue();
-  const currentCity = v?.city || (typeof smsValues !== 'undefined' ? smsValues.city : '') || '';
+  const currentCity = currentSelectedCityName();
   const boxStyleAttr = customStyle ? ` style="${customStyle}"` : '';
 
   const cityPlan = plan?.cities?.find(c => c.cityName?.trim().toLowerCase() === currentCity?.trim().toLowerCase());
-  const slot = selectedPlanSlot;
-  const hasSelected = slot && (!slot.city || slot.city.toLowerCase() === currentCity.toLowerCase());
+  const validSlot = getValidSelectedSlotForCurrentCity();
+  const hasSelected = Boolean(validSlot);
 
   let badgeHtml = '';
-  if (hasSelected && slot) {
-    const label = `${slot.day ? slot.day + (slot.date ? ' (' + formatRuShortDate(slot.date) + ')' : '') : (slot.date || '')} в ${slot.time}${slot.hall ? ' · ' + slot.hall : ''}`;
+  if (hasSelected && validSlot) {
+    const label = `${validSlot.day ? validSlot.day + (validSlot.date ? ' (' + formatRuShortDate(validSlot.date) + ')' : '') : (validSlot.date || '')} в ${validSlot.time}${validSlot.hall ? ' · ' + validSlot.hall : ''}`;
     badgeHtml = `
       <div class="psb-selected-badge">
         <span>✓ Зафиксировано время: <strong>${escapeHTML(label)}</strong></span>
@@ -2502,13 +2641,18 @@ function presentationScheduleMarkup(stage, customStyle = '') {
     `;
   }
 
+  const weekNum = plan?.weekNumber || (plan?.weekStart ? getBauerWeekNumberFromDate(plan.weekStart) : getCurrentBauerWeekNumber());
+  const weekStartTuesday = plan?.weekNumber
+    ? getBauerWeekStartTuesday(plan.weekNumber, plan.calendarYear || BAUER_CALENDAR_YEAR)
+    : (plan?.weekStart || getBauerWeekStartTuesday(weekNum, BAUER_CALENDAR_YEAR));
+
   if (!plan || !Array.isArray(plan.cities) || !plan.cities.length) {
     return `
       <div class="presentation-schedule-box" id="presentation-schedule-box"${boxStyleAttr}>
         <div class="psb-header">
           <div class="psb-title">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
-            <span>График презентаций на неделю</span>
+            <span>График презентаций на неделю (${weekNum}-я нед. ${BAUER_CALENDAR_YEAR})</span>
           </div>
           ${badgeHtml}
         </div>
@@ -2527,13 +2671,12 @@ function presentationScheduleMarkup(stage, customStyle = '') {
         <div class="psb-header">
           <div class="psb-title">
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
-            <span>График презентаций · ${escapeHTML(currentCity || 'Город не выбран')}</span>
+            <span>График презентаций · ${escapeHTML(currentCity || 'Город не выбран')} (${weekNum}-я нед. ${BAUER_CALENDAR_YEAR})</span>
           </div>
-          ${badgeHtml}
         </div>
         <div class="psb-body">
           <p class="psb-hint" style="margin:0">
-            Для города <strong>${escapeHTML(currentCity || '—')}</strong> на этой неделе презентации не запланированы. Выберите другой город вверху либо настройте план в «Плане презентаций».
+            Для города <strong>${escapeHTML(currentCity || '—')}</strong> на этой неделе презентации не запланированы (план не построен руководителем). Выберите другой город вверху либо настройте план в «Плане презентаций».
           </p>
         </div>
       </div>
@@ -2567,7 +2710,6 @@ function presentationScheduleMarkup(stage, customStyle = '') {
             <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
             <span>График презентаций · ${escapeHTML(currentCity)} · ${escapeHTML(activeHall.hallName || '')}</span>
           </div>
-          ${badgeHtml}
         </div>
         <div class="psb-body">
           ${hallsTabHtml}
@@ -2577,12 +2719,11 @@ function presentationScheduleMarkup(stage, customStyle = '') {
     `;
   }
 
-  const daysWeekOrder = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
   const sortedDays = [...days].sort((a,b) => {
     const aName = typeof a === 'string' ? a : a.day;
     const bName = typeof b === 'string' ? b : b.day;
-    const ia = daysWeekOrder.indexOf(aName?.slice(0, 2));
-    const ib = daysWeekOrder.indexOf(bName?.slice(0, 2));
+    const ia = BAUER_WEEK_DAYS.indexOf(aName?.slice(0, 2));
+    const ib = BAUER_WEEK_DAYS.indexOf(bName?.slice(0, 2));
     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
   });
 
@@ -2591,7 +2732,7 @@ function presentationScheduleMarkup(stage, customStyle = '') {
       <div class="psb-header">
         <div class="psb-title">
           <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2v4M13 2v4"/></svg>
-          <span>График презентаций · ${escapeHTML(currentCity)}${activeHall.hallName ? ' (' + escapeHTML(activeHall.hallName) + ')' : ''}</span>
+          <span>График презентаций · ${escapeHTML(currentCity)}${activeHall.hallName ? ' (' + escapeHTML(activeHall.hallName) + ')' : ''} · ${weekNum}-я нед. ${BAUER_CALENDAR_YEAR}</span>
         </div>
         ${badgeHtml || '<span class="psb-hint">Нажмите на удобное время гостя, чтобы зафиксировать его в скрипте и SMS</span>'}
       </div>
@@ -2600,9 +2741,9 @@ function presentationScheduleMarkup(stage, customStyle = '') {
         <div class="psb-grid">
           ${sortedDays.map(dObj => {
             const dayName = typeof dObj === 'string' ? dObj : dObj.day;
-            const dateStr = typeof dObj === 'object' && dObj.date ? dObj.date : getCalculatedDateForDay(plan.weekStart, dayName);
+            const dateStr = typeof dObj === 'object' && dObj.date ? dObj.date : getCalculatedDateForDay(weekStartTuesday, dayName);
             const dayTimes = getHallTimesForDay(activeHall, dayName);
-            const isFullSelectedDay = slot?.day === dayName;
+            const isFullSelectedDay = validSlot?.day === dayName;
             return `
               <div class="psb-col">
                 <div class="psb-day-title">
@@ -2611,7 +2752,7 @@ function presentationScheduleMarkup(stage, customStyle = '') {
                 </div>
                 <div class="psb-times">
                   ${dayTimes.length ? dayTimes.map(t => {
-                    const isSelected = isFullSelectedDay && slot?.time === t && (!slot?.hall || !activeHall.hallName || slot.hall === activeHall.hallName);
+                    const isSelected = isFullSelectedDay && validSlot?.time === t && (!validSlot?.hall || !activeHall.hallName || validSlot.hall === activeHall.hallName);
                     return `
                       <button type="button" 
                         class="psb-time-btn ${isSelected ? 'active' : ''}"
@@ -2973,8 +3114,8 @@ async function api(path,options={}){
   try{
     return await api_remote(path,options);
   }catch(err){
-    if(err&&err.fallbackToLocal){
-      localMode=true;
+    if(err&&(err.fallbackToLocal||err.status===404||/Маршрут не найден/i.test(err.message||''))){
+      if(err.fallbackToLocal&&location.protocol==='file:')localMode=true;
       return api_local_vault(path,options);
     }
     throw err;
@@ -3822,6 +3963,29 @@ async function api_local_vault(rawPath,options={}){
     }
   }
 
+  if(pathname==='/api/presentation-plan'){
+    if(method==='GET'){
+      let plan=await VaultDB.get('presentationPlan',null);
+      if(!plan){
+        try{plan=JSON.parse(localStorage.getItem('bauer-presentation-plan')||'null');}catch{plan=null;}
+      }
+      return plan;
+    }
+    if(method==='PUT'||method==='POST'){
+      const actor=authUser||currentUser||{login:'Руководитель',displayName:'Руководитель',role:'HEAD'};
+      const plan={
+        ...(body||{}),
+        updatedAt:Date.now(),
+        updatedBy:actor.displayName||actor.login||actor.name||actor.username||'Руководитель',
+        updatedByRole:actor.role||'HEAD'
+      };
+      await VaultDB.set('presentationPlan',plan);
+      try{localStorage.setItem('bauer-presentation-plan',JSON.stringify(plan));}catch{}
+      await logEvent({action:'presentation_plan.update',actor,target:String(plan.weekStart||plan.weekNumber||'plan')});
+      return plan;
+    }
+  }
+
   throw fail('Маршрут не найден',404);
 }
 function setTab(name){document.querySelectorAll('.section-tab').forEach(button=>{const active=button.id===name+'-tab';button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});}
@@ -4275,13 +4439,14 @@ $('#whole-script').addEventListener('click',()=>{
   const wVenues=(typeof smsSource!=='undefined'&&smsSource.venues)?smsSource.venues:[];
   const wCities=[...new Set(wVenues.map(v=>v.city))].sort((a,b)=>a.localeCompare(b,'ru'));
   const currentV=typeof currentVenue==='function'?currentVenue():null;
-  const initialCity=currentV?.city||smsValues?.city||(wCities[0]||'');
+  const initialCity=currentV?.city||currentSelectedCityName()||smsValues?.city||(wCities[0]||'');
   const initialHall=currentV?.id||smsValues?.hall||'';
-  const todayDate=new Date().toISOString().slice(0,10);
+  const validSlot=typeof getValidSelectedSlotForCurrentCity==='function'?getValidSelectedSlotForCurrentCity():null;
+  const hasPlanForInitialCity=typeof getCityPlanForCity==='function'?Boolean(getCityPlanForCity(initialCity,activePresentationPlan)):false;
   const wSmsValues={
     city:initialCity,
-    date:smsValues?.date||todayDate,
-    time:smsValues?.time||'10:00',
+    date:validSlot?.date||(hasPlanForInitialCity?(smsValues?.date||''):''),
+    time:validSlot?.time||(hasPlanForInitialCity?(smsValues?.time||''):''),
     hall:initialHall,
     program:smsValues?.program||'С КШ',
     client:smsValues?.client||'',
@@ -5096,7 +5261,20 @@ function fill(){const sv=saved(),cities=[...new Set(smsSource.venues.filter(x=>!
   city.innerHTML='<option value="">Город…</option>'+cities.map(c=>`<option value="${E(c)}">${E(c)}</option>`).join('');
   city.value=cities.includes(sv.city)?sv.city:'';halls(sv.hall);store();}
 function refresh(){store();try{renderCards()}catch{}const lvw=document.getElementById('layouts-view');if(lvw&&!lvw.hidden&&typeof renderLayouts==='function')renderLayouts();}
-city.addEventListener('change',()=>{halls('');refresh();});
+city.addEventListener('change',()=>{
+  halls('');
+  cityScheduleActiveHall=0;
+  if(selectedPlanSlot&&selectedPlanSlot.city&&selectedPlanSlot.city.trim().toLowerCase()!==city.value.trim().toLowerCase()){
+    selectedPlanSlot=null;
+    try{localStorage.removeItem('bauer-selected-plan-slot');}catch{}
+  }
+  if(!getCityPlanForCity(city.value,activePresentationPlan)){
+    selectedPlanSlot=null;
+    try{localStorage.removeItem('bauer-selected-plan-slot');}catch{}
+    if(typeof smsValues!=='undefined'&&smsValues){smsValues.date='';smsValues.time='';}
+  }
+  refresh();
+});
 hall.addEventListener('change',refresh);
 fill();
 if(typeof applyVenues==='function'){const orig=applyVenues;applyVenues=function(v){orig(v);fill();try{renderCards()}catch{}};}
@@ -9062,22 +9240,12 @@ window.loadOwnerData = loadOwnerData;
 
 <script id="presentation-plan-module">
 // ==========================================
-// PRESENTATION PLAN WIZARD (4-STEP SYSTEM)
+// PRESENTATION PLAN WIZARD (3-STEP SYSTEM + BUILT-IN 2026 WEEK CALENDAR)
 // ==========================================
 let planWizardStep = 1;
 let planDraft = null;
 const ALWAYS_WORKING_CITIES = ['Москва', 'Санкт-Петербург', 'Ростов', 'Севастополь', 'Симферополь', 'Краснодар'];
-
-function getNextMondayDate() {
-  const d = new Date();
-  const day = d.getDay(); // 0 is Sun, 1 is Mon
-  const diff = (day === 0 ? 1 : 8 - day); // next monday
-  d.setDate(d.getDate() + diff);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dt = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dt}`;
-}
+const QUICK_DAY_TIMES = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
 
 function getAllDatabaseCities() {
   const list = [];
@@ -9089,49 +9257,58 @@ function getAllDatabaseCities() {
   ALWAYS_WORKING_CITIES.forEach(c => {
     if (!list.includes(c)) list.push(c);
   });
-  return list.sort((a,b) => a.localeCompare(b, 'ru'));
+  return list.sort((a, b) => a.localeCompare(b, 'ru'));
 }
 
+// Возвращает уникальные залы из базы «Адреса» для выбранного города (без дублей)
 function getDatabaseHallsForCity(cityName) {
   if (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues)) {
-    return smsSource.venues.filter(v => v.city?.trim().toLowerCase() === cityName?.trim().toLowerCase());
+    const raw = smsSource.venues.filter(v => v.city?.trim().toLowerCase() === cityName?.trim().toLowerCase() && !v.unavailable);
+    const seen = new Set();
+    const unique = [];
+    raw.forEach(v => {
+      const hName = String(v.hall || '').trim();
+      const key = hName.toLowerCase();
+      if (hName && !seen.has(key)) {
+        seen.add(key);
+        unique.push(v);
+      }
+    });
+    return unique;
   }
   return [];
 }
-
-async function loadPresentationPlan() {
-  try {
-    const res = await api('/api/presentation-plan');
-    if (res && Array.isArray(res.cities)) {
-      activePresentationPlan = res;
-    }
-  } catch (e) {
-    console.warn('Could not load plan from server:', e);
-  }
-  if (!activePresentationPlan) {
-    try {
-      activePresentationPlan = JSON.parse(localStorage.getItem('bauer-presentation-plan') || 'null');
-    } catch {}
-  }
-}
-
-const QUICK_DAY_TIMES = ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
 
 function sortTimesList(arr) {
   return [...new Set((arr || []).map(x => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
+function sortBauerDays(daysArr) {
+  const clean = [...new Set((daysArr || []).map(d => (typeof d === 'string' ? d : d?.day) || '').map(s => s.trim()).filter(Boolean))];
+  return clean.sort((a, b) => {
+    const ia = BAUER_WEEK_DAYS.indexOf(a.slice(0, 2));
+    const ib = BAUER_WEEK_DAYS.indexOf(b.slice(0, 2));
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+}
+
 function ensureHallDayTimes(hall) {
   if (!hall) return;
-  const fallback = Array.isArray(hall.times) && hall.times.length ? [...hall.times] : ['10:00', '14:00', '18:00'];
+  const fallback = Array.isArray(hall.times) && hall.times.length ? sortTimesList(hall.times) : ['10:00', '14:00', '18:00'];
   if (!hall.dayTimes || typeof hall.dayTimes !== 'object' || Array.isArray(hall.dayTimes)) {
     hall.dayTimes = {};
   }
-  const days = Array.isArray(hall.days) ? hall.days : ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-  days.forEach(d => {
+  if (!Array.isArray(hall.days) || !hall.days.length) {
+    hall.days = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  } else {
+    hall.days = sortBauerDays(hall.days);
+  }
+  hall.days.forEach(d => {
     const dName = typeof d === 'string' ? d : d.day;
-    if (dName && !Array.isArray(hall.dayTimes[dName])) {
+    if (dName && (!Array.isArray(hall.dayTimes[dName]) || !hall.dayTimes[dName].length)) {
       hall.dayTimes[dName] = [...fallback];
+    } else if (dName && Array.isArray(hall.dayTimes[dName])) {
+      hall.dayTimes[dName] = sortTimesList(hall.dayTimes[dName]);
     }
   });
   syncHallFlatTimes(hall);
@@ -9153,39 +9330,262 @@ function syncHallFlatTimes(hall) {
   }
 }
 
-function initPlanDraft() {
-  if (activePresentationPlan && Array.isArray(activePresentationPlan.cities) && activePresentationPlan.cities.length) {
-    planDraft = JSON.parse(JSON.stringify(activePresentationPlan));
-    if (!planDraft.weekStart) planDraft.weekStart = getNextMondayDate();
-    planDraft.cities.forEach(c => (c.halls || []).forEach(h => ensureHallDayTimes(h)));
+function createDefaultMoscowCityPlan(existingMoscow = null) {
+  const moscowVenues = getDatabaseHallsForCity('Москва');
+  // Сохраняем все данные Москвы, если пользователь уже заполнял их, и копируем времена презентаций в дни работы
+  if (existingMoscow && Array.isArray(existingMoscow.halls) && existingMoscow.halls.length > 0) {
+    const cloned = JSON.parse(JSON.stringify(existingMoscow));
+    cloned.halls.forEach(h => ensureHallDayTimes(h));
+    // Если в Москве был только 1 авто-дефолтный зал "Отель Панорама" без Бухареста, но в слоте или базе есть ТК «Бухарест», 2 этаж — гарантируем оба зала Москвы с перенесёнными временами
+    const hasBuharest = cloned.halls.some(h => /бухарест/i.test(h.hallName || ''));
+    const hasPanorama = cloned.halls.some(h => /панорама/i.test(h.hallName || ''));
+    if (cloned.halls.length === 1 && !hasBuharest && hasPanorama) {
+      const baseTimes = cloned.halls[0]?.times?.length ? [...cloned.halls[0].times] : ['10:00', '14:00', '18:00'];
+      const baseDays = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      const buhHall = {
+        hallName: 'ТК «Бухарест», 2 этаж',
+        days: [...baseDays],
+        times: [...baseTimes],
+        dayTimes: Object.fromEntries(baseDays.map(d => [d, [...baseTimes]]))
+      };
+      const panHall = {
+        hallName: 'Отель Панорама',
+        days: [...baseDays],
+        times: [...baseTimes],
+        dayTimes: Object.fromEntries(baseDays.map(d => [d, [...baseTimes]]))
+      };
+      cloned.halls = [buhHall, panHall];
+    }
+    return cloned;
+  }
+
+  const baseDays = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const baseTimes = ['10:00', '14:00', '18:00'];
+  const buharestName = moscowVenues.find(v => /бухарест/i.test(v.hall))?.hall || 'ТК «Бухарест», 2 этаж';
+  const panoramaName = moscowVenues.find(v => /панорама/i.test(v.hall))?.hall || 'Отель Панорама';
+  return {
+    cityName: 'Москва',
+    halls: [
+      {
+        hallName: buharestName,
+        days: [...baseDays],
+        times: [...baseTimes],
+        dayTimes: Object.fromEntries(baseDays.map(d => [d, [...baseTimes]]))
+      },
+      {
+        hallName: panoramaName,
+        days: [...baseDays],
+        times: [...baseTimes],
+        dayTimes: Object.fromEntries(baseDays.map(d => [d, [...baseTimes]]))
+      }
+    ]
+  };
+}
+
+function normalizeAndMigratePlanObject(rawPlan) {
+  if (!rawPlan || typeof rawPlan !== 'object' || !Array.isArray(rawPlan.cities) || !rawPlan.cities.length) {
+    return null;
+  }
+  const plan = JSON.parse(JSON.stringify(rawPlan));
+  const currentWeek = getCurrentBauerWeekNumber();
+  if (!plan.calendarYear) plan.calendarYear = BAUER_CALENDAR_YEAR;
+  if (!plan.weekNumber) {
+    plan.weekNumber = plan.weekStart ? getBauerWeekNumberFromDate(plan.weekStart) : currentWeek;
+  }
+  plan.weekStart = getBauerWeekStartTuesday(plan.weekNumber, plan.calendarYear);
+
+  plan.cities = plan.cities.map(c => {
+    if (!c || !c.cityName) return c;
+    if (c.cityName.trim().toLowerCase() === 'москва') {
+      return createDefaultMoscowCityPlan(c);
+    }
+    (c.halls || []).forEach(h => ensureHallDayTimes(h));
+    return c;
+  });
+
+  if (!plan.weeklyPlans || typeof plan.weeklyPlans !== 'object') {
+    plan.weeklyPlans = {};
+  }
+  plan.weeklyPlans[String(plan.weekNumber)] = {
+    weekNumber: plan.weekNumber,
+    weekStart: plan.weekStart,
+    cities: JSON.parse(JSON.stringify(plan.cities)),
+    updatedAt: plan.updatedAt || Date.now()
+  };
+
+  // Автоматическое дублирование расписания на текущую/следующую неделю, если руководитель не вносил изменений
+  if (plan.autoDuplicateNextWeek !== false && plan.weekNumber < currentWeek) {
+    const targetWeek = currentWeek;
+    if (!plan.weeklyPlans[String(targetWeek)]) {
+      plan.weeklyPlans[String(targetWeek)] = {
+        weekNumber: targetWeek,
+        weekStart: getBauerWeekStartTuesday(targetWeek, plan.calendarYear),
+        cities: JSON.parse(JSON.stringify(plan.cities)),
+        autoDuplicatedFromWeek: plan.weekNumber,
+        updatedAt: Date.now()
+      };
+    }
+    plan.weekNumber = targetWeek;
+    plan.weekStart = getBauerWeekStartTuesday(targetWeek, plan.calendarYear);
+    plan.cities = JSON.parse(JSON.stringify(plan.weeklyPlans[String(targetWeek)].cities));
+  }
+
+  return plan;
+}
+
+function persistDraftLocally() {
+  if (!planDraft) return;
+  try {
+    if (!planDraft.weeklyPlans || typeof planDraft.weeklyPlans !== 'object') {
+      planDraft.weeklyPlans = {};
+    }
+    const wn = planDraft.weekNumber || getCurrentBauerWeekNumber();
+    planDraft.weeklyPlans[String(wn)] = {
+      weekNumber: wn,
+      weekStart: planDraft.weekStart,
+      cities: JSON.parse(JSON.stringify(planDraft.cities || [])),
+      updatedAt: Date.now()
+    };
+    localStorage.setItem('bauer-presentation-plan-draft', JSON.stringify(planDraft));
+  } catch {}
+}
+
+async function loadPresentationPlan() {
+  let loaded = null;
+  try {
+    const res = await api('/api/presentation-plan');
+    if (res && Array.isArray(res.cities) && res.cities.length) {
+      loaded = res;
+    }
+  } catch (e) {
+    console.warn('Could not load plan from server:', e);
+  }
+  if (!loaded) {
+    try {
+      const localSaved = JSON.parse(localStorage.getItem('bauer-presentation-plan') || 'null');
+      if (localSaved && Array.isArray(localSaved.cities) && localSaved.cities.length) {
+        loaded = localSaved;
+      }
+    } catch {}
+  }
+  if (!loaded) {
+    try {
+      const draftSaved = JSON.parse(localStorage.getItem('bauer-presentation-plan-draft') || 'null');
+      if (draftSaved && Array.isArray(draftSaved.cities) && draftSaved.cities.length) {
+        loaded = draftSaved;
+      }
+    } catch {}
+  }
+  if (loaded) {
+    const prevWeek = loaded.weekNumber;
+    activePresentationPlan = normalizeAndMigratePlanObject(loaded);
+    try {
+      localStorage.setItem('bauer-presentation-plan', JSON.stringify(activePresentationPlan));
+    } catch {}
+    // Если произошло автодублирование на новую неделю, сохраняем обновлённый план
+    if (activePresentationPlan && prevWeek && activePresentationPlan.weekNumber !== prevWeek) {
+      try {
+        await api('/api/presentation-plan', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(activePresentationPlan)
+        });
+      } catch {}
+    }
   } else {
-    // Default draft: pre-fill the 6 always working cities
-    planDraft = {
-      weekStart: getNextMondayDate(),
-      cities: ALWAYS_WORKING_CITIES.map(c => {
-        const venues = getDatabaseHallsForCity(c);
-        const firstHall = venues[0]?.hall || 'Основной зал';
-        const hallObj = {
-          hallName: firstHall,
-          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-          times: ['10:00', '14:00', '18:00'],
-          dayTimes: {
-            'Пн': ['10:00', '14:00', '18:00'],
-            'Вт': ['10:00', '14:00', '18:00'],
-            'Ср': ['10:00', '14:00', '18:00'],
-            'Чт': ['10:00', '14:00', '18:00'],
-            'Пт': ['10:00', '14:00', '18:00'],
-            'Сб': ['10:00', '14:00', '18:00'],
-            'Вс': ['10:00', '14:00', '18:00']
-          }
-        };
-        return {
-          cityName: c,
-          halls: [hallObj]
-        };
-      })
+    // Если плана ещё не было, инициализируем дефолтный план (с заполненной Москвой на 44-ю неделю 2026) и сохраняем локально
+    initPlanDraft();
+    activePresentationPlan = JSON.parse(JSON.stringify(planDraft));
+    try {
+      localStorage.setItem('bauer-presentation-plan', JSON.stringify(activePresentationPlan));
+    } catch {}
+  }
+}
+
+function initPlanDraft() {
+  // Сначала проверяем несохранённый черновик в localStorage, чтобы никогда не удалить то, что заполнил руководитель
+  let sourcePlan = null;
+  try {
+    const savedDraft = JSON.parse(localStorage.getItem('bauer-presentation-plan-draft') || 'null');
+    if (savedDraft && Array.isArray(savedDraft.cities) && savedDraft.cities.length) {
+      sourcePlan = savedDraft;
+    }
+  } catch {}
+  if (!sourcePlan && activePresentationPlan && Array.isArray(activePresentationPlan.cities) && activePresentationPlan.cities.length) {
+    sourcePlan = activePresentationPlan;
+  }
+
+  if (sourcePlan) {
+    planDraft = normalizeAndMigratePlanObject(sourcePlan);
+    persistDraftLocally();
+    return;
+  }
+
+  const weekNum = getCurrentBauerWeekNumber(); // 44-я неделя 2026 года
+  const weekStart = getBauerWeekStartTuesday(weekNum, BAUER_CALENDAR_YEAR);
+  const baseDays = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const baseTimes = ['10:00', '14:00', '18:00'];
+
+  planDraft = {
+    calendarYear: BAUER_CALENDAR_YEAR,
+    weekNumber: weekNum,
+    weekStart,
+    autoDuplicateNextWeek: true,
+    weeklyPlans: {},
+    cities: ALWAYS_WORKING_CITIES.map(c => {
+      if (c === 'Москва') {
+        return createDefaultMoscowCityPlan(null);
+      }
+      const venues = getDatabaseHallsForCity(c);
+      const firstHall = venues[0]?.hall || 'Основной зал';
+      const hallObj = {
+        hallName: firstHall,
+        days: [...baseDays],
+        times: [...baseTimes],
+        dayTimes: Object.fromEntries(baseDays.map(d => [d, [...baseTimes]]))
+      };
+      return {
+        cityName: c,
+        halls: [hallObj]
+      };
+    })
+  };
+  persistDraftLocally();
+}
+
+function switchPlanWeek(targetWeekNum) {
+  if (!planDraft) initPlanDraft();
+  const wn = Math.max(1, Math.min(52, Number(targetWeekNum) || getCurrentBauerWeekNumber()));
+  const curWn = planDraft.weekNumber || getCurrentBauerWeekNumber();
+  if (!planDraft.weeklyPlans || typeof planDraft.weeklyPlans !== 'object') {
+    planDraft.weeklyPlans = {};
+  }
+  // Сохраняем текущую неделю перед переключением
+  planDraft.weeklyPlans[String(curWn)] = {
+    weekNumber: curWn,
+    weekStart: planDraft.weekStart || getBauerWeekStartTuesday(curWn, BAUER_CALENDAR_YEAR),
+    cities: JSON.parse(JSON.stringify(planDraft.cities || [])),
+    updatedAt: Date.now()
+  };
+
+  // Если на выбранную неделю руководитель ещё не вносил изменений — автоматически дублируем расписание!
+  const existingTarget = planDraft.weeklyPlans[String(wn)];
+  if (existingTarget && Array.isArray(existingTarget.cities) && existingTarget.cities.length) {
+    planDraft.cities = JSON.parse(JSON.stringify(existingTarget.cities));
+  } else {
+    planDraft.cities = JSON.parse(JSON.stringify(planDraft.cities || []));
+    planDraft.weeklyPlans[String(wn)] = {
+      weekNumber: wn,
+      weekStart: getBauerWeekStartTuesday(wn, BAUER_CALENDAR_YEAR),
+      cities: JSON.parse(JSON.stringify(planDraft.cities)),
+      autoDuplicatedFromWeek: curWn,
+      updatedAt: Date.now()
     };
   }
+  planDraft.weekNumber = wn;
+  planDraft.weekStart = getBauerWeekStartTuesday(wn, BAUER_CALENDAR_YEAR);
+  planDraft.cities.forEach(c => (c.halls || []).forEach(h => ensureHallDayTimes(h)));
+  persistDraftLocally();
 }
 
 async function openPlanPanel() {
@@ -9202,7 +9602,7 @@ async function openPlanPanel() {
       if (!planDraft) initPlanDraft();
       renderPlanView();
       await loadPresentationPlan();
-      initPlanDraft();
+      if (!planDraft) initPlanDraft();
       renderPlanView();
       if (pv) pv.hidden = false;
     } catch (err) {
@@ -9222,6 +9622,9 @@ function renderPlanView() {
   const container = document.getElementById('plan-view');
   if (!container) return;
   if (!planDraft) initPlanDraft();
+  if (planWizardStep > 3) planWizardStep = 3;
+  if (planWizardStep < 1) planWizardStep = 1;
+
   const prevWinY = window.scrollY || 0;
   const prevContainerScroll = container.scrollTop || 0;
 
@@ -9240,15 +9643,28 @@ function renderPlanView() {
     });
   });
 
-  const weekStartDate = planDraft.weekStart || getNextMondayDate();
-  const weekStartRu = formatRuShortDate(weekStartDate);
+  const currentSystemWeek = getCurrentBauerWeekNumber();
+  const activeWeekNum = planDraft.weekNumber || currentSystemWeek;
+  const weekStartDate = getBauerWeekStartTuesday(activeWeekNum, BAUER_CALENDAR_YEAR);
+  planDraft.weekNumber = activeWeekNum;
+  planDraft.weekStart = weekStartDate;
+  const weekCalendarDays = getBauerWeekDaysCalendar(activeWeekNum, BAUER_CALENDAR_YEAR);
+  const weekRangeLabel = `${weekCalendarDays[0]?.dmy || ''} (Вт) – ${weekCalendarDays[6]?.dmy || ''} (Пн)`;
 
-  // Stepper tabs
+  // Опции выпадающего календаря недель 2026 года (с акцентом на текущую 44-ю неделю и соседние)
+  const weekOptionsHtml = Array.from({ length: 52 }, (_, i) => {
+    const w = i + 1;
+    const cal = getBauerWeekDaysCalendar(w, BAUER_CALENDAR_YEAR);
+    const isCur = w === currentSystemWeek;
+    const hasSaved = Boolean(planDraft.weeklyPlans?.[String(w)]);
+    return `<option value="${w}" ${w === activeWeekNum ? 'selected' : ''}>Неделя ${w} (${BAUER_CALENDAR_YEAR}) · ${cal[0].shortRu} (Вт) – ${cal[6].shortRu} (Пн)${isCur ? ' ★ Текущая' : ''}${hasSaved ? ' ✓' : ''}</option>`;
+  }).join('');
+
+  // 3 шага мастера (Дни работы и времена презентаций объединены в единый удобный Шаг 3!)
   const steps = [
     { num: 1, title: 'Города на неделю', badge: `${selectedCount} гор.` },
-    { num: 2, title: 'Города и залы', badge: `${totalHalls} зал.` },
-    { num: 3, title: 'Дни работы', badge: 'Пн–Вс' },
-    { num: 4, title: 'Времена презентаций', badge: `${totalTimes} слотов` }
+    { num: 2, title: 'Города и залы (+ без ограничений)', badge: `${totalHalls} зал.` },
+    { num: 3, title: 'Дни работы и времена презентаций', badge: `${totalTimes} слотов` }
   ];
 
   let stepBodyHtml = '';
@@ -9261,8 +9677,8 @@ function renderPlanView() {
       <div class="plan-step-card">
         <div class="plan-step-title-row">
           <div>
-            <h2>Этап 1: Города, которые работают на следующей неделе</h2>
-            <p>Выберите города, в которых будут проводиться презентации. Города с золотой звездой работают всегда.</p>
+            <h2>Этап 1: Города, которые работают на ${activeWeekNum}-й неделе ${BAUER_CALENDAR_YEAR} года</h2>
+            <p>Выберите города, в которых будут проводиться презентации (${escapeHTML(weekRangeLabel)}). Города с золотой звездой работают всегда.</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button type="button" class="plan-week-btn" id="plan-btn-select-always">★ Выбрать базовые 6</button>
@@ -9295,17 +9711,17 @@ function renderPlanView() {
     `;
   } else if (planWizardStep === 2) {
     // ==========================================
-    // STEP 2: HALLS PER CITY (MAX 2 HALLS)
+    // STEP 2: UNLIMITED HALLS PER CITY (NO DUPLICATE INPUT)
     // ==========================================
     stepBodyHtml = `
       <div class="plan-step-card">
         <div class="plan-step-title-row">
           <div>
             <h2>Этап 2: Города и залы, которые работают</h2>
-            <p>Для каждого выбранного города укажите 1 или 2 работающих зала. Для каждого зала можно будет настроить независимое расписание.</p>
+            <p>Добавляйте любое количество залов кнопкой <strong>«+ Добавить зал»</strong> (1, 2, 3, 4 и более залов). Залы подтягиваются из вкладки «Адреса» без дублирования, либо можно ввести свой зал вручную.</p>
           </div>
           <div class="psb-selected-badge">
-            Выбрано городов: ${selectedCount}
+            Выбрано городов: ${selectedCount} · Залов: ${totalHalls}
           </div>
         </div>
 
@@ -9315,49 +9731,52 @@ function renderPlanView() {
           ${planDraft.cities.map((cityObj, cIdx) => {
             const dbVenues = getDatabaseHallsForCity(cityObj.cityName);
             const halls = cityObj.halls || [];
-            const hasTwoHalls = halls.length >= 2;
 
             return `
               <div class="plan-hall-block">
                 <div class="plan-hall-head">
-                  <strong style="font-size:16px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer">
-                    <input type="checkbox" data-plan-toggle-two-halls="${cIdx}" ${hasTwoHalls ? 'checked' : ''}>
-                    <span>Второй зал в этом городе</span>
-                  </label>
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <strong style="font-size:16px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
+                    <span class="psb-hint" style="font-size:12px">Открыто залов: <strong>${halls.length}</strong>${dbVenues.length ? ` (в базе «Адреса»: ${dbVenues.length})` : ''}</span>
+                  </div>
+                  <button type="button" class="plan-week-btn" data-plan-add-hall="${cIdx}" style="background:var(--teal);color:#fff;border-color:var(--teal);padding:6px 14px;font-size:12.5px">
+                    + Добавить зал
+                  </button>
                 </div>
 
-                <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:14px;margin-top:10px">
-                  <!-- Hall 1 -->
-                  <div style="background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:12px">
-                    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-                      <span style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase">Зал 1 (Основной)</span>
-                    </div>
-                    ${dbVenues.length > 0 ? `
-                      <select class="whole-sms-input" data-plan-hall-select="${cIdx},0">
-                        ${dbVenues.map(v => `<option value="${escapeHTML(v.hall)}" ${(halls[0]?.hallName === v.hall) ? 'selected' : ''}>${escapeHTML(v.hall)}</option>`).join('')}
-                        <option value="__custom__" ${(!dbVenues.some(v => v.hall === halls[0]?.hallName)) ? 'selected' : ''}>+ Другой зал / адрес...</option>
-                      </select>
-                    ` : ''}
-                    <input type="text" class="whole-sms-input" style="margin-top:6px" placeholder="Название или адрес первого зала" data-plan-hall-name="${cIdx},0" value="${escapeHTML(halls[0]?.hallName || '')}">
-                  </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));gap:14px;margin-top:10px">
+                  ${halls.map((hall, hIdx) => {
+                    const isInDb = dbVenues.some(v => v.hall === hall.hallName);
+                    const isCustom = Boolean(hall.isCustom) || !dbVenues.length || (hall.hallName && !isInDb);
+                    return `
+                      <div style="background:var(--surface);border:1.5px solid ${hIdx === 0 ? 'var(--line)' : 'color-mix(in srgb, var(--teal) 55%, var(--line))'};border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                          <span style="font-size:11.5px;font-weight:800;color:${hIdx === 0 ? 'var(--muted)' : 'var(--teal)'};text-transform:uppercase">
+                            Зал ${hIdx + 1}${hIdx === 0 ? ' (Основной)' : ''}
+                          </span>
+                          ${halls.length > 1 ? `
+                            <button type="button" class="psb-clear-btn" data-plan-remove-hall="${cIdx},${hIdx}" title="Удалить зал ${hIdx + 1}">✕ Удалить</button>
+                          ` : ''}
+                        </div>
 
-                  <!-- Hall 2 (if enabled) -->
-                  ${hasTwoHalls ? `
-                    <div style="background:var(--surface);border:1.5px solid var(--teal);border-radius:10px;padding:12px">
-                      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-                        <span style="font-size:11px;font-weight:800;color:var(--teal);text-transform:uppercase">Зал 2 (Дополнительный)</span>
-                        <button type="button" class="psb-clear-btn" data-plan-remove-hall="${cIdx},1" title="Отключить второй зал">✕</button>
+                        ${dbVenues.length > 0 ? `
+                          <select class="whole-sms-input" data-plan-hall-select="${cIdx},${hIdx}" aria-label="Выбор зала из базы адресов">
+                            ${dbVenues.map(v => `<option value="${escapeHTML(v.hall)}" ${(!isCustom && hall.hallName === v.hall) ? 'selected' : ''}>${escapeHTML(v.hall)}</option>`).join('')}
+                            <option value="__custom__" ${isCustom ? 'selected' : ''}>+ Ввести свой зал вручную...</option>
+                          </select>
+                        ` : ''}
+
+                        ${isCustom ? `
+                          <input type="text" class="whole-sms-input" placeholder="Введите название или адрес своего зала" data-plan-hall-name="${cIdx},${hIdx}" value="${escapeHTML(hall.hallName || '')}">
+                        ` : ''}
                       </div>
-                      ${dbVenues.length > 1 ? `
-                        <select class="whole-sms-input" data-plan-hall-select="${cIdx},1">
-                          ${dbVenues.map(v => `<option value="${escapeHTML(v.hall)}" ${(halls[1]?.hallName === v.hall) ? 'selected' : ''}>${escapeHTML(v.hall)}</option>`).join('')}
-                          <option value="__custom__" ${(!dbVenues.some(v => v.hall === halls[1]?.hallName)) ? 'selected' : ''}>+ Другой зал / адрес...</option>
-                        </select>
-                      ` : ''}
-                      <input type="text" class="whole-sms-input" style="margin-top:6px" placeholder="Название или адрес второго зала" data-plan-hall-name="${cIdx},1" value="${escapeHTML(halls[1]?.hallName || 'Зал 2')}">
-                    </div>
-                  ` : ''}
+                    `;
+                  }).join('')}
+
+                  <!-- Карточка-кнопка быстрого добавления ещё одного зала -->
+                  <button type="button" data-plan-add-hall="${cIdx}" style="background:transparent;border:2px dashed color-mix(in srgb, var(--teal) 45%, var(--line));border-radius:10px;padding:16px;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--teal);font-weight:800;font-size:13px;cursor:pointer;min-height:86px">
+                    <span>＋ Добавить зал №${halls.length + 1} в г. ${escapeHTML(cityObj.cityName)}</span>
+                  </button>
                 </div>
               </div>
             `;
@@ -9367,119 +9786,89 @@ function renderPlanView() {
     `;
   } else if (planWizardStep === 3) {
     // ==========================================
-    // STEP 3: DAYS OF WEEK PER HALL
+    // STEP 3: UNIFIED WORKING DAYS + PRESENTATION TIMES IN ONE VIEW
     // ==========================================
-    const allDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     stepBodyHtml = `
       <div class="plan-step-card">
         <div class="plan-step-title-row">
           <div>
-            <h2>Этап 3: Дни, в которые работают выбранные залы</h2>
-            <p>Отметьте дни недели проведения презентаций для каждого зала. Доступны быстрые шаблоны.</p>
+            <h2>Этап 3: Дни работы и времена презентаций (${activeWeekNum}-я неделя ${BAUER_CALENDAR_YEAR} · Вт–Пн)</h2>
+            <p>Отмечайте рабочие дни зала (Вт, Ср, Чт, Пт, Сб, Вс, Пн) и <strong>сразу в карточке каждого дня</strong> ставьте времена презентаций. Все времена презентаций по Москве уже перенесены в дни работы.</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="plan-week-btn" id="plan-btn-apply-all-days">Применить «Пн–Вс (все дни)» ко всем</button>
-            <button type="button" class="plan-week-btn" id="plan-btn-apply-workdays">Применить «Будни (Пн–Пт)» ко всем</button>
+            <button type="button" class="plan-week-btn" id="plan-btn-apply-tue-sun-days">Всем залам: Вт–Вс (6 дн.)</button>
+            <button type="button" class="plan-week-btn" id="plan-btn-apply-all-days">Всем залам: Все 7 дней (Вт–Пн)</button>
+            <button type="button" class="plan-week-btn" id="plan-btn-apply-standard-times">Всем залам и дням: 10:00, 14:00, 18:00</button>
           </div>
         </div>
 
         <div class="plan-city-halls-grid">
           ${planDraft.cities.map((cityObj, cIdx) => `
             <div class="plan-hall-block">
-              <strong style="font-size:16px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
-              <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
-                ${(cityObj.halls || []).map((hall, hIdx) => {
-                  const hallDays = hall.days || [];
-                  return `
-                    <div style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px">
-                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-                        <strong>Зал ${hIdx + 1}: ${escapeHTML(hall.hallName || 'Основной')}</strong>
-                        <div style="display:flex;gap:4px">
-                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},all" style="padding:3px 8px;font-size:11px">Все 7</button>
-                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},work" style="padding:3px 8px;font-size:11px">Пн-Пт</button>
-                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},weekend" style="padding:3px 8px;font-size:11px">Сб-Вс</button>
-                        </div>
-                      </div>
-                      <div class="plan-days-chips">
-                        ${allDays.map(dayName => {
-                          const isChecked = hallDays.includes(dayName);
-                          const dateStr = getCalculatedDateForDay(planDraft.weekStart, dayName);
-                          return `
-                            <label class="plan-day-chip">
-                              <input type="checkbox" data-plan-day-toggle="${cIdx},${hIdx},${dayName}" ${isChecked ? 'checked' : ''} style="display:none">
-                              <span>${dayName}</span>
-                              ${dateStr ? `<small style="opacity:0.75;font-size:10px">${formatRuShortDate(dateStr)}</small>` : ''}
-                            </label>
-                          `;
-                        }).join('')}
-                      </div>
-                    </div>
-                  `;
-                }).join('')}
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+                <strong style="font-size:17px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
+                <button type="button" class="plan-week-btn" data-plan-add-hall="${cIdx}" style="padding:4px 10px;font-size:11.5px">+ Добавить ещё зал в ${escapeHTML(cityObj.cityName)}</button>
               </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  } else if (planWizardStep === 4) {
-    // ==========================================
-    // STEP 4: PRESENTATION TIMES PER HALL AND PER DAY
-    // ==========================================
-    const daysWeekOrder = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-    stepBodyHtml = `
-      <div class="plan-step-card">
-        <div class="plan-step-title-row">
-          <div>
-            <h2>Этап 4: Времена презентаций по залам и дням недели</h2>
-            <p>Для каждого дня недели можно задать своё расписание презентаций (нажимайте на часы для быстрого включения/выключения слота в конкретный день или используйте шаблоны).</p>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="plan-week-btn" id="plan-btn-apply-standard-times">Ко всем залам и дням: 10:00, 14:00, 18:00</button>
-          </div>
-        </div>
-
-        <div class="plan-city-halls-grid">
-          ${planDraft.cities.map((cityObj, cIdx) => `
-            <div class="plan-hall-block">
-              <strong style="font-size:16px;color:var(--teal)">📍 ${escapeHTML(cityObj.cityName)}</strong>
-              <div style="display:flex;flex-direction:column;gap:14px;margin-top:10px">
+              <div style="display:flex;flex-direction:column;gap:16px">
                 ${(cityObj.halls || []).map((hall, hIdx) => {
                   ensureHallDayTimes(hall);
-                  const sortedDays = [...(hall.days || [])].map(d => typeof d === 'string' ? d : d.day).sort((a, b) => {
-                    const ia = daysWeekOrder.indexOf(a?.slice(0, 2));
-                    const ib = daysWeekOrder.indexOf(b?.slice(0, 2));
-                    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-                  });
+                  const hallDays = hall.days || [];
+                  const sortedDays = sortBauerDays(hallDays);
                   return `
                     <div style="background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:14px">
-                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--line)">
+                      <!-- Шапка зала: выбор рабочих дней и быстрые шаблоны времени -->
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--line)">
                         <div>
-                          <strong style="font-size:14.5px">Зал ${hIdx + 1}: ${escapeHTML(hall.hallName || 'Основной')}</strong>
+                          <strong style="font-size:15px">Зал ${hIdx + 1}: ${escapeHTML(hall.hallName || 'Основной')}</strong>
                           <span style="font-size:12px;color:var(--muted);margin-left:8px">Рабочих дней: ${sortedDays.length}</span>
                         </div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                          <span style="font-size:11.5px;color:var(--muted);font-weight:600">Ко всем дням зала:</span>
-                          <button type="button" class="plan-week-btn" data-plan-hall-all-times="${cIdx},${hIdx},10-14-18" style="padding:4px 9px;font-size:11.5px">10:00, 14:00, 18:00</button>
-                          <button type="button" class="plan-week-btn" data-plan-hall-all-times="${cIdx},${hIdx},11-15-19" style="padding:4px 9px;font-size:11.5px">11:00, 15:00, 19:00</button>
+                          <span style="font-size:11.5px;color:var(--muted);font-weight:700">Дни:</span>
+                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},tue_sun" style="padding:3px 8px;font-size:11px">Вт–Вс</button>
+                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},all" style="padding:3px 8px;font-size:11px">Все 7 (Вт–Пн)</button>
+                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},work" style="padding:3px 8px;font-size:11px">Будни</button>
+                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},weekend" style="padding:3px 8px;font-size:11px">Сб–Вс</button>
+                          <span style="font-size:11.5px;color:var(--muted);font-weight:700;margin-left:6px">Время на все дни зала:</span>
+                          <button type="button" class="plan-week-btn" data-plan-hall-all-times="${cIdx},${hIdx},10-14-18" style="padding:3px 8px;font-size:11px">10:00, 14:00, 18:00</button>
+                          <button type="button" class="plan-week-btn" data-plan-hall-all-times="${cIdx},${hIdx},11-15-19" style="padding:3px 8px;font-size:11px">11:00, 15:00, 19:00</button>
                         </div>
                       </div>
 
-                      ${!sortedDays.length ? '<p class="psb-hint" style="margin:0">Для этого зала не выбраны рабочие дни на Шаге 3.</p>' : `
-                        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(235px, 1fr));gap:10px">
+                      <!-- Переключатели дней недели (Вт, Ср, Чт, Пт, Сб, Вс, Пн) по календарю 2026 -->
+                      <div style="margin-bottom:12px">
+                        <div style="font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:6px">Отметьте рабочие дни зала (нажмите на день, чтобы включить или выключить):</div>
+                        <div class="plan-days-chips">
+                          ${BAUER_WEEK_DAYS.map(dayName => {
+                            const isChecked = hallDays.includes(dayName);
+                            const dateStr = getCalculatedDateForDay(weekStartDate, dayName);
+                            return `
+                              <label class="plan-day-chip">
+                                <input type="checkbox" data-plan-day-toggle="${cIdx},${hIdx},${dayName}" ${isChecked ? 'checked' : ''} style="display:none">
+                                <span>${dayName}</span>
+                                ${dateStr ? `<small style="opacity:0.85;font-size:10.5px">${formatRuShortDate(dateStr)}</small>` : ''}
+                              </label>
+                            `;
+                          }).join('')}
+                        </div>
+                      </div>
+
+                      <!-- Карточки рабочих дней с временами презентаций прямо внутри дня -->
+                      ${!sortedDays.length ? '<p class="psb-hint" style="margin:0">Отметьте хотя бы один рабочий день выше, чтобы задать время презентаций.</p>' : `
+                        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(238px, 1fr));gap:10px">
                           ${sortedDays.map(dayName => {
-                            const dateStr = getCalculatedDateForDay(planDraft.weekStart, dayName);
+                            const dateStr = getCalculatedDateForDay(weekStartDate, dayName);
                             const dTimes = hall.dayTimes?.[dayName] || [];
                             return `
-                              <div style="background:var(--surface-alt);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
-                                <div style="display:flex;justify-content:space-between;align-items:center;gap:4px">
+                              <div style="background:var(--surface-alt);border:1.5px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:4px;border-bottom:1px solid var(--line);padding-bottom:6px">
                                   <div>
-                                    <strong style="font-size:13.5px;color:var(--ink)">${escapeHTML(dayName)}</strong>
-                                    ${dateStr ? `<small style="color:var(--muted);margin-left:4px;font-weight:600">${escapeHTML(formatRuShortDate(dateStr))}</small>` : ''}
+                                    <strong style="font-size:14px;color:var(--teal)">${escapeHTML(dayName)}</strong>
+                                    ${dateStr ? `<span style="color:var(--ink);margin-left:5px;font-size:12.5px;font-weight:700">${escapeHTML(formatRuShortDate(dateStr))}</span>` : ''}
                                   </div>
                                   <div style="display:flex;gap:3px">
-                                    <button type="button" class="plan-week-btn" data-plan-day-preset="${cIdx},${hIdx},${escapeHTML(dayName)},10-14-18" style="padding:2px 6px;font-size:10.5px" title="Поставить 10:00, 14:00, 18:00 на ${escapeHTML(dayName)}">10/14/18</button>
-                                    <button type="button" class="plan-week-btn" data-plan-day-preset="${cIdx},${hIdx},${escapeHTML(dayName)},11-15-19" style="padding:2px 6px;font-size:10.5px" title="Поставить 11:00, 15:00, 19:00 на ${escapeHTML(dayName)}">11/15/19</button>
+                                    <button type="button" class="plan-week-btn" data-plan-day-preset="${cIdx},${hIdx},${escapeHTML(dayName)},10-14-18" style="padding:2px 6px;font-size:10px" title="Поставить 10:00, 14:00, 18:00 на ${escapeHTML(dayName)}">10/14/18</button>
+                                    <button type="button" class="plan-week-btn" data-plan-day-preset="${cIdx},${hIdx},${escapeHTML(dayName)},11-15-19" style="padding:2px 6px;font-size:10px" title="Поставить 11:00, 15:00, 19:00 на ${escapeHTML(dayName)}">11/15/19</button>
+                                    <button type="button" class="plan-week-btn" data-plan-copy-day-to-hall="${cIdx},${hIdx},${escapeHTML(dayName)}" style="padding:2px 6px;font-size:10px" title="Скопировать время с ${escapeHTML(dayName)} на все рабочие дни этого зала">На все дни</button>
                                   </div>
                                 </div>
 
@@ -9529,19 +9918,48 @@ function renderPlanView() {
     `;
   }
 
-  // Complete HTML with Header, Stepper, Step Card, and Actions Bar
+  // Complete HTML with Built-in 2026 Week Calendar Header, Stepper, Step Card, and Actions Bar
   container.innerHTML = `
     <header class="plan-header">
-      <div>
-        <h1>📅 План презентаций BAUER</h1>
-        <p>Мастер формирования расписания презентаций по городам и залам для руководителей. Сохранённые слоты времени передаются операторам на этапе «Выбор времени».</p>
-        <div class="plan-week-bar">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
-            <span>Начало недели (Понедельник):</span>
-            <input type="date" id="plan-week-start-input" class="whole-sms-input" style="width:auto;padding:4px 10px" value="${escapeHTML(weekStartDate)}">
-          </label>
+      <div style="flex:1;min-width:300px">
+        <h1>📅 План презентаций BAUER · Календарь недель ${BAUER_CALENDAR_YEAR}</h1>
+        <p>Встроенный календарь текущих недель ${BAUER_CALENDAR_YEAR} года (с 44-й недели · цикл дней: <strong>Вт, Ср, Чт, Пт, Сб, Вс, Пн</strong>). Если не менять расписание на следующую неделю, времена презентаций автоматически дублируются и сохраняются.</p>
+
+        <!-- Встроенный календарь недель 2026 года -->
+        <div style="margin-top:14px;background:var(--surface-alt);border:1.5px solid color-mix(in srgb, var(--teal) 35%, var(--line));border-radius:14px;padding:12px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="plan-always-tag" style="background:var(--teal)">📆 Календарь ${BAUER_CALENDAR_YEAR}</span>
+              <button type="button" class="plan-week-btn" data-plan-week-nav="-1" title="Предыдущая неделя">◀ Нед. ${Math.max(1, activeWeekNum - 1)}</button>
+              <select id="plan-week-number-select" class="whole-sms-input" style="width:auto;font-weight:750;padding:5px 10px">
+                ${weekOptionsHtml}
+              </select>
+              <button type="button" class="plan-week-btn" data-plan-week-nav="1" title="Следующая неделя (автоматически дублирует времена, если они не менялись)">Нед. ${Math.min(52, activeWeekNum + 1)} ▶</button>
+              ${activeWeekNum !== currentSystemWeek ? `
+                <button type="button" class="plan-week-btn" data-plan-week-today style="color:var(--teal);border-color:var(--teal)">Вернуться к текущей (${currentSystemWeek}-я нед.)</button>
+              ` : ''}
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;cursor:pointer" title="Если руководитель не вносил изменений на следующую неделю, времена презентаций автоматически дублируются и сохраняются">
+              <input type="checkbox" id="plan-auto-duplicate-toggle" ${planDraft.autoDuplicateNextWeek !== false ? 'checked' : ''}>
+              <span>Автодублирование времён на следующую неделю</span>
+            </label>
+          </div>
+
+          <!-- Полоса 7 дней выбранной недели: Вт, Ср, Чт, Пт, Сб, Вс, Пн -->
+          <div style="display:grid;grid-template-columns:repeat(7, minmax(95px, 1fr));gap:6px;overflow-x:auto">
+            ${weekCalendarDays.map(cd => `
+              <div style="background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;text-align:center">
+                <div style="font-size:11px;font-weight:800;color:var(--teal);text-transform:uppercase">${escapeHTML(cd.fullDay)} (${escapeHTML(cd.day)})</div>
+                <div style="font-size:13px;font-weight:800;color:var(--ink);margin-top:2px">${escapeHTML(cd.shortRu)}</div>
+                <div style="font-size:10px;color:var(--muted)">${escapeHTML(cd.dmy)}</div>
+              </div>
+            `).join('')}
+          </div>
+
           ${activePresentationPlan?.updatedAt ? `
-            <span class="psb-hint">Последнее сохранение: ${new Date(activePresentationPlan.updatedAt).toLocaleString('ru')} (${escapeHTML(activePresentationPlan.updatedBy || 'Руководитель')})</span>
+            <div style="margin-top:8px;font-size:11.5px;color:var(--muted)">
+              ✓ Последнее сохранение: <strong>${new Date(activePresentationPlan.updatedAt).toLocaleString('ru')}</strong> (${escapeHTML(activePresentationPlan.updatedBy || 'Руководитель')})
+            </div>
           ` : ''}
         </div>
       </div>
@@ -9570,7 +9988,7 @@ function renderPlanView() {
         ` : ''}
       </div>
       <div style="display:flex;gap:12px;align-items:center">
-        ${planWizardStep < 4 ? `
+        ${planWizardStep < 3 ? `
           <button type="button" class="plan-week-btn" id="plan-btn-next-step" style="background:var(--ink);color:#fff;border-color:var(--ink);padding:10px 18px;font-size:13px">
             Следующий этап: ${steps[planWizardStep]?.title || 'Далее'} →
           </button>
@@ -9599,11 +10017,12 @@ function refreshScheduleViewsWithoutScroll() {
       const headHtml = headRow ? headRow.outerHTML : '';
       art.innerHTML = `${headHtml}${renderStageLines(stg, true, data.gifts)}${operatorTipMarkup(stg)}`;
     });
-    if (selectedPlanSlot) {
+    const validSlot = getValidSelectedSlotForCurrentCity();
+    if (validSlot) {
       const wDate = wv.querySelector('#w-sms-date');
       const wTime = wv.querySelector('#w-sms-time');
-      if (wDate && selectedPlanSlot.date) { wDate.value = selectedPlanSlot.date; wDate.dispatchEvent(new Event('input', { bubbles: true })); }
-      if (wTime && selectedPlanSlot.time) { wTime.value = selectedPlanSlot.time; wTime.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (wDate && validSlot.date) { wDate.value = validSlot.date; wDate.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (wTime && validSlot.time) { wTime.value = validSlot.time; wTime.dispatchEvent(new Event('input', { bubbles: true })); }
     }
     if (wc) wc.scrollTop = prevScroll;
   }
@@ -9615,22 +10034,68 @@ function refreshScheduleViewsWithoutScroll() {
 
 async function savePresentationPlanToServer() {
   if (!planDraft) return;
-  const weekStartEl = document.getElementById('plan-week-start-input');
-  if (weekStartEl && weekStartEl.value) {
-    planDraft.weekStart = weekStartEl.value;
-  }
+  const wn = planDraft.weekNumber || getCurrentBauerWeekNumber();
+  planDraft.weekNumber = wn;
+  planDraft.calendarYear = BAUER_CALENDAR_YEAR;
+  planDraft.weekStart = getBauerWeekStartTuesday(wn, BAUER_CALENDAR_YEAR);
   (planDraft.cities || []).forEach(c => (c.halls || []).forEach(h => ensureHallDayTimes(h)));
+
+  if (!planDraft.weeklyPlans || typeof planDraft.weeklyPlans !== 'object') {
+    planDraft.weeklyPlans = {};
+  }
+  planDraft.weeklyPlans[String(wn)] = {
+    weekNumber: wn,
+    weekStart: planDraft.weekStart,
+    cities: JSON.parse(JSON.stringify(planDraft.cities || [])),
+    updatedAt: Date.now()
+  };
+
+  // Если включено автодублирование и на следующую неделю (wn + 1) ещё нет отдельных правок — дублируем и сохраняем на следующую неделю тоже
+  if (planDraft.autoDuplicateNextWeek !== false && wn < 52) {
+    const nextWn = wn + 1;
+    if (!planDraft.weeklyPlans[String(nextWn)] || planDraft.weeklyPlans[String(nextWn)].autoDuplicatedFromWeek) {
+      planDraft.weeklyPlans[String(nextWn)] = {
+        weekNumber: nextWn,
+        weekStart: getBauerWeekStartTuesday(nextWn, BAUER_CALENDAR_YEAR),
+        cities: JSON.parse(JSON.stringify(planDraft.cities || [])),
+        autoDuplicatedFromWeek: wn,
+        updatedAt: Date.now()
+      };
+    }
+  }
+
+  persistDraftLocally();
+
   try {
-    const saved = await api('/api/presentation-plan', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(planDraft)
-    });
-    activePresentationPlan = saved || planDraft;
+    let saved = null;
+    try {
+      saved = await api('/api/presentation-plan', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(planDraft)
+      });
+    } catch (apiErr) {
+      // Резервное сохранение в локальное хранилище VaultDB, чтобы кнопка сохранения работала всегда без ошибки «Маршрут не найден»
+      saved = await api_local_vault('/api/presentation-plan', {
+        method: 'PUT',
+        body: JSON.stringify(planDraft)
+      });
+    }
+    activePresentationPlan = saved || {
+      ...planDraft,
+      updatedAt: Date.now(),
+      updatedBy: currentUser?.displayName || currentUser?.login || 'Руководитель'
+    };
+    planDraft.updatedAt = activePresentationPlan.updatedAt;
+    planDraft.updatedBy = activePresentationPlan.updatedBy;
+    try {
+      await VaultDB.set('presentationPlan', activePresentationPlan);
+    } catch {}
     try {
       localStorage.setItem('bauer-presentation-plan', JSON.stringify(activePresentationPlan));
+      localStorage.setItem('bauer-presentation-plan-draft', JSON.stringify(planDraft));
     } catch {}
-    toast('✓ План презентаций успешно сохранён на сервере!');
+    toast(`✓ План презентаций на ${wn}-ю неделю ${BAUER_CALENDAR_YEAR} успешно сохранён!`);
     renderPlanView();
     refreshScheduleViewsWithoutScroll();
   } catch (e) {
@@ -9646,10 +10111,31 @@ document.addEventListener('click', e => {
     return;
   }
 
+  // Week calendar navigation buttons
+  const weekNavBtn = e.target.closest('[data-plan-week-nav]');
+  if (weekNavBtn && planDraft) {
+    const delta = Number(weekNavBtn.dataset.planWeekNav || 0);
+    const nextW = Math.max(1, Math.min(52, (planDraft.weekNumber || getCurrentBauerWeekNumber()) + delta));
+    switchPlanWeek(nextW);
+    renderPlanView();
+    refreshScheduleViewsWithoutScroll();
+    toast(`Переключено на ${nextW}-ю неделю ${BAUER_CALENDAR_YEAR} года`);
+    return;
+  }
+
+  if (e.target.closest('[data-plan-week-today]') && planDraft) {
+    const curW = getCurrentBauerWeekNumber();
+    switchPlanWeek(curW);
+    renderPlanView();
+    refreshScheduleViewsWithoutScroll();
+    toast(`Текущая ${curW}-я неделя ${BAUER_CALENDAR_YEAR} года`);
+    return;
+  }
+
   // Stepper navigation
   const gotoStepBtn = e.target.closest('[data-plan-goto-step]');
   if (gotoStepBtn) {
-    planWizardStep = Number(gotoStepBtn.dataset.planGotoStep);
+    planWizardStep = Math.min(3, Math.max(1, Number(gotoStepBtn.dataset.planGotoStep)));
     renderPlanView();
     return;
   }
@@ -9658,7 +10144,7 @@ document.addEventListener('click', e => {
     return;
   }
   if (e.target.closest('#plan-btn-next-step')) {
-    if (planWizardStep < 4) { planWizardStep++; renderPlanView(); }
+    if (planWizardStep < 3) { planWizardStep++; renderPlanView(); }
     return;
   }
 
@@ -9669,11 +10155,13 @@ document.addEventListener('click', e => {
     const existingIdx = planDraft.cities.findIndex(c => c.cityName === cName);
     if (existingIdx >= 0) {
       planDraft.cities.splice(existingIdx, 1);
+    } else if (cName === 'Москва') {
+      planDraft.cities.push(createDefaultMoscowCityPlan(null));
     } else {
       const dbVenues = getDatabaseHallsForCity(cName);
       const newHall = {
         hallName: dbVenues[0]?.hall || 'Основной зал',
-        days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+        days: ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
         times: ['10:00', '14:00', '18:00']
       };
       ensureHallDayTimes(newHall);
@@ -9682,6 +10170,7 @@ document.addEventListener('click', e => {
         halls: [newHall]
       });
     }
+    persistDraftLocally();
     renderPlanView();
     return;
   }
@@ -9690,19 +10179,24 @@ document.addEventListener('click', e => {
   if (e.target.closest('#plan-btn-select-always') && planDraft) {
     ALWAYS_WORKING_CITIES.forEach(cName => {
       if (!planDraft.cities.some(c => c.cityName === cName)) {
-        const dbVenues = getDatabaseHallsForCity(cName);
-        const newHall = {
-          hallName: dbVenues[0]?.hall || 'Основной зал',
-          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-          times: ['10:00', '14:00', '18:00']
-        };
-        ensureHallDayTimes(newHall);
-        planDraft.cities.push({
-          cityName: cName,
-          halls: [newHall]
-        });
+        if (cName === 'Москва') {
+          planDraft.cities.push(createDefaultMoscowCityPlan(null));
+        } else {
+          const dbVenues = getDatabaseHallsForCity(cName);
+          const newHall = {
+            hallName: dbVenues[0]?.hall || 'Основной зал',
+            days: ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+            times: ['10:00', '14:00', '18:00']
+          };
+          ensureHallDayTimes(newHall);
+          planDraft.cities.push({
+            cityName: cName,
+            halls: [newHall]
+          });
+        }
       }
     });
+    persistDraftLocally();
     renderPlanView();
     return;
   }
@@ -9710,58 +10204,71 @@ document.addEventListener('click', e => {
     const all = getAllDatabaseCities();
     all.forEach(cName => {
       if (!planDraft.cities.some(c => c.cityName === cName)) {
-        const dbVenues = getDatabaseHallsForCity(cName);
-        const newHall = {
-          hallName: dbVenues[0]?.hall || 'Основной зал',
-          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-          times: ['10:00', '14:00', '18:00']
-        };
-        ensureHallDayTimes(newHall);
-        planDraft.cities.push({
-          cityName: cName,
-          halls: [newHall]
-        });
+        if (cName === 'Москва') {
+          planDraft.cities.push(createDefaultMoscowCityPlan(null));
+        } else {
+          const dbVenues = getDatabaseHallsForCity(cName);
+          const newHall = {
+            hallName: dbVenues[0]?.hall || 'Основной зал',
+            days: ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+            times: ['10:00', '14:00', '18:00']
+          };
+          ensureHallDayTimes(newHall);
+          planDraft.cities.push({
+            cityName: cName,
+            halls: [newHall]
+          });
+        }
       }
     });
+    persistDraftLocally();
     renderPlanView();
     return;
   }
   if (e.target.closest('#plan-btn-reset-cities') && planDraft) {
     planDraft.cities = [];
+    persistDraftLocally();
     renderPlanView();
     return;
   }
 
-  // Step 2: Toggle 2 halls
-  const twoHallsCb = e.target.closest('[data-plan-toggle-two-halls]');
-  if (twoHallsCb && planDraft) {
-    const cIdx = Number(twoHallsCb.dataset.planToggleTwoHalls);
+  // Step 2 & Step 3: Add unlimited hall (+ Добавить зал)
+  const addHallBtn = e.target.closest('[data-plan-add-hall]');
+  if (addHallBtn && planDraft) {
+    const cIdx = Number(addHallBtn.dataset.planAddHall);
     const city = planDraft.cities[cIdx];
     if (city) {
-      if (city.halls.length >= 2) {
-        city.halls = [city.halls[0]];
-      } else {
-        const dbVenues = getDatabaseHallsForCity(city.cityName);
-        const secondVenue = dbVenues.find(v => v.hall !== city.halls[0]?.hallName) || dbVenues[1];
-        const secondHall = {
-          hallName: secondVenue?.hall || 'Зал 2',
-          days: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'],
-          times: ['11:00', '15:00', '19:00']
-        };
-        ensureHallDayTimes(secondHall);
-        city.halls.push(secondHall);
-      }
+      if (!Array.isArray(city.halls)) city.halls = [];
+      const dbVenues = getDatabaseHallsForCity(city.cityName);
+      const usedNames = new Set(city.halls.map(h => (h.hallName || '').trim().toLowerCase()));
+      const unusedVenue = dbVenues.find(v => !usedNames.has(v.hall.trim().toLowerCase()));
+      const nextNum = city.halls.length + 1;
+      const baseHall = city.halls[0];
+      const baseDays = Array.isArray(baseHall?.days) && baseHall.days.length ? [...baseHall.days] : ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      const baseTimes = Array.isArray(baseHall?.times) && baseHall.times.length ? [...baseHall.times] : ['10:00', '14:00', '18:00'];
+      const newHall = {
+        hallName: unusedVenue ? unusedVenue.hall : `Зал ${nextNum}`,
+        isCustom: !unusedVenue && dbVenues.length > 0,
+        days: [...baseDays],
+        times: [...baseTimes],
+        dayTimes: Object.fromEntries(baseDays.map(d => [d, [...baseTimes]]))
+      };
+      ensureHallDayTimes(newHall);
+      city.halls.push(newHall);
+      persistDraftLocally();
+      renderPlanView();
+      toast(`Добавлен Зал ${nextNum} для г. ${city.cityName}`);
     }
-    renderPlanView();
     return;
   }
 
-  // Step 2: Remove hall 2
+  // Step 2: Remove hall
   const removeHallBtn = e.target.closest('[data-plan-remove-hall]');
   if (removeHallBtn && planDraft) {
     const [cIdx, hIdx] = removeHallBtn.dataset.planRemoveHall.split(',').map(Number);
-    if (planDraft.cities[cIdx]?.halls) {
+    if (planDraft.cities[cIdx]?.halls && planDraft.cities[cIdx].halls.length > 1) {
       planDraft.cities[cIdx].halls.splice(hIdx, 1);
+      persistDraftLocally();
       renderPlanView();
     }
     return;
@@ -9773,32 +10280,56 @@ document.addEventListener('click', e => {
     const [cIdx, hIdx, type] = presetDaysBtn.dataset.planPresetDays.split(',');
     const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
     if (hall) {
-      if (type === 'all') hall.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-      if (type === 'work') hall.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'];
+      if (type === 'tue_sun') hall.days = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      if (type === 'all') hall.days = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс', 'Пн'];
+      if (type === 'work') hall.days = ['Вт', 'Ср', 'Чт', 'Пт'];
       if (type === 'weekend') hall.days = ['Сб', 'Вс'];
       ensureHallDayTimes(hall);
+      persistDraftLocally();
       renderPlanView();
     }
     return;
   }
-  if (e.target.closest('#plan-btn-apply-all-days') && planDraft) {
+  if (e.target.closest('#plan-btn-apply-tue-sun-days') && planDraft) {
     planDraft.cities.forEach(c => (c.halls || []).forEach(h => {
-      h.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      h.days = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
       ensureHallDayTimes(h);
     }));
+    persistDraftLocally();
     renderPlanView();
     return;
   }
-  if (e.target.closest('#plan-btn-apply-workdays') && planDraft) {
+  if (e.target.closest('#plan-btn-apply-all-days') && planDraft) {
     planDraft.cities.forEach(c => (c.halls || []).forEach(h => {
-      h.days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт'];
+      h.days = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс', 'Пн'];
       ensureHallDayTimes(h);
     }));
+    persistDraftLocally();
     renderPlanView();
     return;
   }
 
-  // Step 4: Per-day time toggles, chips & presets
+  // Step 3: Copy a single day's times to all working days of the hall
+  const copyDayToHallBtn = e.target.closest('[data-plan-copy-day-to-hall]');
+  if (copyDayToHallBtn && planDraft) {
+    const [cIdx, hIdx, dayName] = copyDayToHallBtn.dataset.planCopyDayToHall.split(',');
+    const hall = planDraft.cities[Number(cIdx)]?.halls[Number(hIdx)];
+    if (hall && dayName) {
+      ensureHallDayTimes(hall);
+      const srcTimes = [...(hall.dayTimes[dayName] || ['10:00', '14:00', '18:00'])];
+      (hall.days || []).forEach(d => {
+        const dKey = typeof d === 'string' ? d : d.day;
+        hall.dayTimes[dKey] = [...srcTimes];
+      });
+      syncHallFlatTimes(hall);
+      persistDraftLocally();
+      renderPlanView();
+      toast(`Время с ${dayName} скопировано на все дни зала`);
+    }
+    return;
+  }
+
+  // Step 3: Per-day time toggles, chips & presets
   const toggleDayTimeBtn = e.target.closest('[data-plan-toggle-day-time]');
   if (toggleDayTimeBtn && planDraft) {
     const [cIdx, hIdx, dayName, timeVal] = toggleDayTimeBtn.dataset.planToggleDayTime.split(',');
@@ -9812,6 +10343,7 @@ document.addEventListener('click', e => {
         hall.dayTimes[dayName] = sortTimesList([...list, timeVal]);
       }
       syncHallFlatTimes(hall);
+      persistDraftLocally();
       renderPlanView();
     }
     return;
@@ -9825,6 +10357,7 @@ document.addEventListener('click', e => {
       ensureHallDayTimes(hall);
       hall.dayTimes[dayName]?.splice(Number(tIdx), 1);
       syncHallFlatTimes(hall);
+      persistDraftLocally();
       renderPlanView();
     }
     return;
@@ -9838,6 +10371,7 @@ document.addEventListener('click', e => {
       ensureHallDayTimes(hall);
       hall.dayTimes[dayName] = (type === '10-14-18') ? ['10:00', '14:00', '18:00'] : ['11:00', '15:00', '19:00'];
       syncHallFlatTimes(hall);
+      persistDraftLocally();
       renderPlanView();
     }
     return;
@@ -9857,6 +10391,7 @@ document.addEventListener('click', e => {
           hall.dayTimes[dayName] = sortTimesList([...list, val]);
         }
         syncHallFlatTimes(hall);
+        persistDraftLocally();
         renderPlanView();
       }
     }
@@ -9876,6 +10411,7 @@ document.addEventListener('click', e => {
         hall.dayTimes[dName] = [...preset];
       });
       syncHallFlatTimes(hall);
+      persistDraftLocally();
       renderPlanView();
     }
     return;
@@ -9891,6 +10427,7 @@ document.addEventListener('click', e => {
       });
       syncHallFlatTimes(h);
     }));
+    persistDraftLocally();
     renderPlanView();
     return;
   }
@@ -9923,7 +10460,7 @@ document.addEventListener('click', e => {
       }
     }
     refreshScheduleViewsWithoutScroll();
-    toast(`✓ Время зафиксировано: ${day} в ${time}`);
+    toast(`✓ Время зафиксировано: ${day} (${formatRuShortDate(date)}) в ${time}`);
     return;
   }
 
@@ -9955,11 +10492,14 @@ document.addEventListener('change', e => {
       if (!hall.days) hall.days = [];
       if (e.target.checked) {
         if (!hall.days.includes(dayName)) hall.days.push(dayName);
+        hall.days = sortBauerDays(hall.days);
         ensureHallDayTimes(hall);
       } else {
         hall.days = hall.days.filter(d => d !== dayName);
         syncHallFlatTimes(hall);
       }
+      persistDraftLocally();
+      renderPlanView();
     }
     return;
   }
@@ -9968,18 +10508,29 @@ document.addEventListener('change', e => {
     const [cIdx, hIdx] = e.target.dataset.planHallSelect.split(',').map(Number);
     const hall = planDraft.cities[cIdx]?.halls[hIdx];
     if (hall) {
-      if (e.target.value !== '__custom__') {
+      if (e.target.value === '__custom__') {
+        hall.isCustom = true;
+      } else {
+        hall.isCustom = false;
         hall.hallName = e.target.value;
-        const txtInp = document.querySelector(`[data-plan-hall-name="${cIdx},${hIdx}"]`);
-        if (txtInp) txtInp.value = e.target.value;
       }
+      persistDraftLocally();
+      renderPlanView();
     }
     return;
   }
 
-  if (e.target.id === 'plan-week-start-input' && planDraft) {
-    planDraft.weekStart = e.target.value;
+  if (e.target.id === 'plan-week-number-select' && planDraft) {
+    const nextW = Number(e.target.value);
+    switchPlanWeek(nextW);
     renderPlanView();
+    refreshScheduleViewsWithoutScroll();
+    return;
+  }
+
+  if (e.target.id === 'plan-auto-duplicate-toggle' && planDraft) {
+    planDraft.autoDuplicateNextWeek = Boolean(e.target.checked);
+    persistDraftLocally();
     return;
   }
 });
@@ -9990,6 +10541,8 @@ document.addEventListener('input', e => {
     const hall = planDraft.cities[cIdx]?.halls[hIdx];
     if (hall) {
       hall.hallName = e.target.value;
+      hall.isCustom = true;
+      persistDraftLocally();
     }
   }
 });

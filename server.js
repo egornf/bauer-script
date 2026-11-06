@@ -1496,10 +1496,49 @@ function createAppServer(options = {}) {
       }
 
       if (pathname === '/api/presentation-plan') {
+        const computeCurrentBauerWeek = () => {
+          const now = new Date();
+          const refTue = new Date(2026, 0, 6);
+          const curIn2026 = new Date(2026, now.getMonth(), now.getDate());
+          const diffDays = Math.floor((curIn2026.getTime() - refTue.getTime()) / 86400000);
+          return diffDays < 0 ? 1 : Math.max(1, Math.min(52, Math.floor(diffDays / 7) + 1));
+        };
+        const computeWeekStartTuesday = (weekNum = 44, year = 2026) => {
+          const wn = Math.max(1, Math.min(53, Number(weekNum) || 44));
+          const d = new Date(year, 0, 6 + (wn - 1) * 7);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const dt = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${dt}`;
+        };
+
         if (method === 'GET') {
-          return sendJson(res, 200, appData.presentationPlan || null);
+          let plan = appData.presentationPlan || null;
+          if (plan && Array.isArray(plan.cities) && plan.cities.length && plan.autoDuplicateNextWeek !== false) {
+            const curWeek = computeCurrentBauerWeek();
+            if (plan.weekNumber && plan.weekNumber < curWeek) {
+              if (!plan.weeklyPlans || typeof plan.weeklyPlans !== 'object') {
+                plan.weeklyPlans = {};
+              }
+              if (!plan.weeklyPlans[String(curWeek)]) {
+                plan.weeklyPlans[String(curWeek)] = {
+                  weekNumber: curWeek,
+                  weekStart: computeWeekStartTuesday(curWeek, plan.calendarYear || 2026),
+                  cities: JSON.parse(JSON.stringify(plan.cities)),
+                  autoDuplicatedFromWeek: plan.weekNumber,
+                  updatedAt: Date.now()
+                };
+              }
+              plan.weekNumber = curWeek;
+              plan.weekStart = computeWeekStartTuesday(curWeek, plan.calendarYear || 2026);
+              plan.cities = JSON.parse(JSON.stringify(plan.weeklyPlans[String(curWeek)].cities));
+              appData.presentationPlan = plan;
+              store.saveAppData();
+            }
+          }
+          return sendJson(res, 200, plan);
         }
-        if (method === 'PUT') {
+        if (method === 'PUT' || method === 'POST') {
           if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
           if (!['OWNER', 'ADMIN', 'HEAD'].includes(auth.user.role) && !hasPermission(auth.user, 'addresses.manage')) {
             store.logEvent({ action: 'presentation_plan.update.denied', actor: auth.user, ip, userAgent, status: 'denied' });
@@ -1509,8 +1548,32 @@ function createAppServer(options = {}) {
           if (!body || typeof body !== 'object') {
             return sendJson(res, 400, { error: 'Некорректные данные плана презентаций.' });
           }
+          const wn = Number(body.weekNumber) || computeCurrentBauerWeek();
+          const weekStart = body.weekStart || computeWeekStartTuesday(wn, body.calendarYear || 2026);
+          const weeklyPlans = (body.weeklyPlans && typeof body.weeklyPlans === 'object') ? { ...body.weeklyPlans } : {};
+          if (Array.isArray(body.cities)) {
+            weeklyPlans[String(wn)] = {
+              weekNumber: wn,
+              weekStart,
+              cities: body.cities,
+              updatedAt: Date.now()
+            };
+            if (body.autoDuplicateNextWeek !== false && wn < 52 && (!weeklyPlans[String(wn + 1)] || weeklyPlans[String(wn + 1)].autoDuplicatedFromWeek)) {
+              weeklyPlans[String(wn + 1)] = {
+                weekNumber: wn + 1,
+                weekStart: computeWeekStartTuesday(wn + 1, body.calendarYear || 2026),
+                cities: JSON.parse(JSON.stringify(body.cities)),
+                autoDuplicatedFromWeek: wn,
+                updatedAt: Date.now()
+              };
+            }
+          }
           const plan = {
             ...body,
+            calendarYear: body.calendarYear || 2026,
+            weekNumber: wn,
+            weekStart,
+            weeklyPlans,
             updatedAt: Date.now(),
             updatedBy: auth.user.displayName || auth.user.login || auth.user.name || auth.user.username,
             updatedByRole: auth.user.role
@@ -1523,6 +1586,7 @@ function createAppServer(options = {}) {
             ip,
             userAgent,
             details: {
+              weekNumber: plan.weekNumber,
               weekStart: plan.weekStart,
               citiesCount: Array.isArray(plan.cities) ? plan.cities.length : 0
             }
