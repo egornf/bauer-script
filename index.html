@@ -7578,6 +7578,7 @@ async function openDesignPanel(){
 async function openOwnerPanel(){
   await ensureAdmin(async()=>{
     if(!$('#drawer').hidden)closeDrawer();
+    if(typeof closeWhole==='function'&&$('#whole-view')&&!$('#whole-view').hidden)closeWhole();
     for(const el of document.querySelectorAll('main'))el.hidden=true;
     $('#edit').hidden=true;$('#all-objections').hidden=true;
     setTab('owner');
@@ -7588,6 +7589,9 @@ async function openOwnerPanel(){
 
 document.getElementById('owner-tab')?.addEventListener('click',openOwnerPanel);
 document.getElementById('header-user-btn')?.addEventListener('click',openOwnerPanel);
+document.getElementById('plan-tab')?.addEventListener('click',()=>{
+  if(typeof window.openPlanPanel==='function')window.openPlanPanel();
+});
 
 async function loadOwnerData(){
   try{
@@ -9084,21 +9088,34 @@ function initPlanDraft() {
 }
 
 async function openPlanPanel() {
-  await ensureAdmin(async () => {
-    if (!$('#drawer').hidden) closeDrawer();
-    for (const el of document.querySelectorAll('main')) el.hidden = true;
-    $('#edit').hidden = true;
-    $('#all-objections').hidden = true;
-    setTab('plan');
-    const pv = document.getElementById('plan-view');
-    if (pv) pv.hidden = false;
-    await loadPresentationPlan();
-    initPlanDraft();
-    renderPlanView();
-    if (pv) pv.hidden = false;
-  });
+  const showAndRender = async () => {
+    try {
+      if ($('#drawer') && !$('#drawer').hidden) closeDrawer();
+      if (typeof closeWhole === 'function' && $('#whole-view') && !$('#whole-view').hidden) closeWhole();
+      for (const el of document.querySelectorAll('main')) el.hidden = true;
+      if ($('#edit')) $('#edit').hidden = true;
+      if ($('#all-objections')) $('#all-objections').hidden = true;
+      setTab('plan');
+      const pv = document.getElementById('plan-view');
+      if (pv) pv.hidden = false;
+      if (!planDraft) initPlanDraft();
+      renderPlanView();
+      await loadPresentationPlan();
+      initPlanDraft();
+      renderPlanView();
+      if (pv) pv.hidden = false;
+    } catch (err) {
+      console.error('openPlanPanel error:', err);
+      toast('Ошибка открытия плана презентаций: ' + (err.message || err));
+    }
+  };
+  if (adminUnlocked && currentUser) {
+    await showAndRender();
+  } else {
+    await ensureAdmin(showAndRender);
+  }
 }
-document.getElementById('plan-tab')?.addEventListener('click', openPlanPanel);
+window.openPlanPanel = openPlanPanel;
 
 function renderPlanView() {
   const container = document.getElementById('plan-view');

@@ -806,7 +806,9 @@ function createAppServer(options = {}) {
           const html = fs.readFileSync(htmlPath, 'utf8');
           res.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
             'X-Content-Type-Options': 'nosniff',
             'X-Frame-Options': 'SAMEORIGIN'
           });
