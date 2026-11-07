@@ -2650,101 +2650,112 @@ function syncActiveScheduleHallToVenue(hIdx) {
 
 function duplicateSlotToConstructors(slot) {
   if (!slot) return;
-  const { day, date, time, city, hall } = slot;
-  const venue = findVenueForCityAndHall(city, hall);
-
-  // 1. Сохраняем выбранную площадку в bauer-venue и синхронизируем шапку
   try {
-    localStorage.setItem('bauer-venue', JSON.stringify({ city: city, hall: venue ? venue.id : '' }));
-  } catch {}
-  const vCity = document.getElementById('venue-city');
-  const vHall = document.getElementById('venue-hall');
-  if (vCity && vCity.value !== city) vCity.value = city;
-  if (vHall && venue && vHall.value !== venue.id) vHall.value = venue.id;
+    const { day, date, time, city, hall } = slot;
+    const venue = findVenueForCityAndHall(city, hall);
 
-  // 2. Дублируем в «Помощник СМС»
-  if (typeof smsValues !== 'undefined') {
-    if (city) smsValues.city = city;
-    if (date) smsValues.date = date;
-    if (time) smsValues.time = time;
-    if (venue) {
-      smsValues.hall = venue.id;
-      smsValues.route = venue.route || smsValues.route || '';
-    }
-    const smsView = document.getElementById('sms-view');
-    if (smsView) {
-      const sCity = smsView.querySelector('#sms-city');
-      const sHall = smsView.querySelector('#sms-hall');
-      const sDate = smsView.querySelector('#sms-date');
-      const sTime = smsView.querySelector('#sms-time');
-      if (sCity && city) sCity.value = city;
-      if (sHall && venue) {
-        if (typeof smsHallOptions === 'function') {
-          sHall.innerHTML = smsHallOptions();
-        }
-        sHall.value = venue.id;
+    // 1. Сохраняем выбранную площадку в bauer-venue и синхронизируем шапку
+    try {
+      localStorage.setItem('bauer-venue', JSON.stringify({ city: city, hall: venue ? venue.id : '' }));
+    } catch {}
+    const vCity = document.getElementById('venue-city');
+    const vHall = document.getElementById('venue-hall');
+    if (vCity && vCity.value !== city) vCity.value = city;
+    if (vHall && venue && vHall.value !== venue.id) vHall.value = venue.id;
+
+    // 2. Дублируем в «Помощник СМС»
+    if (typeof smsValues !== 'undefined' && smsValues) {
+      if (city) smsValues.city = city;
+      if (date) smsValues.date = date;
+      if (time) smsValues.time = time;
+      if (venue) {
+        smsValues.hall = venue.id;
+        smsValues.route = venue.route || smsValues.route || '';
       }
-      if (sDate && date) sDate.value = date;
-      if (sTime && time) sTime.value = time;
-      if (typeof updateSmsPreview === 'function') updateSmsPreview();
-      if (typeof updateSmsStatus === 'function') updateSmsStatus();
-    }
-  }
-
-  // 3. Дублируем в конструктор SMS внизу «Весь скрипт»
-  if (typeof wSmsValues !== 'undefined') {
-    if (city) wSmsValues.city = city;
-    if (date) wSmsValues.date = date;
-    if (time) wSmsValues.time = time;
-    if (venue) {
-      wSmsValues.hall = venue.id;
-      wSmsValues.route = venue.route || wSmsValues.route || '';
-    }
-  }
-  const wv = document.getElementById('whole-view');
-  if (wv) {
-    const wCity = wv.querySelector('#w-sms-city');
-    const wHall = wv.querySelector('#w-sms-hall');
-    const wDate = wv.querySelector('#w-sms-date');
-    const wTime = wv.querySelector('#w-sms-time');
-    if (wCity && city) wCity.value = city;
-    if (wHall && venue) {
-      const venues = (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues))
-        ? smsSource.venues.filter(v => v.city === city && !v.unavailable)
-        : [];
-      wHall.innerHTML = '<option value="">Выберите площадку</option>' +
-        venues.map(v => `<option value="${escapeHTML(v.id)}" ${v.id === venue.id ? 'selected' : ''}>${escapeHTML(v.hall)}</option>`).join('');
-      wHall.disabled = !venues.length;
-      wHall.value = venue.id;
-    }
-    if (wDate && date) wDate.value = date;
-    if (wTime && time) wTime.value = time;
-    const placeInfo = wv.querySelector('#w-sms-place-info');
-    if (placeInfo && venue) {
-      placeInfo.hidden = false;
-      placeInfo.innerHTML = `<strong>📍 ${escapeHTML(venue.address)}</strong>${venue.route ? `<p style="margin:4px 0 0;font-size:12px;color:var(--muted)">${escapeHTML(venue.route)}</p>` : ''}`;
-    }
-    const smsText = wv.querySelector('#w-sms-text');
-    const smsLen = wv.querySelector('#w-sms-len');
-    const smsVal = wv.querySelector('#w-sms-val');
-    const smsCopy = wv.querySelector('#w-sms-copy');
-    if (smsText && typeof SmsModel !== 'undefined' && typeof smsSource !== 'undefined') {
-      const gen = SmsModel.buildSms(wSmsValues, smsSource);
-      smsText.value = gen;
-      if (smsLen) smsLen.textContent = gen.length + ' зн.';
-      if (smsVal && smsCopy) {
-        const missing = SmsModel.smsMissing(wSmsValues, smsSource);
-        if (missing.length) {
-          smsVal.textContent = 'Осталось заполнить: ' + missing.join(', ') + '.';
-          smsVal.classList.remove('is-ready');
-          smsCopy.disabled = true;
-        } else {
-          smsVal.textContent = '✓ Всё готово. Проверьте текст перед отправкой.';
-          smsVal.classList.add('is-ready');
-          smsCopy.disabled = !gen.trim();
+      const smsView = document.getElementById('sms-view');
+      if (smsView && typeof smsInitialized !== 'undefined' && smsInitialized) {
+        const sCity = smsView.querySelector('#sms-city');
+        const sHall = smsView.querySelector('#sms-hall');
+        const sDate = smsView.querySelector('#sms-date');
+        const sTime = smsView.querySelector('#sms-time');
+        if (sCity && city) sCity.value = city;
+        if (sHall && venue) {
+          if (typeof smsHallOptions === 'function') {
+            try { smsHallOptions(); } catch {}
+          }
+          if (sHall) sHall.value = venue.id;
+        }
+        if (sDate && date) sDate.value = date;
+        if (sTime && time) sTime.value = time;
+        if (typeof updateSmsPreview === 'function') {
+          try { updateSmsPreview(); } catch {}
+        }
+        if (typeof updateSmsStatus === 'function') {
+          try { updateSmsStatus(); } catch {}
         }
       }
     }
+
+    // 3. Дублируем в конструктор SMS внизу «Весь скрипт»
+    try {
+      const activeWSms = (typeof window.wSmsValues !== 'undefined' && window.wSmsValues) ? window.wSmsValues : (typeof wSmsValues !== 'undefined' ? wSmsValues : null);
+      if (activeWSms) {
+        if (city) activeWSms.city = city;
+        if (date) activeWSms.date = date;
+        if (time) activeWSms.time = time;
+        if (venue) {
+          activeWSms.hall = venue.id;
+          activeWSms.route = venue.route || activeWSms.route || '';
+        }
+      }
+      const wv = document.getElementById('whole-view');
+      if (wv) {
+        const wCity = wv.querySelector('#w-sms-city');
+        const wHall = wv.querySelector('#w-sms-hall');
+        const wDate = wv.querySelector('#w-sms-date');
+        const wTime = wv.querySelector('#w-sms-time');
+        if (wCity && city) wCity.value = city;
+        if (wHall && venue) {
+          const venues = (typeof smsSource !== 'undefined' && Array.isArray(smsSource.venues))
+            ? smsSource.venues.filter(v => v.city === city && !v.unavailable)
+            : [];
+          wHall.innerHTML = '<option value="">Выберите площадку</option>' +
+            venues.map(v => `<option value="${escapeHTML(v.id)}" ${v.id === venue.id ? 'selected' : ''}>${escapeHTML(v.hall)}</option>`).join('');
+          wHall.disabled = !venues.length;
+          wHall.value = venue.id;
+        }
+        if (wDate && date) wDate.value = date;
+        if (wTime && time) wTime.value = time;
+        const placeInfo = wv.querySelector('#w-sms-place-info');
+        if (placeInfo && venue) {
+          placeInfo.hidden = false;
+          placeInfo.innerHTML = `<strong>📍 ${escapeHTML(venue.address)}</strong>${venue.route ? `<p style="margin:4px 0 0;font-size:12px;color:var(--muted)">${escapeHTML(venue.route)}</p>` : ''}`;
+        }
+        const smsText = wv.querySelector('#w-sms-text');
+        const smsLen = wv.querySelector('#w-sms-len');
+        const smsVal = wv.querySelector('#w-sms-val');
+        const smsCopy = wv.querySelector('#w-sms-copy');
+        if (smsText && activeWSms && typeof SmsModel !== 'undefined' && typeof smsSource !== 'undefined') {
+          const gen = SmsModel.buildSms(activeWSms, smsSource);
+          smsText.value = gen;
+          if (smsLen) smsLen.textContent = gen.length + ' зн.';
+          if (smsVal && smsCopy) {
+            const missing = SmsModel.smsMissing(activeWSms, smsSource);
+            if (missing.length) {
+              smsVal.textContent = 'Осталось заполнить: ' + missing.join(', ') + '.';
+              smsVal.classList.remove('is-ready');
+              smsCopy.disabled = true;
+            } else {
+              smsVal.textContent = '✓ Всё готово. Проверьте текст перед отправкой.';
+              smsVal.classList.add('is-ready');
+              smsCopy.disabled = !gen.trim();
+            }
+          }
+        }
+      }
+    } catch {}
+  } catch (e) {
+    console.warn('duplicateSlotToConstructors error:', e);
   }
 }
 
@@ -2765,14 +2776,15 @@ function getValidSelectedSlotForCurrentCity() {
   const currentCity = currentSelectedCityName();
   // Если город выбран, но для него нет плана презентаций — НЕ возвращаем старые/чужие даты и время!
   if (currentCity) {
-    const cp = getCityPlanForCity(currentCity, activePresentationPlan);
+    const slotWeek = selectedPlanSlot.weekNumber || (typeof getScheduleViewingWeek === 'function' ? getScheduleViewingWeek() : getCurrentBauerWeekNumber());
+    const planForSlot = (typeof getActivePlanForViewingWeek === 'function') ? getActivePlanForViewingWeek(slotWeek) : activePresentationPlan;
+    const cp = getCityPlanForCity(currentCity, planForSlot);
     if (!cp) return null;
     if (selectedPlanSlot.city && selectedPlanSlot.city.trim().toLowerCase() !== currentCity.toLowerCase()) {
       return null;
     }
     // Пересчитываем актуальную дату по текущему календарю недели плана слота, чтобы не оставались старые числа
-    const slotWeek = selectedPlanSlot.weekNumber || activePresentationPlan?.weekNumber || getCurrentBauerWeekNumber();
-    const weekRef = getBauerWeekStartTuesday(slotWeek, activePresentationPlan?.calendarYear || BAUER_CALENDAR_YEAR);
+    const weekRef = getBauerWeekStartTuesday(slotWeek, planForSlot?.calendarYear || BAUER_CALENDAR_YEAR);
     const freshDate = selectedPlanSlot.day ? getCalculatedDateForDay(weekRef, selectedPlanSlot.day) : selectedPlanSlot.date;
     return {
       ...selectedPlanSlot,
@@ -2781,7 +2793,9 @@ function getValidSelectedSlotForCurrentCity() {
   }
   // Если город вообще не выбран, проверяем, есть ли план хотя бы для города из самого слота
   if (selectedPlanSlot.city) {
-    const cp = getCityPlanForCity(selectedPlanSlot.city, activePresentationPlan);
+    const slotWeek = selectedPlanSlot.weekNumber || (typeof getScheduleViewingWeek === 'function' ? getScheduleViewingWeek() : getCurrentBauerWeekNumber());
+    const planForSlot = (typeof getActivePlanForViewingWeek === 'function') ? getActivePlanForViewingWeek(slotWeek) : activePresentationPlan;
+    const cp = getCityPlanForCity(selectedPlanSlot.city, planForSlot);
     if (!cp) return null;
   } else if (!activePresentationPlan || !Array.isArray(activePresentationPlan.cities) || !activePresentationPlan.cities.length) {
     return null;
@@ -3031,7 +3045,7 @@ function presentationScheduleMarkup(stage, customStyle = '') {
                 </div>
                 <div class="psb-times">
                   ${dayTimes.length ? dayTimes.map(t => {
-                    const isSelected = isFullSelectedDay && validSlot?.time === t && (!validSlot?.hall || !activeHall.hallName || validSlot.hall === activeHall.hallName);
+                    const isSelected = isFullSelectedDay && String(validSlot?.time || '').trim() === String(t || '').trim() && (!validSlot?.hall || !activeHall?.hallName || String(validSlot.hall).trim().toLowerCase() === String(activeHall.hallName).trim().toLowerCase());
                     return `
                       <button type="button" 
                         class="psb-time-btn ${isSelected ? 'active' : ''}"
@@ -4417,14 +4431,14 @@ const SmsModel={cleanSms,smsMissing,buildSms};
 let smsValues={city:'',date:'',time:'',hall:'',program:'',client:'',sender:'',route:''},smsInitialized=false,smsGenerated='',smsCandidate='',smsDirty=false,smsPending=false,smsResetPending=false,smsCityIndex=-1;
 function openSmsBuilder(){if(!$('#drawer').hidden)closeDrawer();$('.workspace').hidden=true;$('#objections-view').hidden=true;$('#layouts-view').hidden=true;$('#sms-view').hidden=false;$('#edit').hidden=true;$('#all-objections').hidden=true;setTab('sms');if(!smsInitialized)renderSmsBuilder();}
 function renderSmsBuilder(){smsInitialized=true;$('#sms-view').innerHTML=`<header class="sms-builder-intro"><div><div class="kicker">ПЕРСОНАЛЬНОЕ ПРИГЛАШЕНИЕ</div><h1>Конструктор SMS-приглашений BAUER</h1><p>${smsCities.length} городов · ${smsSource.venues.length} площадок · два варианта программы и короткая СМС</p></div><button type="button" id="sms-back">← К скрипту</button></header><div class="sms-builder-grid"><section class="sms-form-card" aria-labelledby="sms-form-heading"><div class="sms-card-heading"><span class="sms-step">01</span><div><h2 id="sms-form-heading">Данные приглашения</h2><p>Все поля обязательны</p></div></div><form id="sms-builder-form" novalidate><label for="sms-city">Город <span>*</span></label><div class="sms-city-wrap"><input id="sms-city" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sms-city-options" autocomplete="off" placeholder="Начните вводить город" required><div id="sms-city-options" role="listbox" aria-label="Города" hidden></div></div><div class="sms-form-row"><div><label for="sms-date">Дата мероприятия <span>*</span></label><input id="sms-date" type="date" required></div><div><label for="sms-time">Время мероприятия <span>*</span></label><input id="sms-time" type="text" inputmode="numeric" maxlength="5" list="sms-time-options" placeholder="ЧЧ:ММ" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" required><datalist id="sms-time-options">${Array.from({length:29},(_,i)=>{const minutes=8*60+i*30;return `<option value="${String(Math.floor(minutes/60)).padStart(2,'0')}:${String(minutes%60).padStart(2,'0')}"></option>`;}).join('')}</datalist><small>Формат ЧЧ:ММ</small></div></div><label for="sms-hall">Зал / площадка <span>*</span></label><select id="sms-hall" required disabled><option value="">Сначала выберите город</option></select><div id="sms-place-info" hidden></div><div id="sms-route-warning" class="sms-route-warning" hidden></div><fieldset class="sms-program"><legend>Формат сообщения <span>*</span></legend><div class="sms-program-options"><label><input type="radio" name="sms-program" value="С КШ" required><span>С КШ</span></label><label><input type="radio" name="sms-program" value="Без КШ" required><span>Без КШ</span></label><label><input type="radio" name="sms-program" value="short" required><span>Короткая СМС</span></label></div><small>КШ — кулинарное шоу. Короткая СМС — без описания программы мероприятия.</small></fieldset><div class="sms-form-row"><div><label for="sms-client-name">Имя клиента <span>*</span></label><input id="sms-client-name" type="text" autocomplete="off" maxlength="150" placeholder="Имя и отчество" required></div><div><label for="sms-sender-name">Ваше имя <span>*</span></label><input id="sms-sender-name" type="text" autocomplete="off" maxlength="150" placeholder="Имя отправителя" required></div></div><button type="button" id="sms-reset" class="sms-reset">Сбросить</button></form></section><section class="sms-result-card" aria-labelledby="sms-result-heading"><div class="sms-card-heading"><span class="sms-step">02</span><div><h2 id="sms-result-heading">Готовое сообщение</h2><p>Можно отредактировать перед копированием</p></div><span id="sms-length"></span></div><div id="sms-validation" class="sms-validation" role="status" aria-live="polite"></div><div id="sms-edit-warning" class="sms-edit-warning" role="alert" hidden></div><label class="live" for="sms-result-text">Текст SMS — доступен для ручного редактирования</label><textarea id="sms-result-text" spellcheck="true" maxlength="30000"></textarea><div class="sms-result-footer"><div id="sms-copy-status" role="status" aria-live="polite"></div><button class="primary" type="button" id="sms-copy" disabled>Скопировать SMS</button><p>Сайт не отправляет сообщения. Скопируйте текст и отправьте клиенту самостоятельно.</p></div></section></div>`;updateSmsPreview();}
-function smsHallOptions(){const venues=smsSource.venues.filter(v=>v.city===smsValues.city);$('#sms-hall').disabled=!venues.length;$('#sms-hall').innerHTML='<option value="">'+(venues.length?'Выберите зал':'Сначала выберите город')+'</option>'+venues.map(v=>`<option value="${v.id}" ${v.unavailable?'disabled':''}>${escapeHTML(v.hall)}${v.unavailable?' — сейчас нет':''}</option>`).join('');smsVenueInfo();}
-function smsVenueInfo(){const venue=smsSource.venues.find(v=>v.id===smsValues.hall&&v.city===smsValues.city);$('#sms-place-info').hidden=!venue;$('#sms-route-warning').hidden=!venue?.conflict;$('#sms-place-info').innerHTML=venue?`<strong>📍 ${escapeHTML(venue.address)}</strong>${!venue.conflict?`<p>${escapeHTML(venue.route)}</p>`:''}`:'';$('#sms-route-warning').innerHTML=venue?.conflict?`<strong>⚠ Уточните маршрут перед копированием</strong><p>${escapeHTML(venue.note)}</p><details><summary>Исходные варианты из таблицы</summary><p>${escapeHTML(venue.route)}</p></details><label for="sms-confirmed-route">Подтверждённые маршрут, вход и этаж <span>*</span></label><textarea id="sms-confirmed-route" rows="5" maxlength="6000" placeholder="Уточните информацию у площадки и введите верный текст" required></textarea><small>Противоречивые варианты не подставляются в SMS автоматически.</small>`:'';}
-function showSmsCities(){const query=$('#sms-city').value.trim().toLocaleLowerCase('ru'),options=smsCities.filter(c=>c.toLocaleLowerCase('ru').includes(query));$('#sms-city-options').innerHTML=options.map((c,i)=>`<button type="button" role="option" aria-selected="false" id="sms-city-option-${i}" data-sms-city="${escapeHTML(c)}">${escapeHTML(c)}</button>`).join('')||'<p>Город не найден</p>';$('#sms-city-options').hidden=false;$('#sms-city').setAttribute('aria-expanded','true');smsCityIndex=-1;$('#sms-city').removeAttribute('aria-activedescendant');}
-function closeSmsCities(){$('#sms-city-options').hidden=true;$('#sms-city').setAttribute('aria-expanded','false');$('#sms-city').removeAttribute('aria-activedescendant');}
-function selectSmsCity(city){const changed=city!==smsValues.city;smsValues.city=city;$('#sms-city').value=city;if(changed){smsValues.hall='';smsValues.route='';smsHallOptions();}closeSmsCities();updateSmsPreview();}
-function updateSmsPreview(){smsCandidate=SmsModel.buildSms(smsValues,smsSource);if(!smsDirty){$('#sms-result-text').value=smsCandidate;smsGenerated=smsCandidate;smsPending=false;}else if(smsCandidate!==smsGenerated){smsPending=true;smsResetPending=false;$('#sms-edit-warning').hidden=false;$('#sms-edit-warning').innerHTML='<strong>В сообщении есть ваши правки</strong><p>Параметры формы изменились. Заменить текст новым приглашением?</p><div><button type="button" data-sms-update>Обновить по форме</button><button type="button" data-sms-keep>Сохранить мои правки</button></div>';}
- if(smsDirty&&smsCandidate===smsGenerated&&!smsResetPending){smsPending=false;$('#sms-edit-warning').hidden=true;}updateSmsStatus();}
-function updateSmsStatus(){const missing=SmsModel.smsMissing(smsValues,smsSource),text=$('#sms-result-text').value;$('#sms-validation').textContent=missing.length?'Осталось заполнить: '+missing.join(', ')+'.':smsPending?'Выберите, что сделать с ручными правками.':smsResetPending?'Подтвердите сброс формы.':'Всё готово. Проверьте текст перед отправкой.';$('#sms-validation').classList.toggle('is-complete',!missing.length&&!smsPending&&!smsResetPending);$('#sms-copy').disabled=!!missing.length||smsPending||smsResetPending||!text.trim();$('#sms-copy-status').textContent='';$('#sms-length').textContent=text.length+' зн.';}
+function smsHallOptions(){const hallEl=$('#sms-hall');if(!hallEl)return;const venues=smsSource.venues.filter(v=>v.city===smsValues.city);hallEl.disabled=!venues.length;hallEl.innerHTML='<option value="">'+(venues.length?'Выберите зал':'Сначала выберите город')+'</option>'+venues.map(v=>`<option value="${v.id}" ${v.unavailable?'disabled':''}>${escapeHTML(v.hall)}${v.unavailable?' — сейчас нет':''}</option>`).join('');smsVenueInfo();}
+function smsVenueInfo(){const pi=$('#sms-place-info'),rw=$('#sms-route-warning');if(!pi||!rw)return;const venue=smsSource.venues.find(v=>v.id===smsValues.hall&&v.city===smsValues.city);pi.hidden=!venue;rw.hidden=!venue?.conflict;pi.innerHTML=venue?`<strong>📍 ${escapeHTML(venue.address)}</strong>${!venue.conflict?`<p>${escapeHTML(venue.route)}</p>`:''}`:'';rw.innerHTML=venue?.conflict?`<strong>⚠ Уточните маршрут перед копированием</strong><p>${escapeHTML(venue.note)}</p><details><summary>Исходные варианты из таблицы</summary><p>${escapeHTML(venue.route)}</p></details><label for="sms-confirmed-route">Подтверждённые маршрут, вход и этаж <span>*</span></label><textarea id="sms-confirmed-route" rows="5" maxlength="6000" placeholder="Уточните информацию у площадки и введите верный текст" required></textarea><small>Противоречивые варианты не подставляются в SMS автоматически.</small>`:'';}
+function showSmsCities(){const query=$('#sms-city')?.value?.trim()?.toLocaleLowerCase('ru')||'',options=smsCities.filter(c=>c.toLocaleLowerCase('ru').includes(query));const sco=$('#sms-city-options');if(!sco)return;sco.innerHTML=options.map((c,i)=>`<button type="button" role="option" aria-selected="false" id="sms-city-option-${i}" data-sms-city="${escapeHTML(c)}">${escapeHTML(c)}</button>`).join('')||'<p>Город не найден</p>';sco.hidden=false;$('#sms-city')?.setAttribute('aria-expanded','true');smsCityIndex=-1;$('#sms-city')?.removeAttribute('aria-activedescendant');}
+function closeSmsCities(){$('#sms-city-options')&&(document.getElementById('sms-city-options').hidden=true);$('#sms-city')?.setAttribute('aria-expanded','false');$('#sms-city')?.removeAttribute('aria-activedescendant');}
+function selectSmsCity(city){const changed=city!==smsValues.city;smsValues.city=city;const sc=$('#sms-city');if(sc)sc.value=city;if(changed){smsValues.hall='';smsValues.route='';smsHallOptions();}closeSmsCities();updateSmsPreview();}
+function updateSmsPreview(){const resText=$('#sms-result-text');if(!resText)return;smsCandidate=SmsModel.buildSms(smsValues,smsSource);if(!smsDirty){resText.value=smsCandidate;smsGenerated=smsCandidate;smsPending=false;}else if(smsCandidate!==smsGenerated){smsPending=true;smsResetPending=false;const ew=$('#sms-edit-warning');if(ew){ew.hidden=false;ew.innerHTML='<strong>В сообщении есть ваши правки</strong><p>Параметры формы изменились. Заменить текст новым приглашением?</p><div><button type="button" data-sms-update>Обновить по форме</button><button type="button" data-sms-keep>Сохранить мои правки</button></div>';}}
+ if(smsDirty&&smsCandidate===smsGenerated&&!smsResetPending){smsPending=false;const ew=$('#sms-edit-warning');if(ew)ew.hidden=true;}updateSmsStatus();}
+function updateSmsStatus(){const resText=$('#sms-result-text');if(!resText)return;const missing=SmsModel.smsMissing(smsValues,smsSource),text=resText.value;const sv=$('#sms-validation');if(sv){sv.textContent=missing.length?'Осталось заполнить: '+missing.join(', ')+'.':smsPending?'Выберите, что сделать с ручными правками.':smsResetPending?'Подтвердите сброс формы.':'Всё готово. Проверьте текст перед отправкой.';sv.classList.toggle('is-complete',!missing.length&&!smsPending&&!smsResetPending);}const sc=$('#sms-copy');if(sc)sc.disabled=!!missing.length||smsPending||smsResetPending||!text.trim();const scs=$('#sms-copy-status');if(scs)scs.textContent='';const sl=$('#sms-length');if(sl)sl.textContent=text.length+' зн.';}
 $('#sms-view').addEventListener('input',event=>{const field=event.target;if(field.id==='sms-result-text'){smsDirty=field.value!==smsGenerated;updateSmsStatus();return;}if(field.id==='sms-city'){const city=smsCities.find(c=>c.toLocaleLowerCase('ru')===field.value.trim().toLocaleLowerCase('ru'))||'';if(city!==smsValues.city){smsValues.city=city;smsValues.hall='';smsValues.route='';smsHallOptions();}showSmsCities();updateSmsPreview();return;}const keys={'sms-date':'date','sms-time':'time','sms-client-name':'client','sms-sender-name':'sender','sms-confirmed-route':'route'};if(keys[field.id]){if(field.id==='sms-time'&&/^\d{4}$/.test(field.value))field.value=field.value.slice(0,2)+':'+field.value.slice(2);smsValues[keys[field.id]]=field.value;updateSmsPreview();}});
 $('#sms-view').addEventListener('change',event=>{const field=event.target;if(field.id==='sms-hall'){smsValues.hall=field.value;smsValues.route='';smsVenueInfo();updateSmsPreview();}if(field.name==='sms-program'){smsValues.program=field.value;updateSmsPreview();}});
 $('#sms-view').addEventListener('focusin',event=>{if(event.target.id==='sms-city')showSmsCities();});
@@ -4748,6 +4762,7 @@ $('#whole-script').addEventListener('click',()=>{
     sender:smsValues?.sender||(typeof currentUser!=='undefined'&&currentUser?(currentUser.name||currentUser.username):''),
     route:currentV?.route||smsValues?.route||''
   };
+  window.wSmsValues = wSmsValues;
 
   view.innerHTML=`
     <header class="whole-head">
@@ -10766,7 +10781,11 @@ document.addEventListener('click', e => {
     } catch {}
 
     // Дублируем выбранный слот в оба конструктора приглашений (Помощник СМС и Весь скрипт)
-    duplicateSlotToConstructors(selectedPlanSlot);
+    try {
+      duplicateSlotToConstructors(selectedPlanSlot);
+    } catch (err) {
+      console.warn('duplicateSlotToConstructors error:', err);
+    }
     refreshScheduleViewsWithoutScroll();
     toast(`✓ Время зафиксировано: ${day} (${formatRuShortDate(date)}) в ${time}`);
     return;
