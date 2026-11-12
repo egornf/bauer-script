@@ -1958,6 +1958,158 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   border-color: var(--teal) !important;
   font-weight: 750 !important;
 }
+.role-pill.trainer {
+  background: rgba(124, 58, 237, 0.14);
+  color: #6d28d9;
+  border: 1px solid rgba(124, 58, 237, 0.35);
+}
+[data-theme="dark"] .role-pill.trainer {
+  background: rgba(139, 92, 246, 0.22);
+  color: #c4b5fd;
+  border-color: rgba(139, 92, 246, 0.45);
+}
+.line.trainer-line {
+  border-left: 4px solid #7c3aed !important;
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.09) 0%, var(--surface) 100%) !important;
+}
+.line.trainer-tip {
+  border-left: 4px solid #d97706 !important;
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12) 0%, var(--surface) 100%) !important;
+}
+.trainer-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+  background: rgba(124, 58, 237, 0.14);
+  color: #6d28d9;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+.line.trainer-tip .trainer-badge-inline {
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+[data-theme="dark"] .trainer-badge-inline {
+  color: #ddd6fe;
+  background: rgba(139, 92, 246, 0.25);
+}
+[data-theme="dark"] .line.trainer-tip .trainer-badge-inline {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.24);
+}
+.origin.trainer {
+  background: rgba(124, 58, 237, 0.14);
+  color: #6d28d9;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+.emp-script-matrix-wrap {
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.emp-script-matrix-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.emp-script-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.emp-script-matrix th,
+.emp-script-matrix td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  text-align: center;
+  vertical-align: middle;
+}
+.emp-script-matrix th:first-child,
+.emp-script-matrix td:first-child {
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 2;
+  min-width: 210px;
+}
+.emp-script-matrix thead th {
+  background: var(--surface-alt);
+  font-weight: 750;
+  font-size: 12px;
+}
+.emp-script-matrix thead th:first-child {
+  z-index: 3;
+}
+.trainer-workspace-layout {
+  display: grid;
+  grid-template-columns: 310px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 980px) {
+  .trainer-workspace-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.trainer-mgr-btn {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  transition: all .15s ease;
+}
+.trainer-mgr-btn:hover {
+  border-color: #7c3aed;
+}
+.trainer-mgr-btn.active {
+  background: rgba(124, 58, 237, 0.12);
+  border-color: #7c3aed;
+  font-weight: 750;
+}
+.trainer-block-card {
+  border: 1px dashed #7c3aed;
+  border-left: 4px solid #7c3aed;
+  background: rgba(124, 58, 237, 0.06);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+.trainer-block-card.relocated {
+  border-color: #d97706;
+  border-left-color: #d97706;
+  background: rgba(245, 158, 11, 0.1);
+}
+.trainer-relocated-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(245, 158, 11, 0.2);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}
 </style>
 
 </head>
@@ -2183,17 +2335,17 @@ function upgrade(value){
     const rawKinds=(stage.lines||[]).map((l,n)=>
       !stage.guestGiftVersion&&stage.showGifts&&/термос/iu.test(l)?'gift-plus-one':
       !stage.guestGiftVersion&&stage.showGifts&&/вафельниц/iu.test(l)?'gift-plus-two':
-      ['speech','gift','gift-plus-one','gift-plus-two','address','schedule'].includes(stage.lineKinds?.[n])?stage.lineKinds[n]:
+      ['speech','gift','gift-plus-one','gift-plus-two','address','schedule','trainer-line','trainer-tip'].includes(stage.lineKinds?.[n])?stage.lineKinds[n]:
       (/ЭТО СПЕЦИАЛЬНЫЙ ПОДАРОК-СЮРПРИЗ|^Руководство подготовило для вас особенный подарок/iu.test(l.trim())?'gift':'speech')
     );
-    const lines=[],lineKinds=[],lineFormats=[],lineGifts=[];
+    const lines=[],lineKinds=[],lineFormats=[],lineGifts=[],lineTrainerMeta=[];
     for(let n=0;n<stage.lines.length;n++){
       const k=rawKinds[n],l=stage.lines[n],fmt=cleanFormat(stage.lineFormats?.[n],l.length);
       let gid=typeof stage.lineGifts?.[n]==='string'?stage.lineGifts[n]:'';
       if(k==='gift-plus-one'||k==='gift-plus-two'){
         const targetId=gid||(k==='gift-plus-one'?'thermos':'waffle');
         ensureGift(targetId,l.trim()?{script:l,scriptFormat:fmt}:{});
-        lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(targetId);
+        lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(targetId);lineTrainerMeta.push(null);
       }else if(k==='gift'&&!gid){
         const parts=[l],ranges=[...fmt.ranges];
         let offset=l.length;
@@ -2215,34 +2367,36 @@ function upgrade(value){
           ...(combined?{script:combined,scriptFormat:combinedFmt}:{}),
           prepend:true
         });
-        lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(surpriseId);
+        lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(surpriseId);lineTrainerMeta.push(null);
       }else if(k==='gift'){
         if(l.trim()){
           const g=rawGifts.find(x=>x.id===gid);
           if(g&&!g.script){g.script=l;g.scriptFormat=fmt;}
         }
-        lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(gid);
+        lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(gid);lineTrainerMeta.push(null);
       }else if(k==='schedule'){
-        lines.push('');lineKinds.push('schedule');lineFormats.push(cleanFormat(stage.lineFormats?.[n],0));lineGifts.push('');
+        lines.push('');lineKinds.push('schedule');lineFormats.push(cleanFormat(stage.lineFormats?.[n],0));lineGifts.push('');lineTrainerMeta.push(null);
+      }else if(k==='trainer-line'||k==='trainer-tip'){
+        lines.push(l);lineKinds.push(k);lineFormats.push(fmt);lineGifts.push('');lineTrainerMeta.push(stage.lineTrainerMeta?.[n]||null);
       }else{
-        lines.push(l);lineKinds.push(k==='address'?'address':'speech');lineFormats.push(fmt);lineGifts.push('');
+        lines.push(l);lineKinds.push(k==='address'?'address':'speech');lineFormats.push(fmt);lineGifts.push('');lineTrainerMeta.push(null);
       }
     }
     const isTimeBlock=id==='time'||String(stage.title||'').toLowerCase().includes('выбор времени')||id.toLowerCase().includes('vrem')||id.toLowerCase().includes('time');
     if(isTimeBlock&&!lineKinds.includes('schedule')&&!stage.scheduleRemoved){
-      lines.push('');lineKinds.push('schedule');lineFormats.push(cleanFormat(null,0));lineGifts.push('');
+      lines.push('');lineKinds.push('schedule');lineFormats.push(cleanFormat(null,0));lineGifts.push('');lineTrainerMeta.push(null);
     }
     return {
       id,guestGiftVersion:2,giftPhoto:'',title:stage.title,showTip:stage.showTip===true,tip:stage.tip,
       tipFormat:cleanFormat(stage.tipFormat,stage.tip.length),
-      lines,lineKinds,lineFormats,lineGifts,
+      lines,lineKinds,lineFormats,lineGifts,lineTrainerMeta,
       objectionIds:[...new Set(stage.objectionIds||[])],
       hidden:stage.hidden===true,showGifts:false,showSms:old?i===7:stage.showSms===true,
       scheduleRemoved:stage.scheduleRemoved===true,
       giftIds:[]
     };
   });
-  result.objections=result.objections.map((o,i)=>({title:o.title,text:o.text,textFormat:cleanFormat(o.textFormat,o.text.length),origin:o.origin==='document'?'document':'suggested',nextStageId:typeof o.nextStageId==='string'?o.nextStageId:(old&&i===3?'time':'')}));
+  result.objections=result.objections.map((o,i)=>({title:o.title,text:o.text,textFormat:cleanFormat(o.textFormat,o.text.length),origin:o.origin==='document'?'document':(o.origin==='trainer'?'trainer':'suggested'),...(o.origin==='trainer'?{trainerBlockId:o.trainerBlockId,authorName:o.authorName,relocated:o.relocated}:{}),nextStageId:typeof o.nextStageId==='string'?o.nextStageId:(old&&i===3?'time':'')}));
   const ids=new Set(result.stages.map(s=>s.id));
   result.objections.forEach(o=>{if(!ids.has(o.nextStageId))o.nextStageId='';});
   result.gifts=rawGifts;
@@ -2383,7 +2537,7 @@ function visibleIndices(){return data.stages.flatMap((s,i)=>s.hidden?[]:[i]);}
 function toast(message){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').hidden=false;toastTimer=setTimeout(()=>$('#toast').hidden=true,4000);}
 function save(){data.updatedAt=Date.now();try{localStorage.setItem(KEY,JSON.stringify({...data,gifts:[]}));$('#status').textContent='Сохранено в этом браузере';}catch{toast('Для сохранения правок скачайте HTML.');}}
 function stageIds(i=current){return (data.stages[i]?.objectionIds||[]).filter(id=>data.objections[id]);}
-function stageOptions(i){return stageIds(i).map(id=>`<button class="objection-button" data-objection="${id}"><span>${escapeHTML(data.objections[id].title)}</span><span aria-hidden="true">↗</span></button>`).join('');}
+function stageOptions(i){return stageIds(i).map(id=>{const o=data.objections[id];const isTr=o?.origin==='trainer';return `<button class="objection-button" data-objection="${id}"><span>${isTr?'<b style="color:#7c3aed" title="Добавлено бизнес-тренером ДПК">🎓 </b>':''}${escapeHTML(o.title)}</span><span aria-hidden="true">↗</span></button>`;}).join('');}
 function renderStepper(){const indices=visibleIndices();$('#stepper').innerHTML=indices.map((i,n)=>`<button class="step ${n<indices.indexOf(current)?'complete':''}" data-go="${i}" ${i===current?'aria-current="step"':''} aria-label="Этап ${n+1}: ${escapeHTML(data.stages[i].title)}"><span class="step-number">${String(n+1).padStart(2,'0')}</span><span class="step-title">${escapeHTML(data.stages[i].title)}</span></button>`).join('');}
 function scriptGiftPhoto(stage,readonly=false){const photo=cleanPhoto(stage.giftPhoto);return `<div class="script-gift-photo">${photo?`<img src="${photo}" alt="Подарок-сюрприз BAUER">`:'<div class="script-gift-photo-empty"><span aria-hidden="true">▧</span><strong>Фото подарка-сюрприза</strong><small>Загрузите фотографию через редактор макета</small></div>'}${readonly||photo?'':`<button type="button" data-stage-gift-photo="${stage.id}">${photo?'Заменить фото':'+ Добавить фото'}</button>`}</div>`;}
 function lineGiftId(kind){return kind==='gift-plus-one'?'thermos':kind==='gift-plus-two'?'waffle':null;}
@@ -3111,6 +3265,13 @@ function renderStageLines(stage,readonly=false,gifts=data.gifts){
     const bCss=LayoutModel.blockCSS(stage.lineFormats?.[n]);
     if(kind==='schedule'){html+=presentationScheduleMarkup(stage,bCss);return;}
     if(kind==='address'){html+=addressLineHtml(line,stage.lineFormats?.[n],bCss);return;}
+    if(kind==='trainer-line'||kind==='trainer-tip'){
+      const tMeta=stage.lineTrainerMeta?.[n]||null;
+      const badgeLbl=kind==='trainer-tip'?'🎓 Совет бизнес-тренера':'🎓 Доп. реплика от бизнес-тренера';
+      const titleHtml=tMeta?.title?`<div style="font-weight:750;margin-bottom:4px">${escapeHTML(tMeta.title)}</div>`:'';
+      html+=`<div class="line ${kind}"${bCss?` style="${bCss}"`:''}><div class="trainer-badge-inline">${badgeLbl}${tMeta?.authorName?' · '+escapeHTML(tMeta.authorName):''}</div>${titleHtml}<div>${fillPlanHtml(fillVenueHtml(LayoutModel.renderText(line,stage.lineFormats?.[n])))}</div></div>`;
+      return;
+    }
     html+=`<p class="line"${bCss?` style="${bCss}"`:''}>${fillPlanHtml(fillVenueHtml(LayoutModel.renderText(line,stage.lineFormats?.[n])))}</p>`;
   });
   return html;
@@ -3173,7 +3334,9 @@ function openObjection(id){if(!data.objections[id])return;selected=id;drawerMode
 function renderAnswer(){
   const o=data.objections[selected];if(!o)return;const target=data.stages.find(s=>s.id===o.nextStageId&&!s.hidden);
   $('#drawer .kicker').textContent='ОТРАБОТКИ ВОЗРАЖЕНИЙ';$('#drawer-context').textContent=`${data.stages[current].title}`;
-  $('#drawer-content').innerHTML=`<span class="origin ${o.origin==='document'?'':'suggested'}">${o.origin==='document'?'Из вашего документа':'Добавленная отработка'}</span><h2 id="ob-title">${escapeHTML(o.title)}</h2><div class="pane-label">Сказать клиенту</div><div class="answer">${LayoutModel.renderText(o.text,o.textFormat)}</div>${target?`<div class="related"><p>Продолжение разговора</p><button data-jump-block="${escapeHTML(target.id)}">Продолжить: ${escapeHTML(target.title)} →</button></div>`:''}<div class="related"><p>Другие возражения на этом этапе</p>${stageIds().filter(id=>id!==selected).map(id=>`<button data-objection="${id}">${escapeHTML(data.objections[id].title)} ↗</button>`).join('')}<button data-library>Все отработки →</button></div>`;
+  const originClass=o.origin==='document'?'':(o.origin==='trainer'?'trainer':'suggested');
+  const originLabel=o.origin==='document'?'Из вашего документа':(o.origin==='trainer'?('🎓 От бизнес-тренера'+(o.authorName?' · '+o.authorName:'')):'Добавленная отработка');
+  $('#drawer-content').innerHTML=`<span class="origin ${originClass}">${escapeHTML(originLabel)}</span><h2 id="ob-title">${escapeHTML(o.title)}</h2><div class="pane-label">Сказать клиенту</div><div class="answer">${LayoutModel.renderText(o.text,o.textFormat)}</div>${target?`<div class="related"><p>Продолжение разговора</p><button data-jump-block="${escapeHTML(target.id)}">Продолжить: ${escapeHTML(target.title)} →</button></div>`:''}<div class="related"><p>Другие возражения на этом этапе</p>${stageIds().filter(id=>id!==selected).map(id=>`<button data-objection="${id}">${escapeHTML(data.objections[id].title)} ↗</button>`).join('')}<button data-library>Все отработки →</button></div>`;
 }
 function renderLibrary(){drawerMode='library';$('#drawer .kicker').textContent='ОТРАБОТКИ ВОЗРАЖЕНИЙ';$('#drawer-context').textContent='Библиотека ответов · все этапы';$('#drawer-content').innerHTML=`<h2 id="ob-title">Все возражения</h2>${data.objections.map((o,id)=>`<button class="library-item" data-objection="${id}">${escapeHTML(o.title)}<small>${escapeHTML(data.stages.filter(s=>!s.hidden&&s.objectionIds.includes(id)).map(s=>s.title).join(' · ')||'Библиотека ответов')}</small></button>`).join('')}`;}
 function openLibrary(){renderLibrary();if($('#drawer').hidden)openDrawer();$('#drawer-content').scrollTop=0;}
@@ -3279,18 +3442,67 @@ let localMode=location.protocol==='file:'||/\.github\.io$/i.test(location.hostna
 const fail=(m,st=400)=>{const e=new Error(m);e.status=st;return e};
 const seedLayouts=(()=>{try{return JSON.parse(document.getElementById('layouts-data')?.textContent||'[]');}catch{return [];}})();
 
-const VAULT_PERMISSIONS=['content.edit','layouts.manage','layouts.delete','gifts.manage','addresses.manage','settings.manage','users.view','users.manage','sessions.manage','audit.view'];
+const VAULT_PERMISSIONS=['content.edit','layouts.manage','layouts.delete','gifts.manage','addresses.manage','settings.manage','users.view','users.manage','sessions.manage','audit.view','scripts.trainer-blocks'];
 const VAULT_ROLE_DEFAULTS={
   OWNER:[...VAULT_PERMISSIONS,'admins.manage','owner.full'],
   ADMIN:[...VAULT_PERMISSIONS],
   EDITOR:['content.edit','layouts.manage','layouts.delete','gifts.manage','addresses.manage','settings.manage'],
   HEAD:['content.edit','layouts.manage','users.view','audit.view'],
+  TRAINER:['users.view','scripts.trainer-blocks','settings.manage'],
   OPERATOR:['settings.manage']
 };
+function stripTrainerArtifactsFromData(data){
+  if(!data||typeof data!=='object')return data;
+  const d=clone(data);
+  if(Array.isArray(d.stages)){
+    d.stages=d.stages.map(st=>{
+      const lines=Array.isArray(st.lines)?st.lines:[];
+      const kinds=Array.isArray(st.lineKinds)?st.lineKinds:[];
+      const formats=Array.isArray(st.lineFormats)?st.lineFormats:[];
+      const gifts=Array.isArray(st.lineGifts)?st.lineGifts:[];
+      const meta=Array.isArray(st.lineTrainerMeta)?st.lineTrainerMeta:[];
+      const fLines=[],fKinds=[],fFormats=[],fGifts=[];
+      for(let i=0;i<lines.length;i++){
+        const k=kinds[i]||'speech';
+        const m=meta[i];
+        if(k==='trainer-line'||k==='trainer-tip'||(m&&m.trainerBlockId))continue;
+        fLines.push(lines[i]);
+        fKinds.push(k);
+        if(formats[i]!==undefined)fFormats.push(formats[i]);
+        if(gifts[i]!==undefined)fGifts.push(gifts[i]);
+      }
+      const nextSt={...st,lines:fLines,lineKinds:fKinds};
+      if(Array.isArray(st.lineFormats))nextSt.lineFormats=fFormats;
+      if(Array.isArray(st.lineGifts))nextSt.lineGifts=fGifts;
+      delete nextSt.lineTrainerMeta;
+      return nextSt;
+    });
+  }
+  if(Array.isArray(d.objections)){
+    const keptObs=[];
+    const oldToNewIdx=new Map();
+    d.objections.forEach((ob,oldIdx)=>{
+      if(ob&&(ob.origin==='trainer'||ob.trainerBlockId))return;
+      oldToNewIdx.set(oldIdx,keptObs.length);
+      keptObs.push(ob);
+    });
+    d.objections=keptObs;
+    if(Array.isArray(d.stages)){
+      d.stages.forEach(st=>{
+        if(Array.isArray(st.objectionIds)){
+          st.objectionIds=st.objectionIds.map(idx=>oldToNewIdx.get(Number(idx))).filter(idx=>idx!==undefined);
+        }
+      });
+    }
+  }
+  return d;
+}
 function isScriptTextUnchanged(originalData, nextData) {
   if (!originalData || !nextData) return false;
-  const origStages = Array.isArray(originalData.stages) ? originalData.stages : [];
-  const nextStages = Array.isArray(nextData.stages) ? nextData.stages : [];
+  const cleanOrig = stripTrainerArtifactsFromData(originalData);
+  const cleanNext = stripTrainerArtifactsFromData(nextData);
+  const origStages = Array.isArray(cleanOrig.stages) ? cleanOrig.stages : [];
+  const nextStages = Array.isArray(cleanNext.stages) ? cleanNext.stages : [];
   if (origStages.length !== nextStages.length) return false;
   for (let i = 0; i < origStages.length; i++) {
     const o = origStages[i], n = nextStages[i];
@@ -3304,8 +3516,8 @@ function isScriptTextUnchanged(originalData, nextData) {
       if (String(oLines[j] || '') !== String(nLines[j] || '')) return false;
     }
   }
-  const origObs = Array.isArray(originalData.objections) ? originalData.objections : [];
-  const nextObs = Array.isArray(nextData.objections) ? nextData.objections : [];
+  const origObs = Array.isArray(cleanOrig.objections) ? cleanOrig.objections : [];
+  const nextObs = Array.isArray(cleanNext.objections) ? cleanNext.objections : [];
   if (origObs.length !== nextObs.length) return false;
   for (let i = 0; i < origObs.length; i++) {
     const o = origObs[i], n = nextObs[i];
@@ -3564,6 +3776,7 @@ async function api_local_vault(rawPath,options={}){
       role:u.role,
       managerId:u.managerId||null,
       departmentScripts:Array.isArray(u.departmentScripts)?u.departmentScripts:[],
+      scriptAccess:Array.isArray(u.scriptAccess)?u.scriptAccess:null,
       mustChangePassword:Boolean(u.mustChangePassword),
       blocked:isO?false:Boolean(u.blocked),
       permissions:isO?[...VAULT_ROLE_DEFAULTS.OWNER]:(Array.isArray(u.permissions)?u.permissions:[]),
@@ -3778,6 +3991,140 @@ async function api_local_vault(rawPath,options={}){
     return {ok:true,user:currentUser};
   }
 
+  let trainerBlocks=await VaultDB.get('trainerBlocks',[]);
+  if(!Array.isArray(trainerBlocks))trainerBlocks=[];
+  const saveTrainerBlocks=async()=>{await VaultDB.set('trainerBlocks',trainerBlocks);};
+  const inspectAnchor=(layout,block)=>{
+    const stages=Array.isArray(layout?.data?.stages)?layout.data.stages:[];
+    if(!stages.length)return {stage:null,stageIdx:-1,insertIdx:0,relocated:true};
+    let stageIdx=stages.findIndex(s=>s.id===block.stageId);
+    let relocated=false;
+    if(stageIdx<0){stageIdx=stages.length-1;relocated=true;}
+    const stage=stages[stageIdx];
+    const lines=Array.isArray(stage.lines)?stage.lines:[];
+    if(block.type==='objection')return {stage,stageIdx,insertIdx:lines.length,relocated};
+    let insertIdx=lines.length;
+    if(block.afterLineIndex===-1||block.afterLineIndex===null||block.afterLineIndex===undefined){
+      insertIdx=0;
+    }else if(typeof block.afterLineIndex==='number'&&block.afterLineIndex>=0){
+      const expected=(block.anchorLineSnapshot||'').trim();
+      if(block.afterLineIndex<lines.length){
+        const actual=String(lines[block.afterLineIndex]||'').trim();
+        if(!expected||actual===expected)insertIdx=block.afterLineIndex+1;
+        else{
+          const foundIdx=lines.findIndex(l=>String(l||'').trim()===expected);
+          if(foundIdx>=0)insertIdx=foundIdx+1;
+          else{insertIdx=lines.length;relocated=true;}
+        }
+      }else{
+        const foundIdx=expected?lines.findIndex(l=>String(l||'').trim()===expected):-1;
+        if(foundIdx>=0)insertIdx=foundIdx+1;
+        else{insertIdx=lines.length;relocated=true;}
+      }
+    }
+    return {stage,stageIdx,insertIdx,relocated};
+  };
+  const applyTrainerBlocks=(layout,uBlocks)=>{
+    if(!layout||!Array.isArray(uBlocks)||!uBlocks.length)return layout;
+    const relevant=uBlocks.filter(b=>b&&b.layoutId===layout.id);
+    if(!relevant.length)return layout;
+    const res=clone(layout);
+    if(!res.data)res.data={};
+    if(!Array.isArray(res.data.stages))res.data.stages=[];
+    if(!Array.isArray(res.data.objections))res.data.objections=[];
+    const stages=res.data.stages;
+    stages.forEach(st=>{
+      if(!Array.isArray(st.lines))st.lines=[];
+      if(!Array.isArray(st.lineKinds))st.lineKinds=st.lines.map(()=>'speech');
+      while(st.lineKinds.length<st.lines.length)st.lineKinds.push('speech');
+      if(Array.isArray(st.lineFormats)){while(st.lineFormats.length<st.lines.length)st.lineFormats.push('text');}
+      if(Array.isArray(st.lineGifts)){while(st.lineGifts.length<st.lines.length)st.lineGifts.push({title:'',note:'',photo:''});}
+      st.lineTrainerMeta=st.lines.map(()=>null);
+      if(!Array.isArray(st.objectionIds))st.objectionIds=[];
+    });
+    const origStageLines=new Map();
+    stages.forEach(st=>origStageLines.set(st.id,[...st.lines]));
+    const sorted=[...relevant].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    for(const blk of sorted){
+      if(!stages.length)continue;
+      let targetStage=stages.find(s=>s.id===blk.stageId);
+      let relocated=false;
+      if(!targetStage){targetStage=stages[stages.length-1];relocated=true;}
+      if(blk.type==='objection'){
+        const newObIdx=res.data.objections.length;
+        res.data.objections.push({
+          title:String(blk.title||'Возражение (бизнес-тренер)'),
+          text:String(blk.text||''),
+          keywords:Array.isArray(blk.keywords)?blk.keywords:[],
+          origin:'trainer',
+          trainerBlockId:blk.id,
+          trainerLogin:blk.createdByLogin||'Бизнес-тренер ДПК',
+          relocated
+        });
+        if(!targetStage.objectionIds.includes(newObIdx))targetStage.objectionIds.push(newObIdx);
+        continue;
+      }
+      const origLines=origStageLines.get(targetStage.id)||[];
+      let insertAt=targetStage.lines.length;
+      if(blk.afterLineIndex===-1||blk.afterLineIndex===null||blk.afterLineIndex===undefined){
+        let k=0;while(k<targetStage.lineTrainerMeta.length&&targetStage.lineTrainerMeta[k]!==null)k++;insertAt=k;
+      }else if(typeof blk.afterLineIndex==='number'&&blk.afterLineIndex>=0){
+        const expected=(blk.anchorLineSnapshot||'').trim();
+        let targetOrigText=null;
+        if(blk.afterLineIndex<origLines.length){
+          const candidate=String(origLines[blk.afterLineIndex]||'').trim();
+          if(!expected||candidate===expected)targetOrigText=origLines[blk.afterLineIndex];
+        }
+        if(targetOrigText===null&&expected){
+          const foundOrig=origLines.find(l=>String(l||'').trim()===expected);
+          if(foundOrig!==undefined)targetOrigText=foundOrig;
+        }
+        if(targetOrigText!==null){
+          let curIdx=-1;
+          for(let i=0;i<targetStage.lines.length;i++){
+            if(targetStage.lineTrainerMeta[i]===null&&targetStage.lines[i]===targetOrigText){curIdx=i;break;}
+          }
+          if(curIdx>=0){
+            let k=curIdx+1;while(k<targetStage.lineTrainerMeta.length&&targetStage.lineTrainerMeta[k]!==null)k++;insertAt=k;
+          }else{insertAt=targetStage.lines.length;relocated=true;}
+        }else{insertAt=targetStage.lines.length;relocated=true;}
+      }
+      const kind=blk.type==='tip'?'trainer-tip':'trainer-line';
+      const metaObj={trainerBlockId:blk.id,trainerLogin:blk.createdByLogin||'Бизнес-тренер ДПК',title:blk.title||'',type:blk.type,relocated};
+      targetStage.lines.splice(insertAt,0,String(blk.text||''));
+      targetStage.lineKinds.splice(insertAt,0,kind);
+      if(Array.isArray(targetStage.lineFormats))targetStage.lineFormats.splice(insertAt,0,'text');
+      if(Array.isArray(targetStage.lineGifts))targetStage.lineGifts.splice(insertAt,0,{title:'',note:'',photo:''});
+      targetStage.lineTrainerMeta.splice(insertAt,0,metaObj);
+    }
+    return res;
+  };
+  const getEffectiveOperatorScriptIds=(opUser,allLayouts)=>{
+    const allIds=allLayouts.map(l=>l.id);
+    const mgr=opUser?.managerId?users.find(u=>u.id===opUser.managerId&&(u.role==='HEAD'||u.role==='OWNER')):null;
+    const deptPool=(mgr&&Array.isArray(mgr.departmentScripts)&&mgr.departmentScripts.length>0)?mgr.departmentScripts.filter(id=>allIds.includes(id)):allIds;
+    if(Array.isArray(opUser?.scriptAccess)){
+      const allowedSet=new Set(opUser.scriptAccess.map(String));
+      return deptPool.filter(id=>allowedSet.has(id));
+    }
+    return deptPool;
+  };
+
+  if(pathname.startsWith('/api/users/')&&pathname.endsWith('/script-access')&&method==='PUT'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    const targetId=pathname.split('/')[3]||null;
+    const tu=users.find(u=>u.id===targetId);
+    if(!tu)throw fail('Сотрудник не найден.',404);
+    const isOwnerOrAdmin=authUser.role==='OWNER'||authUser.role==='ADMIN'||hasPerm(authUser,'users.manage');
+    const isOwnHead=authUser.role==='HEAD'&&tu.role==='OPERATOR'&&tu.managerId===authUser.id;
+    if(!isOwnerOrAdmin&&!isOwnHead)throw fail('Только руководитель отдела сотрудника или руководство может менять индивидуальный доступ к скриптам.',403);
+    tu.scriptAccess=(body.scriptAccess===null||body.scriptAccess===undefined)?null:(Array.isArray(body.scriptAccess)?[...new Set(body.scriptAccess.map(String).filter(Boolean))]:null);
+    tu.updatedAt=Date.now();
+    await saveUsers();
+    await logEvent({action:'users.script_access.update',actor:authUser,target:tu.login,details:{scriptAccess:tu.scriptAccess}});
+    return {ok:true,user:sanitize(tu)};
+  }
+
   if(pathname==='/api/users'||pathname.startsWith('/api/users/')){
     if(!authUser)throw fail('Требуется авторизация.',401);
     const tid=pathname.split('/')[3]||null;
@@ -3805,7 +4152,7 @@ async function api_local_vault(rawPath,options={}){
       if(!login)throw fail('Логин должен содержать от 2 до 64 символов (например: МелентьевЕА, ИвановАА).',400);
       if(users.some(u=>normLogin(u.login)===normLogin(login)))throw fail('Пользователь с таким логином уже существует.',400);
       if(!validPass(body.password))throw fail('Пароль должен содержать от 4 до 128 символов.',400);
-      let role=['ADMIN','EDITOR','HEAD','OPERATOR'].includes(body.role)?body.role:'OPERATOR';
+      let role=['ADMIN','EDITOR','HEAD','TRAINER','OPERATOR'].includes(body.role)?body.role:'OPERATOR';
       let perms=Array.isArray(body.permissions)?body.permissions.filter(p=>VAULT_PERMISSIONS.includes(p)):[...(VAULT_ROLE_DEFAULTS[role]||[])];
       let managerId=null;
       if(isHead&&!isFullUserMgr){
@@ -3823,12 +4170,14 @@ async function api_local_vault(rawPath,options={}){
         }
       }
       if(role==='HEAD')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
+      if(role==='TRAINER')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='layouts.manage'&&p!=='users.manage');
       const nu={
         id:'usr_'+VaultCrypto.randomHex(8),
         login,
         displayName:String(body.displayName||login).trim().slice(0,100)||login,
         role,
         managerId,
+        scriptAccess:Array.isArray(body.scriptAccess)?body.scriptAccess.map(String):null,
         passwordHash:await VaultCrypto.hashPassword(body.password),
         mustChangePassword:body.mustChangePassword!==undefined?Boolean(body.mustChangePassword):true,
         blocked:Boolean(body.blocked),
@@ -3869,7 +4218,7 @@ async function api_local_vault(rawPath,options={}){
       }
       if(body.displayName!==undefined){tu.displayName=String(body.displayName||'').trim().slice(0,100)||tu.login;changes.displayName=tu.displayName;}
       if(body.role!==undefined&&tu.role!=='OWNER'){
-        if(!['ADMIN','EDITOR','HEAD','OPERATOR'].includes(body.role))throw fail('Недопустимая роль.',400);
+        if(!['ADMIN','EDITOR','HEAD','TRAINER','OPERATOR'].includes(body.role))throw fail('Недопустимая роль.',400);
         const prevRole=tu.role;
         changes.role={from:tu.role,to:body.role};tu.role=body.role;
         if(prevRole==='HEAD'&&tu.role!=='HEAD')users.forEach(u=>{if(u.managerId===tu.id)u.managerId=null;});
@@ -3887,9 +4236,14 @@ async function api_local_vault(rawPath,options={}){
         tu.departmentScripts=Array.isArray(body.departmentScripts)?body.departmentScripts.map(String):[];
         changes.departmentScripts=tu.departmentScripts;
       }
+      if(body.scriptAccess!==undefined&&tu.role==='OPERATOR'){
+        tu.scriptAccess=Array.isArray(body.scriptAccess)?[...new Set(body.scriptAccess.map(String).filter(Boolean))]:null;
+        changes.scriptAccess=tu.scriptAccess;
+      }
       if(body.permissions!==undefined&&tu.role!=='OWNER'){
         let np=[...new Set((body.permissions||[]).filter(p=>VAULT_PERMISSIONS.includes(p)))];
         if(tu.role==='HEAD')np=np.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
+        if(tu.role==='TRAINER')np=np.filter(p=>p!=='layouts.delete'&&p!=='layouts.manage'&&p!=='users.manage');
         tu.permissions=np;
         changes.permissions=tu.permissions;
       }
@@ -3924,7 +4278,8 @@ async function api_local_vault(rawPath,options={}){
       users.forEach(u=>{if(u.managerId===tid)u.managerId=null;});
       users=users.filter(u=>u.id!==tid);
       sessions=sessions.filter(s=>s.userId!==tid);
-      await saveUsers();await saveSessions();
+      trainerBlocks=trainerBlocks.filter(b=>b.userId!==tid);
+      await saveUsers();await saveSessions();await saveTrainerBlocks();
       await logEvent({action:'users.delete',actor:authUser,target:tu.login,details:{deletedRole:tu.role}});
       return {ok:true};
     }
@@ -4120,7 +4475,8 @@ async function api_local_vault(rawPath,options={}){
         }
       }
       const updatedAt=Date.now();
-      await VaultDB.set('content',{data:{...body.data,gifts:[]},updatedAt});
+      const cleanedData=stripTrainerArtifactsFromData(body.data);
+      await VaultDB.set('content',{data:{...cleanedData,gifts:[]},updatedAt});
       await logEvent({action:'content.publish',actor:authUser,details:{stylingOnly:!hasContentEdit}});
       return {updatedAt};
     }
@@ -4145,11 +4501,27 @@ async function api_local_vault(rawPath,options={}){
         targetHead=users.find(u=>u.id===authUser.managerId&&(u.role==='HEAD'||u.role==='OWNER'));
       }
       const scriptIds=Array.isArray(targetHead?.departmentScripts)?[...new Set(targetHead.departmentScripts.map(String))]:[];
+      const deptEmployees=targetHead
+        ?users.filter(u=>u.role==='OPERATOR'&&u.managerId===targetHead.id).map(u=>{
+          const uBlocks=trainerBlocks.filter(b=>b&&b.userId===u.id);
+          const trainerLayoutIds=[...new Set(uBlocks.map(b=>b.layoutId))];
+          return {
+            id:u.id,
+            login:u.login,
+            displayName:u.displayName||u.login,
+            blocked:Boolean(u.blocked),
+            scriptAccess:Array.isArray(u.scriptAccess)?u.scriptAccess:null,
+            trainerBlockLayouts:trainerLayoutIds,
+            trainerBlocksCount:uBlocks.length
+          };
+        })
+        :[];
       return {
         headId:targetHead?.id||null,
         headLogin:targetHead?.login||null,
         headDisplayName:targetHead?.displayName||targetHead?.login||null,
         scriptIds,
+        employees:deptEmployees,
         layouts:allLayouts.map(l=>({id:l.id,name:l.name,savedAt:l.savedAt,stagesCount:l.data?.stages?.length||0}))
       };
     }
@@ -4168,6 +4540,14 @@ async function api_local_vault(rawPath,options={}){
       if(!targetHead)throw fail('Не указан руководитель отдела.',400);
       targetHead.departmentScripts=[...new Set(body.scriptIds.map(String).filter(Boolean))];
       targetHead.updatedAt=Date.now();
+      if(body.employeeAccess&&typeof body.employeeAccess==='object'&&!Array.isArray(body.employeeAccess)){
+        for(const [empId,accessVal] of Object.entries(body.employeeAccess)){
+          const emp=users.find(u=>u.id===empId&&u.role==='OPERATOR'&&u.managerId===targetHead.id);
+          if(!emp)continue;
+          emp.scriptAccess=(accessVal===null||accessVal===undefined)?null:(Array.isArray(accessVal)?[...new Set(accessVal.map(String).filter(Boolean))]:null);
+          emp.updatedAt=Date.now();
+        }
+      }
       await saveUsers();
       await logEvent({action:'department.scripts.update',actor:authUser,target:targetHead.login,details:{scriptIds:targetHead.departmentScripts}});
       return {ok:true,headId:targetHead.id,scriptIds:targetHead.departmentScripts};
@@ -4217,6 +4597,7 @@ async function api_local_vault(rawPath,options={}){
   if(pathname==='/api/scripts'&&method==='GET'){
     const allLayouts=await getStoredLayouts();
     let resultLayouts=allLayouts;
+    let visibleAllLayouts=allLayouts;
     let deptScripts=[];
     if(authUser){
       let mgr=null;
@@ -4227,13 +4608,18 @@ async function api_local_vault(rawPath,options={}){
       }
       if(mgr&&Array.isArray(mgr.departmentScripts)&&mgr.departmentScripts.length>0){
         deptScripts=mgr.departmentScripts;
-        if(authUser.role==='OPERATOR'){
-          const filtered=allLayouts.filter(l=>deptScripts.includes(l.id));
-          if(filtered.length>0)resultLayouts=filtered;
-        }
+      }
+      if(authUser.role==='OPERATOR'){
+        const effectiveIds=getEffectiveOperatorScriptIds(authUser,allLayouts);
+        const filtered=allLayouts.filter(l=>effectiveIds.includes(l.id));
+        const hasExplicitEmpty=Array.isArray(authUser.scriptAccess)&&authUser.scriptAccess.length===0;
+        const baseList=(filtered.length>0||hasExplicitEmpty)?filtered:allLayouts;
+        const userBlocks=trainerBlocks.filter(b=>b&&b.userId===authUser.id);
+        resultLayouts=baseList.map(l=>applyTrainerBlocks(l,userBlocks));
+        visibleAllLayouts=resultLayouts;
       }
     }
-    return {layouts:resultLayouts,allLayouts,departmentScripts:deptScripts};
+    return {layouts:resultLayouts,allLayouts:visibleAllLayouts,departmentScripts:deptScripts};
   }
 
   if(pathname==='/api/layouts-order'&&method==='PUT'){
@@ -4263,12 +4649,175 @@ async function api_local_vault(rawPath,options={}){
       return {ok:true};
     }
     if(method==='POST'||method==='PUT'){
-      const layout={id:id||('l'+Date.now().toString(36)+VaultCrypto.randomHex(3)),name:String(body.name||'Без названия').slice(0,120),data:{...(body.data||{}),gifts:[]},savedAt:Date.now()};
+      const cleanedData=stripTrainerArtifactsFromData(body.data||{});
+      const layout={id:id||('l'+Date.now().toString(36)+VaultCrypto.randomHex(3)),name:String(body.name||'Без названия').slice(0,120),data:{...cleanedData,gifts:[]},savedAt:Date.now()};
       if(list.some(l=>l.id===layout.id))list=list.map(l=>l.id===layout.id?layout:l);
       else list=[layout,...list].slice(0,50);
       await VaultDB.set('layouts',list);
       await logEvent({action:method==='POST'?'layouts.create':'layouts.update',actor:authUser,target:layout.name});
       return {layout};
+    }
+  }
+
+  if(pathname==='/api/trainer/managers'&&method==='GET'){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    const canTrainer=authUser.role==='TRAINER'||authUser.role==='OWNER'||authUser.role==='ADMIN'||hasPerm(authUser,'scripts.trainer-blocks');
+    if(!canTrainer)throw fail('Доступно только Бизнес-тренеру ДПК и руководству.',403);
+    const allLayouts=await getStoredLayouts();
+    const heads=users.filter(u=>u.role==='HEAD'||u.role==='OWNER');
+    const headMap=new Map(heads.map(h=>[h.id,h]));
+    const managersUnderHeads=users.filter(u=>u.role==='OPERATOR'&&Boolean(u.managerId)&&headMap.has(u.managerId));
+    const managersResult=managersUnderHeads.map(op=>{
+      const head=headMap.get(op.managerId);
+      const effectiveIds=getEffectiveOperatorScriptIds(op,allLayouts);
+      const opBlocks=trainerBlocks.filter(b=>b&&b.userId===op.id);
+      let relocatedCount=0;
+      for(const blk of opBlocks){
+        const lay=allLayouts.find(l=>l.id===blk.layoutId);
+        if(lay){const info=inspectAnchor(lay,blk);if(info.relocated)relocatedCount++;}
+      }
+      return {
+        id:op.id,
+        login:op.login,
+        displayName:op.displayName||op.login,
+        blocked:Boolean(op.blocked),
+        managerId:op.managerId,
+        managerLogin:head?.login||null,
+        managerDisplayName:head?.displayName||head?.login||null,
+        effectiveScriptIds:effectiveIds,
+        scriptAccess:Array.isArray(op.scriptAccess)?op.scriptAccess:null,
+        trainerBlocksCount:opBlocks.length,
+        relocatedBlocksCount:relocatedCount
+      };
+    });
+    return {
+      managers:managersResult,
+      heads:heads.map(h=>({
+        id:h.id,
+        login:h.login,
+        displayName:h.displayName||h.login,
+        role:h.role,
+        departmentScripts:Array.isArray(h.departmentScripts)?h.departmentScripts:[]
+      })),
+      layouts:allLayouts.map(l=>({
+        id:l.id,
+        name:l.name,
+        savedAt:l.savedAt,
+        stages:(l.data?.stages||[]).map(st=>({
+          id:st.id,
+          title:st.title||'',
+          tip:st.tip||'',
+          lines:Array.isArray(st.lines)?st.lines:[],
+          lineKinds:Array.isArray(st.lineKinds)?st.lineKinds:[]
+        }))
+      }))
+    };
+  }
+
+  if(pathname==='/api/trainer/blocks'||pathname.startsWith('/api/trainer/blocks/')){
+    if(!authUser)throw fail('Требуется авторизация.',401);
+    const canTrainer=authUser.role==='TRAINER'||authUser.role==='OWNER'||authUser.role==='ADMIN'||hasPerm(authUser,'scripts.trainer-blocks');
+    if(!canTrainer)throw fail('Управление персональными блоками доступно только Бизнес-тренеру ДПК и руководству.',403);
+    const blockId=pathname.split('/')[4]||null;
+    const allLayouts=await getStoredLayouts();
+    if(method==='GET'&&!blockId){
+      const filterUserId=uObj.searchParams.get('userId')||'';
+      const filterLayoutId=uObj.searchParams.get('layoutId')||'';
+      const list=trainerBlocks.filter(b=>{
+        if(!b)return false;
+        if(filterUserId&&b.userId!==filterUserId)return false;
+        if(filterLayoutId&&b.layoutId!==filterLayoutId)return false;
+        return true;
+      }).map(b=>{
+        const lay=allLayouts.find(l=>l.id===b.layoutId);
+        const info=lay?inspectAnchor(lay,b):{relocated:true};
+        return {...b,relocated:Boolean(info.relocated)};
+      });
+      return {blocks:list};
+    }
+    if(method==='POST'&&!blockId){
+      const userId=String(body.userId||'').trim();
+      const layoutId=String(body.layoutId||'').trim();
+      const stageId=String(body.stageId||'').trim();
+      const type=['line','tip','objection'].includes(body.type)?body.type:'line';
+      const text=String(body.text||'').trim();
+      const title=String(body.title||'').trim();
+      if(!userId||!layoutId||!stageId)throw fail('Необходимо указать сотрудника, скрипт и этап.',400);
+      if(!text)throw fail('Текст блока не может быть пустым.',400);
+      const targetUser=users.find(u=>u.id===userId&&u.role==='OPERATOR');
+      if(!targetUser)throw fail('Менеджер не найден.',404);
+      const layout=allLayouts.find(l=>l.id===layoutId);
+      if(!layout)throw fail('Скрипт не найден.',404);
+      const stage=(layout.data?.stages||[]).find(s=>s.id===stageId);
+      if(!stage)throw fail('Этап скрипта не найден.',404);
+      let afterLineIndex=null;
+      let anchorLineSnapshot='';
+      if(type!=='objection'&&body.afterLineIndex!==undefined&&body.afterLineIndex!==null&&body.afterLineIndex!=='end'){
+        const idx=Number(body.afterLineIndex);
+        if(!Number.isNaN(idx)){
+          afterLineIndex=idx;
+          if(idx>=0&&Array.isArray(stage.lines)&&idx<stage.lines.length)anchorLineSnapshot=String(stage.lines[idx]||'').trim();
+        }
+      }
+      const newBlock={
+        id:'tb_'+VaultCrypto.randomHex(8),
+        userId:targetUser.id,
+        userLogin:targetUser.login,
+        layoutId:layout.id,
+        stageId:stage.id,
+        afterLineIndex,
+        anchorLineSnapshot:body.anchorLineSnapshot!==undefined?String(body.anchorLineSnapshot||''):anchorLineSnapshot,
+        type,
+        title:type==='objection'?(title||'Возражение (бизнес-тренер)'):title,
+        text,
+        keywords:Array.isArray(body.keywords)?body.keywords.map(k=>String(k||'').trim()).filter(Boolean):[],
+        createdBy:authUser.id,
+        createdByLogin:authUser.displayName||authUser.login,
+        createdAt:Date.now(),
+        updatedAt:Date.now()
+      };
+      trainerBlocks.push(newBlock);
+      await saveTrainerBlocks();
+      await logEvent({action:'trainer.block.create',actor:authUser,target:targetUser.login,details:{blockId:newBlock.id,layoutId,stageId,type}});
+      return {ok:true,block:{...newBlock,relocated:false}};
+    }
+    if(method==='PUT'&&blockId){
+      const blk=trainerBlocks.find(b=>b&&b.id===blockId);
+      if(!blk)throw fail('Персональный блок не найден.',404);
+      if(body.type!==undefined&&['line','tip','objection'].includes(body.type))blk.type=body.type;
+      if(body.stageId!==undefined)blk.stageId=String(body.stageId||'').trim()||blk.stageId;
+      if(body.text!==undefined){
+        const t=String(body.text||'').trim();
+        if(!t)throw fail('Текст блока не может быть пустым.',400);
+        blk.text=t;
+      }
+      if(body.title!==undefined)blk.title=String(body.title||'').trim();
+      if(body.keywords!==undefined)blk.keywords=Array.isArray(body.keywords)?body.keywords.map(k=>String(k||'').trim()).filter(Boolean):[];
+      if(body.afterLineIndex!==undefined){
+        if(body.afterLineIndex===null||body.afterLineIndex==='end')blk.afterLineIndex=null;
+        else{const idx=Number(body.afterLineIndex);if(!Number.isNaN(idx))blk.afterLineIndex=idx;}
+      }
+      const lay=allLayouts.find(l=>l.id===blk.layoutId);
+      const st=(lay?.data?.stages||[]).find(s=>s.id===blk.stageId);
+      if(body.anchorLineSnapshot!==undefined)blk.anchorLineSnapshot=String(body.anchorLineSnapshot||'');
+      else if(st&&typeof blk.afterLineIndex==='number'&&blk.afterLineIndex>=0&&Array.isArray(st.lines)&&blk.afterLineIndex<st.lines.length){
+        blk.anchorLineSnapshot=String(st.lines[blk.afterLineIndex]||'').trim();
+      }else if(blk.afterLineIndex===null||blk.afterLineIndex===-1){
+        blk.anchorLineSnapshot='';
+      }
+      blk.updatedAt=Date.now();
+      await saveTrainerBlocks();
+      const info=lay?inspectAnchor(lay,blk):{relocated:false};
+      await logEvent({action:'trainer.block.update',actor:authUser,target:blk.userLogin,details:{blockId:blk.id,layoutId:blk.layoutId,stageId:blk.stageId,type:blk.type}});
+      return {ok:true,block:{...blk,relocated:Boolean(info.relocated)}};
+    }
+    if(method==='DELETE'&&blockId){
+      const idx=trainerBlocks.findIndex(b=>b&&b.id===blockId);
+      if(idx<0)throw fail('Персональный блок не найден.',404);
+      const removed=trainerBlocks.splice(idx,1)[0];
+      await saveTrainerBlocks();
+      await logEvent({action:'trainer.block.delete',actor:authUser,target:removed.userLogin,details:{blockId:removed.id,layoutId:removed.layoutId}});
+      return {ok:true};
     }
   }
 
@@ -4633,9 +5182,21 @@ $('#track').addEventListener('click',event=>{const button=event.target.closest('
 (()=>{
 const CH='bauer-script-choice',lv=document.getElementById('layouts-view');
 const sel=document.getElementById('script-picker');let list=[];
-async function load(){
-  try{list=(await api('/api/scripts')).layouts.filter(l=>!/^Перед изменением/.test(l.name))}catch{list=[]}
-  if(!list.length&&typeof seedLayouts!=='undefined')list=seedLayouts.filter(l=>!/^Перед изменением/.test(l.name));
+async function load(applyCurrent=false){
+  let hasExplicitEmpty=false;
+  try{
+    const res=await api('/api/scripts');
+    list=(res.layouts||[]).filter(l=>!/^Перед изменением/.test(l.name));
+    if(currentUser&&currentUser.role==='OPERATOR'&&Array.isArray(currentUser.scriptAccess)&&currentUser.scriptAccess.length===0&&list.length===0){
+      hasExplicitEmpty=true;
+    }
+  }catch{list=[]}
+  if(!list.length&&!hasExplicitEmpty&&typeof seedLayouts!=='undefined')list=seedLayouts.filter(l=>!/^Перед изменением/.test(l.name));
+  if(hasExplicitEmpty){
+    sel.innerHTML='<option value="">Нет доступных скриптов (обратитесь к руководителю отдела)</option>';
+    sel.value='';
+    return;
+  }
   let cur=localStorage.getItem(CH);
   if(!cur||cur==='main'||!list.some(l=>l.id===cur)){
     cur=list[0]?.id||'prime-ksh';
@@ -4643,6 +5204,7 @@ async function load(){
   }
   sel.innerHTML=list.map(l=>`<option value="${escapeHTML(l.id)}">${escapeHTML(l.name)}</option>`).join('');
   sel.value=cur;
+  if(applyCurrent&&cur&&list.some(l=>l.id===cur))await pick(cur,true);
 }
 async function pick(id,silent){
   try{
@@ -4663,8 +5225,10 @@ async function pick(id,silent){
   }catch(e){toast(e.message)}
 }
 sel.addEventListener('change',()=>pick(sel.value));
-addEventListener('layouts-changed',load);
-load().then(()=>{const c=localStorage.getItem(CH);if(c&&list.some(l=>l.id===c))pick(c,true)});
+addEventListener('layouts-changed',()=>load(false));
+addEventListener('auth-changed',()=>load(true));
+addEventListener('trainer-blocks-changed',()=>load(true));
+load(true);
 
 function bar(){
   const ed=lv.querySelector('.manual-editor');if(!ed||lv.querySelector('#new-layout-bar'))return;
@@ -7868,13 +8432,15 @@ const PERM_LABELS={
   'users.view':'Просмотр списка пользователей',
   'users.manage':'Создание и управление пользователями',
   'sessions.manage':'Управление активными сессиями',
-  'audit.view':'Просмотр журнала действий'
+  'audit.view':'Просмотр журнала действий',
+  'scripts.trainer-blocks':'Персональные блоки бизнес-тренера ДПК'
 };
 const ROLE_NAMES={
   OWNER:'Владелец',
   ADMIN:'Администратор',
   EDITOR:'Редактор',
   HEAD:'Руководитель отдела',
+  TRAINER:'Бизнес-тренер ДПК',
   OPERATOR:'Менеджер обзвона'
 };
 const ACTION_LABELS={
@@ -7905,6 +8471,11 @@ const ACTION_LABELS={
   'users.update':'Изменение пользователя / прав',
   'users.delete':'Удаление пользователя',
   'users.manage.denied':'Отказ в доступе к управлению пользователями',
+  'users.script_access.update':'Настройка доступа сотрудника к скриптам отдела',
+  'department.scripts.update':'Обновление скриптов отдела',
+  'trainer.block.create':'🎓 Добавление персонального блока бизнес-тренера',
+  'trainer.block.update':'🎓 Обновление персонального блока бизнес-тренера',
+  'trainer.block.delete':'🎓 Удаление персонального блока бизнес-тренера',
   'sessions.revoke':'Принудительное завершение сессии',
   'sessions.revoke_user':'Завершение всех сессий пользователя',
   'content.publish':'Публикация рабочего скрипта',
@@ -7928,7 +8499,7 @@ if(navTabs&&!document.getElementById('owner-tab')){
   navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">Владелец · Управление</span></button>');
 }
 if(!document.getElementById('owner-view')){
-  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog><dialog id="temp-password-dialog" class="owner-dialog" aria-labelledby="temp-pw-title"></dialog><dialog id="theme-customizer-modal" class="theme-customizer-dialog" aria-labelledby="tcd-title"></dialog>');
+  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="trainer-block-modal" class="owner-dialog" aria-labelledby="trainer-block-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog><dialog id="temp-password-dialog" class="owner-dialog" aria-labelledby="temp-pw-title"></dialog><dialog id="theme-customizer-modal" class="theme-customizer-dialog" aria-labelledby="tcd-title"></dialog>');
 }
 
 const authFoot=document.querySelector('#auth-dialog .auth-foot');
@@ -7959,7 +8530,7 @@ showScript=function(index=current,tab='script'){
   origShowScript(index,tab);
 };
 
-let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],selectedDeptHeadId=null,empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',roleDefaults={};
+let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],deptEmployeesList=[],selectedDeptHeadId=null,empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',roleDefaults={},trainerManagersList=[],trainerHeadsList=[],trainerLayoutsList=[],trainerSelectedUserId='',trainerSelectedLayoutId='',trainerBlocksList=[],trainerHeadFilter='all';
 
 function formatAuditDetails(ev){
   if(!ev) return '';
@@ -8057,7 +8628,7 @@ function updateHeaderBadge(){
     if(outBtn)outBtn.hidden=false;
     const isOwner=currentUser.role==='OWNER';
     btn.innerHTML=`${isOwner?'<span class="dot-owner"></span>':''}<span>${E(currentUser.login)} · ${E(ROLE_NAMES[currentUser.role]||currentUser.role)}</span>`;
-    if(tabLbl)tabLbl.textContent=isOwner?'Владелец · Управление':currentUser.role==='ADMIN'?'Администрирование':currentUser.role==='HEAD'?'Мой отдел · Управление':'Профиль ('+(ROLE_NAMES[currentUser.role]||currentUser.role)+')';
+    if(tabLbl)tabLbl.textContent=isOwner?'Владелец · Управление':currentUser.role==='ADMIN'?'Администрирование':currentUser.role==='HEAD'?'Мой отдел · Управление':currentUser.role==='TRAINER'?'Бизнес-тренер ДПК · Управление':'Профиль ('+(ROLE_NAMES[currentUser.role]||currentUser.role)+')';
     const planTab=document.getElementById('plan-tab');
     if(planTab)planTab.hidden=!(isOwner||currentUser.role==='ADMIN'||currentUser.role==='HEAD'||(currentUser.permissions&&currentUser.permissions.includes('addresses.manage')));
   }else{
@@ -8147,6 +8718,7 @@ async function openOwnerPanel(){
     for(const el of document.querySelectorAll('main'))el.hidden=true;
     $('#edit').hidden=true;$('#all-objections').hidden=true;
     setTab('owner');
+    if(currentUser&&currentUser.role==='TRAINER'&&ownerTab==='users')ownerTab='trainer';
     await loadOwnerData();
     renderOwnerView();
   });
@@ -8160,6 +8732,19 @@ document.getElementById('plan-tab')?.addEventListener('click',(e)=>{
   else if(typeof openPlanPanel==='function')openPlanPanel();
 });
 
+async function loadTrainerBlocksForCurrent(){
+  if(!trainerSelectedUserId||!trainerSelectedLayoutId){
+    trainerBlocksList=[];
+    return;
+  }
+  try{
+    const bRes=await api(`/api/trainer/blocks?userId=${encodeURIComponent(trainerSelectedUserId)}&layoutId=${encodeURIComponent(trainerSelectedLayoutId)}`);
+    trainerBlocksList=bRes.blocks||[];
+  }catch{
+    trainerBlocksList=[];
+  }
+}
+
 async function loadOwnerData(){
   try{
     const st=await api('/api/admin/status');
@@ -8172,6 +8757,7 @@ async function loadOwnerData(){
     const canSessions=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('sessions.manage');
     const canAudit=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('audit.view');
     const canDeptScripts=currentUser.role==='OWNER'||currentUser.role==='HEAD'||currentUser.role==='ADMIN';
+    const canTrainer=currentUser.role==='TRAINER'||currentUser.role==='OWNER'||currentUser.role==='ADMIN'||perms.includes('scripts.trainer-blocks');
     const tasks=[];
     if(canUsers)tasks.push(api('/api/users').then(uRes=>{
       usersList=uRes.users||[];
@@ -8182,10 +8768,29 @@ async function loadOwnerData(){
       const q = selectedDeptHeadId ? ('?headId=' + encodeURIComponent(selectedDeptHeadId)) : '';
       tasks.push(api('/api/department/scripts' + q).then(dsRes=>{
         deptScriptsIds=Array.isArray(dsRes.scriptIds)?dsRes.scriptIds:[];
+        deptEmployeesList=Array.isArray(dsRes.employees)?dsRes.employees:[];
         allLayoutsList=(dsRes.layouts||[]).filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
         if(!selectedDeptHeadId && dsRes.headId){
           selectedDeptHeadId = dsRes.headId;
         }
+      }).catch(()=>{}));
+    }
+    if(canTrainer){
+      tasks.push(api('/api/trainer/managers').then(async tmRes=>{
+        trainerManagersList=tmRes.managers||[];
+        trainerHeadsList=tmRes.heads||[];
+        trainerLayoutsList=(tmRes.layouts||[]).filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
+        if(!trainerSelectedUserId||!trainerManagersList.some(m=>m.id===trainerSelectedUserId)){
+          trainerSelectedUserId=trainerManagersList[0]?.id||'';
+        }
+        const curMgr=trainerManagersList.find(m=>m.id===trainerSelectedUserId);
+        const allowedLayIds=curMgr&&Array.isArray(curMgr.effectiveScriptIds)&&curMgr.effectiveScriptIds.length
+          ?curMgr.effectiveScriptIds
+          :trainerLayoutsList.map(l=>l.id);
+        if(!trainerSelectedLayoutId||!trainerLayoutsList.some(l=>l.id===trainerSelectedLayoutId)){
+          trainerSelectedLayoutId=allowedLayIds[0]||trainerLayoutsList[0]?.id||'';
+        }
+        await loadTrainerBlocksForCurrent();
       }).catch(()=>{}));
     }
     if(canSessions)tasks.push(api('/api/sessions').then(sRes=>{sessionsList=sRes.sessions||[];}));
@@ -8241,7 +8846,7 @@ function renderUsersSection(){
         <h2>${isHead&&!canManageAll?'Таблица сотрудников моего отдела':'Таблица сотрудников и отделов'} (${displayedUsers.length})</h2>
         <p>${isHead&&!canManageAll
           ?'Сотрудники вашего отдела: просмотр статуса, управление паролем и сессиями, добавление менеджеров обзвона.'
-          :'Иерархия отделов: <b>Владелец (отдел Мелентьев Е.А.)</b>, <b>Администраторы</b>, <b>Редакторы</b>, <b>Руководители отделов</b> и <b>Менеджеры обзвона</b>.'}</p>
+          :'Иерархия отделов: <b>Владелец (отдел Мелентьев Е.А.)</b>, <b>Администраторы</b>, <b>Редакторы</b>, <b>Бизнес-тренеры ДПК</b>, <b>Руководители отделов</b> и <b>Менеджеры обзвона</b>.'}</p>
       </div>
       ${canCreate?`<button type="button" class="primary" data-owner-act="create-user">${isHead&&!canManageAll?'+ Добавить менеджера обзвона':'+ Добавить сотрудника'}</button>`:''}
     </div>
@@ -8287,6 +8892,8 @@ function renderUsersSection(){
               deptLabel='Владелец · Отдел Мелентьев Е.А. (<b>'+deptCount+'</b> менеджеров)';
             }else if(u.role==='HEAD'){
               deptLabel='Руководитель отдела (<b>'+deptCount+'</b> менеджеров)';
+            }else if(u.role==='TRAINER'){
+              deptLabel='🎓 Бизнес-тренер ДПК · Персональные блоки менеджеров';
             }else if(u.role==='ADMIN'){
               deptLabel='Администрация компании';
             }else if(u.role==='EDITOR'){
@@ -8340,17 +8947,19 @@ function renderDepartmentScriptsSection(){
     selectedDeptHeadId = (currentUser.role==='HEAD'||currentUser.role==='OWNER') ? currentUser.id : (availHeads[0]?.id || currentUser.id);
   }
   const activeHead=availHeads.find(h=>h.id===selectedDeptHeadId) || currentUser;
+  const cleanLayouts=allLayoutsList.filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
+  const poolLayouts=deptScriptsIds.length>0?cleanLayouts.filter(l=>deptScriptsIds.includes(l.id)):cleanLayouts;
 
   return `<div class="owner-card">
     <div class="owner-card-head">
       <div>
         <h2>Скрипты для сотрудников отдела</h2>
-        <p>Каждый руководитель отдела может выбрать скрипты, с которыми работают менеджеры обзвона в его отделе.<br><b>Если ничего не выбрано — сотрудникам отдела отображаются все доступные скрипты.</b></p>
+        <p>Выберите скрипты, которые входят в пул отдела, и отметьте галочками ниже, каким именно сотрудникам доступен каждый скрипт.<br><b>Если в пуле отдела ничего не выбрано — доступны все скрипты.</b></p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" id="dept-scripts-select-all">✓ Выбрать все</button>
         <button type="button" id="dept-scripts-clear">✕ Сбросить (показывать все)</button>
-        <button type="button" class="primary" id="dept-scripts-save">💾 Сохранить скрипты отдела</button>
+        <button type="button" class="primary" id="dept-scripts-save">💾 Сохранить скрипты и доступ</button>
       </div>
     </div>
 
@@ -8366,7 +8975,7 @@ function renderDepartmentScriptsSection(){
     `}
 
     <div class="dept-script-grid" id="dept-script-grid">
-      ${allLayoutsList.filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name)).map(l=>{
+      ${cleanLayouts.map(l=>{
         const isChecked=deptScriptsIds.includes(l.id);
         return `<label class="dept-script-item ${isChecked?'selected':''}">
           <input type="checkbox" name="dept_script" value="${E(l.id)}" ${isChecked?'checked':''}>
@@ -8378,7 +8987,310 @@ function renderDepartmentScriptsSection(){
         </label>`;
       }).join('')||'<p class="v4-empty" style="grid-column:1/-1">Макеты не найдены. Сохраните хотя бы один макет.</p>'}
     </div>
+
+    <div style="margin-top:26px;padding-top:20px;border-top:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <div>
+          <h3 style="margin:0 0 4px;font-size:17px;font-weight:800">☑️ Индивидуальный доступ сотрудников к скриптам («Скрипт × Сотрудник»)</h3>
+          <p style="margin:0;font-size:12.5px;color:var(--muted);line-height:1.5">
+            Проставьте галочки, какие скрипты отдела видит каждый конкретный менеджер обзвона.<br>
+            Значок <span class="role-pill trainer" style="font-size:10px;padding:1px 6px">🎓 Блоки тренера</span> означает, что бизнес-тренер ДПК добавил персональные блоки для этого сотрудника в данный скрипт. Руководитель может отключить весь скрипт галочкой, но не меняет блоки тренера.
+          </p>
+        </div>
+      </div>
+
+      ${deptEmployeesList.length===0?`
+        <div style="padding:18px;border-radius:12px;background:var(--surface-alt);border:1px dashed var(--line);color:var(--muted);font-size:13px">
+          В этом отделе пока нет закреплённых менеджеров обзвона. Добавьте сотрудников во вкладке «Сотрудники», чтобы настраивать для них индивидуальный доступ к скриптам.
+        </div>
+      `:poolLayouts.length===0?`
+        <div style="padding:18px;border-radius:12px;background:var(--surface-alt);border:1px dashed var(--line);color:var(--muted);font-size:13px">
+          Нет доступных скриптов для распределения.
+        </div>
+      `:`
+        <div class="emp-script-matrix-wrap">
+          <table class="emp-script-matrix" id="emp-script-matrix">
+            <thead>
+              <tr>
+                <th>Сотрудник отдела (${deptEmployeesList.length})</th>
+                ${poolLayouts.map(l=>`<th style="text-align:center;min-width:130px">${E(l.name)}</th>`).join('')}
+                <th style="text-align:right;min-width:150px">Быстрый выбор</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${deptEmployeesList.map(emp=>{
+                const hasCustomAccess=Array.isArray(emp.scriptAccess);
+                const checkedCount=poolLayouts.filter(l=>!hasCustomAccess||emp.scriptAccess.includes(l.id)).length;
+                return `<tr data-emp-matrix-row="${E(emp.id)}">
+                  <td>
+                    <div style="font-weight:750;color:var(--ink)">${E(emp.displayName||emp.login)}</div>
+                    <div style="font-size:11px;color:var(--muted)">@${E(emp.login)} ${emp.blocked?'· <span style="color:#dc2626;font-weight:700">Заблокирован</span>':''}</div>
+                    ${checkedCount===0?`<div style="margin-top:4px;font-size:11px;font-weight:700;color:#b45309">⚠ Нет выбранных скриптов</div>`:`<div style="margin-top:3px;font-size:11px;color:var(--muted)">Доступно: <b>${checkedCount}</b> из ${poolLayouts.length}</div>`}
+                  </td>
+                  ${poolLayouts.map(l=>{
+                    const isEmpChecked=!hasCustomAccess||emp.scriptAccess.includes(l.id);
+                    const hasTrainer=Array.isArray(emp.trainerBlockLayouts)&&emp.trainerBlockLayouts.includes(l.id);
+                    return `<td style="text-align:center">
+                      <label style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:4px 8px;border-radius:8px">
+                        <input type="checkbox" data-emp-script-cb="1" data-user-id="${E(emp.id)}" data-layout-id="${E(l.id)}" ${isEmpChecked?'checked':''} style="width:18px;height:18px;accent-color:var(--teal);cursor:pointer">
+                        ${hasTrainer?`<span class="role-pill trainer" style="font-size:10px;padding:1px 6px" title="У сотрудника есть персональные блоки от бизнес-тренера ДПК в этом скрипте">🎓 Тренер</span>`:''}
+                      </label>
+                    </td>`;
+                  }).join('')}
+                  <td style="text-align:right;white-space:nowrap">
+                    <button type="button" data-emp-row-all="${E(emp.id)}" style="min-height:28px;padding:0 10px;font-size:11px;border-radius:7px">Все</button>
+                    <button type="button" data-emp-row-none="${E(emp.id)}" style="min-height:28px;padding:0 10px;font-size:11px;border-radius:7px">Снять</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
   </div>`;
+}
+
+function renderTrainerWorkspaceSection(){
+  const filteredManagers=trainerHeadFilter==='all'
+    ?trainerManagersList
+    :trainerManagersList.filter(m=>m.managerId===trainerHeadFilter);
+  const selectedMgr=trainerManagersList.find(m=>m.id===trainerSelectedUserId)||filteredManagers[0]||null;
+  if(selectedMgr&&selectedMgr.id!==trainerSelectedUserId){
+    trainerSelectedUserId=selectedMgr.id;
+  }
+  const selectedLayout=trainerLayoutsList.find(l=>l.id===trainerSelectedLayoutId)||trainerLayoutsList[0]||null;
+  if(selectedLayout&&selectedLayout.id!==trainerSelectedLayoutId){
+    trainerSelectedLayoutId=selectedLayout.id;
+  }
+  const mgrEffectiveIds=selectedMgr&&Array.isArray(selectedMgr.effectiveScriptIds)?selectedMgr.effectiveScriptIds:[];
+
+  const typeLabels={
+    line:'🎓 Доп. реплика для менеджера',
+    tip:'🎓 Совет бизнес-тренера',
+    objection:'🎓 Отработка возражения'
+  };
+
+  return `<div class="owner-card">
+    <div class="owner-card-head">
+      <div>
+        <h2 style="display:flex;align-items:center;gap:10px">
+          <span>🎓 Кабинет бизнес-тренера ДПК · Персональные блоки</span>
+          <span class="role-pill trainer">Только добавление своих блоков</span>
+        </h2>
+        <p>Выберите менеджера обзвона (под руководителем отдела) и скрипт. Оригинальный макет скрипта защищён от изменений — вы добавляете <b>персональные реплики, советы и возражения</b>, которые видит только выбранный сотрудник. При обновлении оригинала ваши блоки автоматически сохраняются на своих местах.</p>
+      </div>
+      <button type="button" data-owner-act="refresh">↻ Обновить</button>
+    </div>
+
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:700;color:var(--muted)">Фильтр по руководителю отдела:</span>
+      <button type="button" class="emp-filter-btn ${trainerHeadFilter==='all'?'active':''}" data-trainer-head-filter="all">Все менеджеры под руководителями (${trainerManagersList.length})</button>
+      ${trainerHeadsList.map(h=>{
+        const cnt=trainerManagersList.filter(m=>m.managerId===h.id).length;
+        return `<button type="button" class="emp-filter-btn ${trainerHeadFilter===h.id?'active':''}" data-trainer-head-filter="${E(h.id)}">${h.role==='OWNER'?'★ ':''}${E(h.displayName||h.login)} (${cnt})</button>`;
+      }).join('')}
+    </div>
+
+    <div class="trainer-workspace-layout">
+      <aside class="trainer-managers-list">
+        <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:8px">Менеджеры обзвона (${filteredManagers.length})</div>
+        ${filteredManagers.map(m=>{
+          const active=selectedMgr&&selectedMgr.id===m.id;
+          return `<button type="button" class="trainer-mgr-btn ${active?'active':''}" data-trainer-select-user="${E(m.id)}">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+              <strong style="font-size:13.5px">${E(m.displayName||m.login)}</strong>
+              ${m.trainerBlocksCount>0?`<span class="role-pill trainer" style="font-size:10px;padding:1px 7px">🎓 ${m.trainerBlocksCount}</span>`:''}
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">@${E(m.login)} · Рук.: <b>${E(m.managerDisplayName||m.managerLogin||'—')}</b></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;color:var(--muted)">
+              <span>Доступно скриптов: <b>${(m.effectiveScriptIds||[]).length}</b></span>
+              ${m.relocatedBlocksCount>0?`<span class="trainer-relocated-badge" title="В оригинальном скрипте изменилась строка-якорь">⚠ Проверьте (${m.relocatedBlocksCount})</span>`:''}
+            </div>
+          </button>`;
+        }).join('')||'<div style="padding:14px;font-size:12px;color:var(--muted)">Нет менеджеров, закреплённых за руководителями отделов.</div>'}
+      </aside>
+
+      <section class="trainer-script-panel">
+        ${!selectedMgr?`
+          <div style="padding:28px;text-align:center;color:var(--muted)">Выберите менеджера слева, чтобы настроить для него персональные блоки скрипта.</div>
+        `:`
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;background:var(--surface-alt);border:1px solid var(--line);border-radius:12px;margin-bottom:16px">
+            <div>
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#6d28d9;letter-spacing:.05em">Персональная доработка скрипта для сотрудника</div>
+              <div style="font-size:17px;font-weight:800;color:var(--ink);margin-top:2px">${E(selectedMgr.displayName||selectedMgr.login)} <span style="font-size:13px;font-weight:600;color:var(--muted)">(@${E(selectedMgr.login)} · Отдел: ${E(selectedMgr.managerDisplayName||selectedMgr.managerLogin||'—')})</span></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <label for="trainer-layout-select" style="font-size:12px;font-weight:700">Скрипт:</label>
+              <select id="trainer-layout-select" style="min-width:240px;height:38px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:700">
+                ${trainerLayoutsList.map(l=>{
+                  const isAllowed=mgrEffectiveIds.includes(l.id);
+                  return `<option value="${E(l.id)}" ${selectedLayout&&selectedLayout.id===l.id?'selected':''}>${E(l.name)}${isAllowed?'':' (скрыт руководителем)'}</option>`;
+                }).join('')}
+              </select>
+              <button type="button" class="primary" data-trainer-add-block="1" data-stage-id="${E(selectedLayout?.stages?.[0]?.id||'')}" data-after-line="end">+ Добавить персональный блок</button>
+            </div>
+          </div>
+
+          ${selectedLayout&&!mgrEffectiveIds.includes(selectedLayout.id)?`
+            <div style="margin-bottom:14px;padding:10px 14px;border-radius:10px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);color:#b45309;font-size:12.5px;font-weight:600">
+              ⚠ Обратите внимание: руководитель отдела сейчас отключил этот скрипт галочкой для сотрудника <b>${E(selectedMgr.displayName||selectedMgr.login)}</b>. Вы можете подготовить персональные блоки заранее — сотрудник увидит их, как только руководитель включит ему этот скрипт.
+            </div>
+          `:''}
+
+          ${!selectedLayout?`<p class="v4-empty">Скрипт не выбран.</p>`:`
+            <div style="display:flex;flex-direction:column;gap:14px">
+              ${(selectedLayout.stages||[]).map((st,stIdx)=>{
+                const stBlocks=trainerBlocksList.filter(b=>b.stageId===st.id);
+                const startBlocks=stBlocks.filter(b=>b.type!=='objection'&&(b.afterLineIndex===-1||b.afterLineIndex===null&&false));
+                const topBlocks=stBlocks.filter(b=>b.type!=='objection'&&b.afterLineIndex===-1);
+                const endBlocks=stBlocks.filter(b=>b.type!=='objection'&&(b.afterLineIndex===null||b.afterLineIndex===undefined||b.afterLineIndex>=(st.lines||[]).length));
+                const obBlocks=stBlocks.filter(b=>b.type==='objection');
+
+                const renderBlockCard=b=>`<div class="trainer-block-card">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                      <span class="role-pill trainer">${E(typeLabels[b.type]||'🎓 Блок тренера')}</span>
+                      ${b.title?`<strong style="font-size:13px;color:var(--ink)">${E(b.title)}</strong>`:''}
+                      ${b.relocated?`<span class="trainer-relocated-badge">⚠ Место блока изменилось — проверьте привязку</span>`:''}
+                    </div>
+                    <div style="display:flex;gap:6px">
+                      <button type="button" data-trainer-edit-block="${E(b.id)}" style="min-height:28px;padding:0 10px;font-size:11.5px;border-radius:7px">✎ Изменить</button>
+                      <button type="button" class="danger-text" data-trainer-del-block="${E(b.id)}" style="min-height:28px;padding:0 10px;font-size:11.5px;border-radius:7px">🗑 Удалить</button>
+                    </div>
+                  </div>
+                  <div style="font-size:13.5px;line-height:1.5;white-space:pre-wrap;color:var(--ink)">${E(b.text)}</div>
+                  <div style="margin-top:6px;font-size:11px;color:var(--muted)">Автор: ${E(b.createdByLogin||'Бизнес-тренер ДПК')} · Обновлено: ${fmtTime(b.updatedAt||b.createdAt)}</div>
+                </div>`;
+
+                return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--surface)">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)">
+                    <div>
+                      <span style="font-size:11px;font-weight:800;color:var(--teal);text-transform:uppercase">Этап ${String(stIdx+1).padStart(2,'0')}</span>
+                      <h3 style="margin:2px 0 0;font-size:16px;font-weight:800;color:var(--ink)">${E(st.title||'Без названия')}</h3>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                      <button type="button" data-trainer-add-block="1" data-stage-id="${E(st.id)}" data-after-line="-1" data-block-type="line" style="min-height:30px;padding:0 10px;font-size:11.5px;border-radius:8px">+ Реплика в начало</button>
+                      <button type="button" data-trainer-add-block="1" data-stage-id="${E(st.id)}" data-after-line="end" data-block-type="tip" style="min-height:30px;padding:0 10px;font-size:11.5px;border-radius:8px">+ Совет тренера</button>
+                      <button type="button" data-trainer-add-block="1" data-stage-id="${E(st.id)}" data-after-line="end" data-block-type="objection" style="min-height:30px;padding:0 10px;font-size:11.5px;border-radius:8px">+ Своё возражение</button>
+                    </div>
+                  </div>
+
+                  ${topBlocks.map(renderBlockCard).join('')}
+
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    ${(st.lines||[]).map((ln,lnIdx)=>{
+                      const afterThisBlocks=stBlocks.filter(b=>b.type!=='objection'&&b.afterLineIndex===lnIdx);
+                      return `<div style="padding:10px 12px;border-radius:10px;background:var(--surface-alt);border:1px solid var(--line)">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                          <div style="font-size:13px;line-height:1.5;color:var(--ink);white-space:pre-wrap"><span style="font-weight:700;color:var(--muted);margin-right:6px">🔒 Реплика #${lnIdx+1}:</span>${E(ln)}</div>
+                          <button type="button" data-trainer-add-block="1" data-stage-id="${E(st.id)}" data-after-line="${lnIdx}" data-block-type="line" style="min-height:26px;padding:0 9px;font-size:11px;border-radius:7px;white-space:nowrap;flex-shrink:0" title="Вставить персональный блок для сотрудника сразу после этой реплики">+ Блок после #${lnIdx+1}</button>
+                        </div>
+                      </div>
+                      ${afterThisBlocks.map(renderBlockCard).join('')}`;
+                    }).join('')}
+                  </div>
+
+                  ${endBlocks.map(renderBlockCard).join('')}
+                  ${obBlocks.length?`<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line)">
+                    <div style="font-size:11px;font-weight:800;color:#6d28d9;text-transform:uppercase;margin-bottom:6px">Персональные возражения на этом этапе (${obBlocks.length})</div>
+                    ${obBlocks.map(renderBlockCard).join('')}
+                  </div>`:''}
+                </div>`;
+              }).join('')}
+            </div>
+          `}
+        `}
+      </section>
+    </div>
+  </div>`;
+}
+
+function openTrainerBlockModal(opts={}){
+  const dlg=document.getElementById('trainer-block-modal');
+  if(!dlg)return;
+  const editBlock=opts.block||null;
+  const isEdit=Boolean(editBlock);
+  const selectedMgr=trainerManagersList.find(m=>m.id===(editBlock?.userId||trainerSelectedUserId));
+  const selectedLayout=trainerLayoutsList.find(l=>l.id===(editBlock?.layoutId||trainerSelectedLayoutId));
+  if(!selectedMgr||!selectedLayout){
+    toast('Сначала выберите сотрудника и скрипт');
+    return;
+  }
+  const stages=selectedLayout.stages||[];
+  const curStageId=editBlock?.stageId||opts.stageId||stages[0]?.id||'';
+  const curStage=stages.find(s=>s.id===curStageId)||stages[0];
+  const curType=editBlock?.type||opts.type||'line';
+  const curAfter=(editBlock!==null&&editBlock!==undefined)
+    ?(editBlock.afterLineIndex===null||editBlock.afterLineIndex===undefined?'end':String(editBlock.afterLineIndex))
+    :(opts.afterLine!==undefined?String(opts.afterLine):'end');
+
+  const buildPositionOptions=(st)=>{
+    const lines=st?.lines||[];
+    let html=`<option value="-1" ${curAfter==='-1'?'selected':''}>В самом начале этапа (перед первой репликой)</option>`;
+    lines.forEach((ln,idx)=>{
+      const snip=String(ln||'').replace(/\s+/g,' ').trim().slice(0,55);
+      html+=`<option value="${idx}" ${curAfter===String(idx)?'selected':''}>После реплики #${idx+1}: «${E(snip)}…»</option>`;
+    });
+    html+=`<option value="end" ${curAfter==='end'?'selected':''}>В конце этапа (после всех реплик)</option>`;
+    return html;
+  };
+
+  dlg.innerHTML=`<button type="button" class="dialog-x" data-close-modal="trainer-block-modal" aria-label="Закрыть">✕</button>
+    <div class="kicker">ПЕРСОНАЛЬНЫЙ БЛОК БИЗНЕС-ТРЕНЕРА ДПК</div>
+    <h2 id="trainer-block-modal-title">${isEdit?'Редактировать персональный блок':'Добавить персональный блок в скрипт'}</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin:4px 0 12px">
+      Сотрудник: <b>${E(selectedMgr.displayName||selectedMgr.login)}</b> (@${E(selectedMgr.login)}) · Скрипт: <b>${E(selectedLayout.name)}</b>
+    </p>
+    <form id="trainer-block-form" data-block-id="${isEdit?E(editBlock.id):''}" data-user-id="${E(selectedMgr.id)}" data-layout-id="${E(selectedLayout.id)}">
+      <label for="tb-type">Тип персонального блока</label>
+      <select id="tb-type" name="type">
+        <option value="line" ${curType==='line'?'selected':''}>💬 Дополнительная реплика для менеджера</option>
+        <option value="tip" ${curType==='tip'?'selected':''}>💡 Совет / подсказка бизнес-тренера</option>
+        <option value="objection" ${curType==='objection'?'selected':''}>🛡️ Персональная отработка возражения на этапе</option>
+      </select>
+
+      <label for="tb-stage" style="display:block;margin-top:12px">Этап скрипта</label>
+      <select id="tb-stage" name="stageId">
+        ${stages.map((s,idx)=>`<option value="${E(s.id)}" ${s.id===curStage?.id?'selected':''}>Этап ${idx+1}: ${E(s.title||'Без названия')}</option>`).join('')}
+      </select>
+
+      <div id="tb-pos-wrap" style="margin-top:12px" ${curType==='objection'?'hidden':''}>
+        <label for="tb-after-line">Куда вставить блок внутри этапа</label>
+        <select id="tb-after-line" name="afterLineIndex">
+          ${buildPositionOptions(curStage)}
+        </select>
+      </div>
+
+      <div id="tb-title-wrap" style="margin-top:12px">
+        <label for="tb-title">${curType==='objection'?'Название возражения (на кнопке у оператора)':'Краткий заголовок (необязательно)'}</label>
+        <input id="tb-title" name="title" maxlength="140" value="${E(editBlock?.title||'')}" placeholder="${curType==='objection'?'Например: Дорого / Подумаю до завтра':'Например: Акцент на выгоду для семьи'}">
+      </div>
+
+      <label for="tb-text" style="display:block;margin-top:12px">Текст блока для сотрудника</label>
+      <textarea id="tb-text" name="text" required rows="5" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);font:inherit;line-height:1.5">${E(editBlock?.text||'')}</textarea>
+
+      <p id="tb-error" class="form-error" role="alert"></p>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="submit" class="primary" style="flex:1">${isEdit?'💾 Сохранить изменения':'+ Добавить блок сотруднику'}</button>
+        <button type="button" data-close-modal="trainer-block-modal">Отмена</button>
+      </div>
+    </form>`;
+
+  const typeSel=dlg.querySelector('#tb-type');
+  const stageSel=dlg.querySelector('#tb-stage');
+  const posWrap=dlg.querySelector('#tb-pos-wrap');
+  const posSel=dlg.querySelector('#tb-after-line');
+
+  typeSel?.addEventListener('change',()=>{
+    if(posWrap)posWrap.hidden=typeSel.value==='objection';
+  });
+  stageSel?.addEventListener('change',()=>{
+    const st=stages.find(s=>s.id===stageSel.value);
+    if(st&&posSel)posSel.innerHTML=buildPositionOptions(st);
+  });
+
+  dlg.showModal();
 }
 
 function renderSessionsSection(){
@@ -8666,18 +9578,23 @@ function renderOwnerView(){
   if(!ov||!currentUser)return;
   const isOwner=currentUser.role==='OWNER';
   const isHead=currentUser.role==='HEAD';
+  const isTrainer=currentUser.role==='TRAINER';
   const perms=currentUser.permissions||[];
-  const canViewUsers=isOwner||isHead||perms.includes('users.view')||perms.includes('users.manage');
+  const canViewUsers=(isOwner||isHead||perms.includes('users.view')||perms.includes('users.manage'))&&!isTrainer;
   const canViewSessions=isOwner||isHead||perms.includes('sessions.manage');
   const canViewAudit=isOwner||isHead||perms.includes('audit.view');
-  if(ownerTab==='users'&&!canViewUsers)ownerTab='design';
-  if(ownerTab==='sessions'&&!canViewSessions)ownerTab='design';
-  if(ownerTab==='audit'&&!canViewAudit)ownerTab='design';
-
   const canDeptScripts=isOwner||isHead||currentUser.role==='ADMIN';
+  const canTrainer=isTrainer||isOwner||currentUser.role==='ADMIN'||perms.includes('scripts.trainer-blocks');
+  if(ownerTab==='users'&&!canViewUsers)ownerTab=canTrainer?'trainer':'design';
+  if(ownerTab==='sessions'&&!canViewSessions)ownerTab=canTrainer?'trainer':'design';
+  if(ownerTab==='audit'&&!canViewAudit)ownerTab=canTrainer?'trainer':'design';
+  if(ownerTab==='trainer'&&!canTrainer)ownerTab=canViewUsers?'users':'design';
+
   const navItems=[];
+  if(canTrainer&&isTrainer)navItems.push(['trainer',`🎓 Бизнес-тренер ДПК · Персональные блоки (${trainerManagersList.length})`]);
   if(canViewUsers)navItems.push(['users',`👥 ${isHead&&!perms.includes('users.manage')?'Мой отдел (сотрудники)':'Сотрудники компании'} (${usersList.length})`]);
   if(canDeptScripts)navItems.push(['dept-scripts',`📋 Скрипты отдела ${deptScriptsIds.length?'('+deptScriptsIds.length+')':''}`]);
+  if(canTrainer&&!isTrainer)navItems.push(['trainer',`🎓 Бизнес-тренер ДПК (${trainerManagersList.length})`]);
   if(canViewSessions)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
   if(canViewAudit)navItems.push(['audit',`📋 Журнал действий`]);
   navItems.push(['design',`🎨 Персональный дизайн`]);
@@ -8685,8 +9602,8 @@ function renderOwnerView(){
 
   ov.innerHTML=`<header class="owner-header">
     <div>
-      <div class="kicker">${isOwner?'ГЛАВНАЯ УЧЁТНАЯ ЗАПИСЬ ВЛАДЕЛЬЦА':currentUser.role==='ADMIN'?'ПАНЕЛЬ АДМИНИСТРАТОРА':isHead?'КАБИНЕТ РУКОВОДИТЕЛЯ ОТДЕЛА':'УЧЁТНАЯ ЗАПИСЬ СОТРУДНИКА'}</div>
-      <h1>${isOwner?'Центр управления Владельца':currentUser.role==='ADMIN'?'Управление системой и сотрудниками':isHead?'Управление отделом и менеджерами обзвона':'Профиль и доступ'}</h1>
+      <div class="kicker">${isOwner?'ГЛАВНАЯ УЧЁТНАЯ ЗАПИСЬ ВЛАДЕЛЬЦА':currentUser.role==='ADMIN'?'ПАНЕЛЬ АДМИНИСТРАТОРА':isHead?'КАБИНЕТ РУКОВОДИТЕЛЯ ОТДЕЛА':isTrainer?'КАБИНЕТ БИЗНЕС-ТРЕНЕРА ДПК':'УЧЁТНАЯ ЗАПИСЬ СОТРУДНИКА'}</div>
+      <h1>${isOwner?'Центр управления Владельца':currentUser.role==='ADMIN'?'Управление системой и сотрудниками':isHead?'Управление отделом и менеджерами обзвона':isTrainer?'Бизнес-тренер ДПК · Персональные блоки скриптов':'Профиль и доступ'}</h1>
       <p>Все пароли защищены криптографическим хешированием, права доступа и иерархия отделов контролируются системой.</p>
     </div>
     <div class="owner-badge-bar">
@@ -8698,7 +9615,7 @@ function renderOwnerView(){
   <nav class="owner-nav" role="tablist">
     ${navItems.map(([id,lbl])=>`<button type="button" role="tab" class="${ownerTab===id?'on':''}" data-owner-tab="${id}">${lbl}</button>`).join('')}
   </nav>
-  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():ownerTab==='design'?renderDesignSection():renderSecuritySection()}`;
+  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='trainer'?renderTrainerWorkspaceSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():ownerTab==='design'?renderDesignSection():renderSecuritySection()}`;
 }
 
 
@@ -8855,6 +9772,7 @@ function openUserModal(editUser=null){
           <option value="ADMIN" ${role==='ADMIN'?'selected':''}>Администратор (может всё: пользователи, скрипты, подарки, настройки)</option>
           <option value="EDITOR" ${role==='EDITOR'?'selected':''}>Редактор (работа с гипер-скриптом, подарками, адресами и макетами)</option>
           <option value="HEAD" ${role==='HEAD'?'selected':''}>Руководитель отдела (свои скрипты без удаления + контроль своих менеджеров)</option>
+          <option value="TRAINER" ${role==='TRAINER'?'selected':''}>🎓 Бизнес-тренер ДПК (персональные блоки в скриптах менеджеров)</option>
           <option value="OPERATOR" ${role==='OPERATOR'?'selected':''}>Менеджер обзвона (работа со скриптом при обзвоне)</option>
         </select>
         <div id="um-manager-wrap" ${role==='OPERATOR'?'':'hidden'}>
@@ -8889,6 +9807,9 @@ function openUserModal(editUser=null){
     if(mgrWrap)mgrWrap.hidden=r!=='OPERATOR';
     dlg.querySelectorAll('input[name="perm"]').forEach(cb=>{
       if(r==='HEAD'&&(cb.value==='layouts.delete'||cb.value==='users.manage')){
+        cb.checked=false;
+        cb.disabled=true;
+      }else if(r==='TRAINER'&&(cb.value==='layouts.delete'||cb.value==='layouts.manage'||cb.value==='users.manage'||cb.value==='content.edit')){
         cb.checked=false;
         cb.disabled=true;
       }else{
@@ -9157,6 +10078,86 @@ document.addEventListener('click',async e=>{
     return;
   }
 
+  const trainerHeadBtn=e.target.closest('[data-trainer-head-filter]');
+  if(trainerHeadBtn){
+    trainerHeadFilter=trainerHeadBtn.dataset.trainerHeadFilter;
+    renderOwnerView();
+    return;
+  }
+
+  const trainerMgrBtn=e.target.closest('[data-trainer-select-user]');
+  if(trainerMgrBtn){
+    trainerSelectedUserId=trainerMgrBtn.dataset.trainerSelectUser;
+    const mgr=trainerManagersList.find(m=>m.id===trainerSelectedUserId);
+    if(mgr&&Array.isArray(mgr.effectiveScriptIds)&&mgr.effectiveScriptIds.length&&!mgr.effectiveScriptIds.includes(trainerSelectedLayoutId)){
+      trainerSelectedLayoutId=mgr.effectiveScriptIds[0];
+    }
+    await loadTrainerBlocksForCurrent();
+    renderOwnerView();
+    return;
+  }
+
+  const addBlockBtn=e.target.closest('[data-trainer-add-block]');
+  if(addBlockBtn){
+    openTrainerBlockModal({
+      stageId:addBlockBtn.dataset.stageId||'',
+      afterLine:addBlockBtn.dataset.afterLine!==undefined?addBlockBtn.dataset.afterLine:'end',
+      type:addBlockBtn.dataset.blockType||'line'
+    });
+    return;
+  }
+
+  const editBlockBtn=e.target.closest('[data-trainer-edit-block]');
+  if(editBlockBtn){
+    const blk=trainerBlocksList.find(b=>b.id===editBlockBtn.dataset.trainerEditBlock);
+    if(blk)openTrainerBlockModal({block:blk});
+    return;
+  }
+
+  const delBlockBtn=e.target.closest('[data-trainer-del-block]');
+  if(delBlockBtn){
+    const blkId=delBlockBtn.dataset.trainerDelBlock;
+    if(!confirm('Удалить этот персональный блок у сотрудника?'))return;
+    try{
+      await api('/api/trainer/blocks/'+encodeURIComponent(blkId),{method:'DELETE'});
+      toast('Персональный блок удалён');
+      await loadOwnerData();
+      dispatchEvent(new Event('trainer-blocks-changed'));
+      renderOwnerView();
+    }catch(err){toast(err.message);}
+    return;
+  }
+
+  const empRowAllBtn=e.target.closest('[data-emp-row-all]');
+  if(empRowAllBtn){
+    const uid=empRowAllBtn.dataset.empRowAll;
+    document.querySelectorAll(`input[data-emp-script-cb="1"][data-user-id="${CSS.escape(uid)}"]`).forEach(cb=>{cb.checked=true;});
+    try{
+      await api('/api/users/'+encodeURIComponent(uid)+'/script-access',{method:'PUT',body:JSON.stringify({scriptAccess:null})});
+      const emp=deptEmployeesList.find(x=>x.id===uid);
+      if(emp)emp.scriptAccess=null;
+      toast('Сотруднику включены все скрипты отдела');
+      dispatchEvent(new Event('layouts-changed'));
+      renderOwnerView();
+    }catch(err){toast(err.message);}
+    return;
+  }
+
+  const empRowNoneBtn=e.target.closest('[data-emp-row-none]');
+  if(empRowNoneBtn){
+    const uid=empRowNoneBtn.dataset.empRowNone;
+    document.querySelectorAll(`input[data-emp-script-cb="1"][data-user-id="${CSS.escape(uid)}"]`).forEach(cb=>{cb.checked=false;});
+    try{
+      await api('/api/users/'+encodeURIComponent(uid)+'/script-access',{method:'PUT',body:JSON.stringify({scriptAccess:[]})});
+      const emp=deptEmployeesList.find(x=>x.id===uid);
+      if(emp)emp.scriptAccess=[];
+      toast('Все скрипты для сотрудника сняты');
+      dispatchEvent(new Event('layouts-changed'));
+      renderOwnerView();
+    }catch(err){toast(err.message);}
+    return;
+  }
+
   if(e.target.id==='dept-scripts-select-all'){
     document.querySelectorAll('#dept-script-grid input[type=checkbox]').forEach(cb=>{
       cb.checked=true;
@@ -9195,29 +10196,31 @@ document.addEventListener('click',async e=>{
     btn.textContent='Сохранение...';
     const selectedIds=[...document.querySelectorAll('#dept-script-grid input[type=checkbox]:checked')].map(cb=>cb.value);
     const headId=document.getElementById('dept-scripts-head-select')?.value||selectedDeptHeadId||currentUser.id;
+    const employeeAccess={};
+    const matrixRows=document.querySelectorAll('#emp-script-matrix tr[data-emp-matrix-row]');
+    matrixRows.forEach(row=>{
+      const uid=row.dataset.empMatrixRow;
+      const cbs=[...row.querySelectorAll('input[data-emp-script-cb="1"]')];
+      if(!cbs.length)return;
+      const checked=cbs.filter(c=>c.checked).map(c=>c.dataset.layoutId);
+      employeeAccess[uid]=checked.length===cbs.length?null:checked;
+    });
     try{
       await api('/api/department/scripts',{
         method:'PUT',
-        body:JSON.stringify({scriptIds:selectedIds,headId})
+        body:JSON.stringify({scriptIds:selectedIds,headId,employeeAccess})
       });
       deptScriptsIds=selectedIds;
       selectedDeptHeadId=headId;
-      const h=headsList.find(x=>x.id===headId);
-      if(h){
-        h.departmentScripts=selectedIds;
-        h.departmentScriptsCount=selectedIds.length;
-      }
-      const u=usersList.find(x=>x.id===headId);
-      if(u)u.departmentScripts=selectedIds;
-      if(currentUser.id===headId)currentUser.departmentScripts=selectedIds;
-      toast(selectedIds.length?'Скрипты отдела сохранены (выбрано: '+selectedIds.length+')':'Скрипты отдела сброшены (сотрудникам доступны все скрипты)');
+      await loadOwnerData();
+      toast(selectedIds.length?'Скрипты отдела и индивидуальный доступ сотрудников сохранены':'Скрипты отдела и доступ сохранены');
       dispatchEvent(new Event('layouts-changed'));
       renderOwnerView();
     }catch(err){
       toast(err.message);
     }finally{
       btn.disabled=false;
-      btn.textContent='💾 Сохранить скрипты отдела';
+      btn.textContent='💾 Сохранить скрипты и доступ';
     }
     return;
   }
@@ -9397,9 +10400,78 @@ document.addEventListener('submit',async e=>{
     }catch(err){toast(err.message);}
     return;
   }
+
+  if(e.target.id==='trainer-block-form'){
+    e.preventDefault();
+    const form=e.target;
+    const blockId=form.dataset.blockId||'';
+    const userId=form.dataset.userId||trainerSelectedUserId;
+    const layoutId=form.dataset.layoutId||trainerSelectedLayoutId;
+    const errEl=document.getElementById('tb-error');
+    if(errEl)errEl.textContent='';
+    const fd=new FormData(form);
+    const typeVal=String(fd.get('type')||'line');
+    const stageIdVal=String(fd.get('stageId')||'').trim();
+    const afterLineRaw=String(fd.get('afterLineIndex')??'end');
+    const afterLineIndex=typeVal==='objection'?null:(afterLineRaw==='end'?null:Number(afterLineRaw));
+    const payload={
+      userId,
+      layoutId,
+      stageId:stageIdVal,
+      type:typeVal,
+      afterLineIndex,
+      title:String(fd.get('title')||'').trim(),
+      text:String(fd.get('text')||'').trim()
+    };
+    try{
+      if(blockId){
+        await api('/api/trainer/blocks/'+encodeURIComponent(blockId),{method:'PUT',body:JSON.stringify(payload)});
+        toast('✓ Персональный блок обновлён');
+      }else{
+        await api('/api/trainer/blocks',{method:'POST',body:JSON.stringify(payload)});
+        toast('✓ Персональный блок добавлен сотруднику');
+      }
+      document.getElementById('trainer-block-modal')?.close();
+      await loadOwnerData();
+      dispatchEvent(new Event('trainer-blocks-changed'));
+      renderOwnerView();
+    }catch(err){
+      if(errEl)errEl.textContent=err.message;
+      else toast(err.message);
+    }
+    return;
+  }
 });
 
 document.addEventListener('change', async (e) => {
+  if (e.target.id === 'trainer-layout-select') {
+    trainerSelectedLayoutId = e.target.value;
+    await loadTrainerBlocksForCurrent();
+    renderOwnerView();
+    return;
+  }
+  if (e.target.hasAttribute('data-emp-script-cb')) {
+    const cb = e.target;
+    const uid = cb.dataset.userId;
+    const row = cb.closest('tr[data-emp-matrix-row]');
+    if (!uid || !row) return;
+    const allCbs = [...row.querySelectorAll('input[data-emp-script-cb="1"]')];
+    const checkedIds = allCbs.filter(c => c.checked).map(c => c.dataset.layoutId);
+    const nextAccess = checkedIds.length === allCbs.length ? null : checkedIds;
+    try {
+      await api('/api/users/' + encodeURIComponent(uid) + '/script-access', {
+        method: 'PUT',
+        body: JSON.stringify({ scriptAccess: nextAccess })
+      });
+      const emp = deptEmployeesList.find(x => x.id === uid);
+      if (emp) emp.scriptAccess = nextAccess;
+      dispatchEvent(new Event('layouts-changed'));
+      renderOwnerView();
+    } catch (err) {
+      toast(err.message || 'Ошибка сохранения доступа сотрудника');
+    }
+    return;
+  }
   if (e.target.id === 'dept-scripts-head-select') {
     const headId = e.target.value;
     selectedDeptHeadId = headId;
@@ -9412,6 +10484,7 @@ document.addEventListener('change', async (e) => {
       const q = headId ? ('?headId=' + encodeURIComponent(headId)) : '';
       const dsRes = await api('/api/department/scripts' + q);
       deptScriptsIds = Array.isArray(dsRes.scriptIds) ? dsRes.scriptIds : [];
+      deptEmployeesList = Array.isArray(dsRes.employees) ? dsRes.employees : [];
       if (foundHead) foundHead.departmentScripts = deptScriptsIds;
       renderOwnerView();
     } catch (err) {

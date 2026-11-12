@@ -31,7 +31,8 @@ const ALL_PERMISSIONS = [
   'users.view',
   'users.manage',
   'sessions.manage',
-  'audit.view'
+  'audit.view',
+  'scripts.trainer-blocks'
 ];
 
 const DEFAULT_ROLE_PERMISSIONS = {
@@ -39,6 +40,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
   ADMIN: [...ALL_PERMISSIONS],
   EDITOR: ['content.edit', 'layouts.manage', 'layouts.delete', 'gifts.manage', 'addresses.manage', 'settings.manage'],
   HEAD: ['content.edit', 'layouts.manage', 'users.view', 'users.manage', 'sessions.manage'],
+  TRAINER: ['users.view', 'scripts.trainer-blocks', 'settings.manage'],
   OPERATOR: ['settings.manage']
 };
 
@@ -275,9 +277,13 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       content: seed.content || { data: null, updatedAt: 0 },
       layouts: seed.layouts || [],
       addresses: seed.addresses || { revision: 0, venues: [] },
-      giftbase: { gifts: seed.gifts || [], deleted: [], updatedAt: Date.now() }
+      giftbase: { gifts: seed.gifts || [], deleted: [], updatedAt: Date.now() },
+      trainerBlocks: []
     };
     writeJsonAtomic(files.appData, appData);
+  }
+  if (!Array.isArray(appData.trainerBlocks)) {
+    appData.trainerBlocks = [];
   }
 
   if (appData && Array.isArray(appData.layouts)) {
@@ -405,6 +411,9 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
           const remoteApp = await new Response(appRes.stream).json();
           if (remoteApp && typeof remoteApp === 'object') {
             appData = remoteApp;
+            if (!Array.isArray(appData.trainerBlocks)) {
+              appData.trainerBlocks = [];
+            }
             if (Array.isArray(appData?.layouts)) {
               const prevCount = appData.layouts.length;
               appData.layouts = appData.layouts.filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
@@ -519,6 +528,13 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
         if (x.managerId === id) x.managerId = null;
       });
       sessions = sessions.filter(s => s.userId !== id);
+      if (Array.isArray(appData?.trainerBlocks)) {
+        const beforeBlocks = appData.trainerBlocks.length;
+        appData.trainerBlocks = appData.trainerBlocks.filter(b => b && b.userId !== id);
+        if (appData.trainerBlocks.length !== beforeBlocks) {
+          saveAppData();
+        }
+      }
       saveUsers();
       saveSessions();
       return true;
@@ -662,6 +678,7 @@ function sanitizeUser(u) {
     role: u.role,
     managerId: u.managerId || null,
     departmentScripts: Array.isArray(u.departmentScripts) ? u.departmentScripts : [],
+    scriptAccess: Array.isArray(u.scriptAccess) ? u.scriptAccess.map(String) : null,
     mustChangePassword: Boolean(u.mustChangePassword),
     blocked: isOwner ? false : Boolean(u.blocked),
     permissions: isOwner ? [...DEFAULT_ROLE_PERMISSIONS.OWNER] : (Array.isArray(u.permissions) ? u.permissions : []),
@@ -674,10 +691,261 @@ function sanitizeUser(u) {
   };
 }
 
+function stripTrainerArtifactsFromData(data) {
+  if (!data || typeof data !== 'object') return data;
+  const clone = structuredClone(data);
+  const oldToNewObjIdx = new Map();
+  const trainerObjStringIds = new Set();
+  if (Array.isArray(clone.objections)) {
+    const cleanObs = [];
+    clone.objections.forEach((o, oldIdx) => {
+      if (o && (o.origin === 'trainer' || o.trainerBlockId || String(o.id || '').startsWith('tr_obj_'))) {
+        if (o.id) trainerObjStringIds.add(String(o.id));
+        return;
+      }
+      const newIdx = cleanObs.push(o) - 1;
+      oldToNewObjIdx.set(oldIdx, newIdx);
+    });
+    clone.objections = cleanObs;
+  }
+  if (Array.isArray(clone.stages)) {
+    clone.stages.forEach(st => {
+      if (!st || typeof st !== 'object') return;
+      if (Array.isArray(st.lines) && Array.isArray(st.lineKinds)) {
+        const nextLines = [];
+        const nextKinds = [];
+        const nextFormats = Array.isArray(st.lineFormats) ? [] : undefined;
+        const nextGifts = Array.isArray(st.lineGifts) ? [] : undefined;
+        for (let i = 0; i < st.lines.length; i++) {
+          const k = st.lineKinds[i] || 'speech';
+          if (k === 'trainer-line' || k === 'trainer-tip') continue;
+          nextLines.push(st.lines[i]);
+          nextKinds.push(k);
+          if (nextFormats) nextFormats.push(st.lineFormats[i] || { style: {}, ranges: [] });
+          if (nextGifts) nextGifts.push(st.lineGifts[i] || '');
+        }
+        st.lines = nextLines;
+        st.lineKinds = nextKinds;
+        if (nextFormats) st.lineFormats = nextFormats;
+        if (nextGifts) st.lineGifts = nextGifts;
+      }
+      delete st.lineTrainerMeta;
+      if (Array.isArray(st.objectionIds)) {
+        st.objectionIds = st.objectionIds
+          .map(id => {
+            if (typeof id === 'number' && oldToNewObjIdx.has(id)) return oldToNewObjIdx.get(id);
+            if (typeof id === 'string' && trainerObjStringIds.has(id)) return undefined;
+            return typeof id === 'number' && id < (clone.objections?.length || 0) ? id : undefined;
+          })
+          .filter(id => id !== undefined);
+      }
+    });
+  }
+  return clone;
+}
+
+function inspectTrainerBlockAnchor(layout, block) {
+  const stages = Array.isArray(layout?.data?.stages) ? layout.data.stages : [];
+  let stage = stages.find(s => String(s?.id) === String(block.stageId));
+  let stageRelocated = false;
+  if (!stage && stages.length > 0) {
+    stage = stages[stages.length - 1];
+    stageRelocated = true;
+  }
+  if (!stage) {
+    return { valid: false, relocated: true, reason: 'stage_missing', stageId: null, insertIndex: 0 };
+  }
+  if (block.kind === 'objection') {
+    return {
+      valid: !stageRelocated,
+      relocated: stageRelocated,
+      reason: stageRelocated ? 'stage_missing' : null,
+      stageId: stage.id,
+      insertIndex: -1
+    };
+  }
+  const origLines = Array.isArray(stage.lines) ? stage.lines : [];
+  const pos = block.position || 'after';
+  if (stageRelocated) {
+    return {
+      valid: false,
+      relocated: true,
+      reason: 'stage_missing',
+      stageId: stage.id,
+      insertIndex: origLines.length
+    };
+  }
+  if (pos === 'start') {
+    return { valid: true, relocated: false, reason: null, stageId: stage.id, insertIndex: 0 };
+  }
+  if (pos === 'end') {
+    return { valid: true, relocated: false, reason: null, stageId: stage.id, insertIndex: origLines.length };
+  }
+  const anchorText = typeof block.afterLineText === 'string' ? block.afterLineText.trim() : '';
+  const anchorIdx = Number.isInteger(block.afterLineIndex) ? block.afterLineIndex : -1;
+  if (anchorText) {
+    if (anchorIdx >= 0 && anchorIdx < origLines.length && String(origLines[anchorIdx] || '').trim() === anchorText) {
+      return { valid: true, relocated: false, reason: null, stageId: stage.id, insertIndex: anchorIdx + 1 };
+    }
+    const foundIdx = origLines.findIndex(l => String(l || '').trim() === anchorText);
+    if (foundIdx >= 0) {
+      return { valid: true, relocated: false, reason: null, stageId: stage.id, insertIndex: foundIdx + 1 };
+    }
+    return {
+      valid: false,
+      relocated: true,
+      reason: 'anchor_line_changed',
+      stageId: stage.id,
+      insertIndex: origLines.length
+    };
+  }
+  if (anchorIdx >= 0 && anchorIdx < origLines.length) {
+    return { valid: true, relocated: false, reason: null, stageId: stage.id, insertIndex: anchorIdx + 1 };
+  }
+  return {
+    valid: false,
+    relocated: true,
+    reason: 'anchor_line_missing',
+    stageId: stage.id,
+    insertIndex: origLines.length
+  };
+}
+
+function applyTrainerBlocksToLayout(layout, userBlocks = []) {
+  if (!layout || !layout.data || !Array.isArray(userBlocks) || userBlocks.length === 0) {
+    return layout;
+  }
+  const relevant = userBlocks.filter(b => b && String(b.layoutId) === String(layout.id));
+  if (relevant.length === 0) return layout;
+
+  const clone = structuredClone(layout);
+  const data = clone.data || (clone.data = {});
+  if (!Array.isArray(data.stages)) data.stages = [];
+  if (!Array.isArray(data.objections)) data.objections = [];
+
+  for (const st of data.stages) {
+    if (!Array.isArray(st.lines)) st.lines = [];
+    if (!Array.isArray(st.lineKinds)) st.lineKinds = [];
+    while (st.lineKinds.length < st.lines.length) st.lineKinds.push('speech');
+    if (!Array.isArray(st.lineTrainerMeta)) {
+      st.lineTrainerMeta = new Array(st.lines.length).fill(null);
+    }
+  }
+
+  const byStage = new Map();
+  for (const b of relevant) {
+    const info = inspectTrainerBlockAnchor(layout, b);
+    if (!info.stageId) continue;
+    if (b.kind === 'objection') {
+      const objId = `tr_obj_${b.id}`;
+      const newObj = {
+        id: objId,
+        title: String(b.title || 'Возражение (от тренера)'),
+        text: String(b.text || ''),
+        textFormat: { style: {}, ranges: [] },
+        origin: 'trainer',
+        nextStageId: '',
+        trainerBlockId: b.id,
+        authorName: b.authorName || 'Бизнес-тренер ДПК',
+        relocated: info.relocated
+      };
+      let objIdx = data.objections.findIndex(o => o && (o.id === objId || o.trainerBlockId === b.id));
+      if (objIdx < 0) {
+        objIdx = data.objections.push(newObj) - 1;
+      }
+      const targetStage = data.stages.find(s => String(s?.id) === String(info.stageId));
+      if (targetStage) {
+        if (!Array.isArray(targetStage.objectionIds)) targetStage.objectionIds = [];
+        if (!targetStage.objectionIds.includes(objIdx)) {
+          targetStage.objectionIds.push(objIdx);
+        }
+      }
+    } else {
+      const key = String(info.stageId);
+      if (!byStage.has(key)) byStage.set(key, []);
+      byStage.get(key).push({ block: b, info });
+    }
+  }
+
+  for (const [stageId, items] of byStage.entries()) {
+    const st = data.stages.find(s => String(s?.id) === stageId);
+    if (!st) continue;
+    const origLines = [...st.lines];
+    const origKinds = [...st.lineKinds];
+    const origFormats = Array.isArray(st.lineFormats) ? [...st.lineFormats] : [];
+    const origGifts = Array.isArray(st.lineGifts) ? [...st.lineGifts] : [];
+    const buckets = new Map();
+    for (let i = 0; i <= origLines.length; i++) buckets.set(i, []);
+    for (const item of items) {
+      const idx = Math.max(0, Math.min(origLines.length, item.info.insertIndex));
+      buckets.get(idx).push(item);
+    }
+    const nextLines = [];
+    const nextKinds = [];
+    const nextFormats = [];
+    const nextGifts = [];
+    const nextMeta = [];
+    const pushTrainerItem = ({ block, info }) => {
+      const kind = block.kind === 'tip' ? 'trainer-tip' : 'trainer-line';
+      nextLines.push(String(block.text || ''));
+      nextKinds.push(kind);
+      nextFormats.push({ style: {}, ranges: [] });
+      nextGifts.push('');
+      nextMeta.push({
+        id: block.id,
+        kind: block.kind,
+        title: block.title || '',
+        authorName: block.authorName || 'Бизнес-тренер ДПК',
+        relocated: Boolean(info.relocated),
+        updatedAt: block.updatedAt || block.createdAt || 0
+      });
+    };
+    for (let i = 0; i < origLines.length; i++) {
+      for (const it of buckets.get(i)) pushTrainerItem(it);
+      nextLines.push(origLines[i]);
+      nextKinds.push(origKinds[i] || 'speech');
+      nextFormats.push(origFormats[i] || { style: {}, ranges: [] });
+      nextGifts.push(origGifts[i] || '');
+      nextMeta.push(null);
+    }
+    for (const it of buckets.get(origLines.length)) pushTrainerItem(it);
+    st.lines = nextLines;
+    st.lineKinds = nextKinds;
+    st.lineFormats = nextFormats;
+    st.lineGifts = nextGifts;
+    st.lineTrainerMeta = nextMeta;
+  }
+
+  return clone;
+}
+
+function getEffectiveScriptIdsForOperator(opUser, allUsers, allLayouts) {
+  const allIds = (allLayouts || []).map(l => String(l.id));
+  if (!opUser) return allIds;
+  let deptPool = allIds;
+  if (opUser.managerId) {
+    const mgr = (allUsers || []).find(u => u.id === opUser.managerId);
+    if (mgr && Array.isArray(mgr.departmentScripts) && mgr.departmentScripts.length > 0) {
+      const mgrSet = new Set(mgr.departmentScripts.map(String));
+      const filtered = allIds.filter(id => mgrSet.has(id));
+      if (filtered.length > 0) {
+        deptPool = filtered;
+      }
+    }
+  }
+  if (Array.isArray(opUser.scriptAccess)) {
+    const allowedSet = new Set(opUser.scriptAccess.map(String));
+    return deptPool.filter(id => allowedSet.has(id));
+  }
+  return deptPool;
+}
+
 function isScriptTextUnchanged(originalData, nextData) {
   if (!originalData || !nextData) return false;
-  const origStages = Array.isArray(originalData.stages) ? originalData.stages : [];
-  const nextStages = Array.isArray(nextData.stages) ? nextData.stages : [];
+  const cleanOrig = stripTrainerArtifactsFromData(originalData);
+  const cleanNext = stripTrainerArtifactsFromData(nextData);
+  const origStages = Array.isArray(cleanOrig.stages) ? cleanOrig.stages : [];
+  const nextStages = Array.isArray(cleanNext.stages) ? cleanNext.stages : [];
   if (origStages.length !== nextStages.length) return false;
   for (let i = 0; i < origStages.length; i++) {
     const o = origStages[i], n = nextStages[i];
@@ -691,8 +959,8 @@ function isScriptTextUnchanged(originalData, nextData) {
       if (String(oLines[j] || '') !== String(nLines[j] || '')) return false;
     }
   }
-  const origObs = Array.isArray(originalData.objections) ? originalData.objections : [];
-  const nextObs = Array.isArray(nextData.objections) ? nextData.objections : [];
+  const origObs = Array.isArray(cleanOrig.objections) ? cleanOrig.objections : [];
+  const nextObs = Array.isArray(cleanNext.objections) ? cleanNext.objections : [];
   if (origObs.length !== nextObs.length) return false;
   for (let i = 0; i < origObs.length; i++) {
     const o = origObs[i], n = nextObs[i];
@@ -820,7 +1088,7 @@ function createAppServer(options = {}) {
         return;
       }
 
-      const needAppData = ['/api/content', '/api/scripts', '/api/giftbase', '/api/addresses', '/api/layouts', '/api/layouts-order', '/api/presentation-plan'].some(
+      const needAppData = ['/api/content', '/api/scripts', '/api/department/scripts', '/api/giftbase', '/api/addresses', '/api/layouts', '/api/layouts-order', '/api/presentation-plan', '/api/users', '/api/trainer'].some(
         p => pathname === p || pathname.startsWith(p + '/')
       );
       await store.syncFromBlob({ needAppData });
@@ -1226,7 +1494,8 @@ function createAppServer(options = {}) {
             return sendJson(res, 403, { error: 'Недостаточно прав для изменения настроек оформления (settings.manage).' });
           }
           const updatedAt = Date.now();
-          appData.content = { data: { ...body.data, gifts: [] }, updatedAt };
+          const cleanedData = stripTrainerArtifactsFromData(body.data);
+          appData.content = { data: { ...cleanedData, gifts: [] }, updatedAt };
           store.saveAppData();
           store.logEvent({
             action: 'content.publish',
@@ -1242,7 +1511,9 @@ function createAppServer(options = {}) {
       if (pathname === '/api/scripts' && method === 'GET') {
         const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
         let resultLayouts = allLayouts;
+        let visibleAllLayouts = allLayouts;
         let deptScripts = [];
+        let scriptAccess = null;
         if (auth && auth.user) {
           let mgr = null;
           const allUsers = store.getUsers();
@@ -1255,19 +1526,21 @@ function createAppServer(options = {}) {
           }
           if (mgr && Array.isArray(mgr.departmentScripts) && mgr.departmentScripts.length > 0) {
             deptScripts = mgr.departmentScripts.map(String);
-            if (auth.user.role === 'OPERATOR') {
-              const deptSet = new Set(deptScripts);
-              const filtered = allLayouts.filter(l => deptSet.has(String(l.id)));
-              if (filtered.length > 0) {
-                resultLayouts = filtered;
-              }
-            }
+          }
+          if (auth.user.role === 'OPERATOR') {
+            scriptAccess = Array.isArray(auth.user.scriptAccess) ? auth.user.scriptAccess.map(String) : null;
+            const effectiveIds = new Set(getEffectiveScriptIdsForOperator(auth.user, allUsers, allLayouts));
+            const filtered = allLayouts.filter(l => effectiveIds.has(String(l.id)));
+            const userBlocks = (appData.trainerBlocks || []).filter(b => b && b.userId === auth.user.id);
+            resultLayouts = filtered.map(l => applyTrainerBlocksToLayout(l, userBlocks));
+            visibleAllLayouts = resultLayouts;
           }
         }
         return sendJson(res, 200, {
           layouts: resultLayouts,
-          allLayouts,
-          departmentScripts: deptScripts
+          allLayouts: visibleAllLayouts,
+          departmentScripts: deptScripts,
+          scriptAccess
         });
       }
 
@@ -1394,11 +1667,30 @@ function createAppServer(options = {}) {
             targetHead = allUsers.find(u => u.id === auth.user.managerId && (u.role === 'HEAD' || u.role === 'OWNER'));
           }
           const scriptIds = Array.isArray(targetHead?.departmentScripts) ? [...new Set(targetHead.departmentScripts.map(String))] : [];
+          const trainerBlocks = Array.isArray(appData.trainerBlocks) ? appData.trainerBlocks : [];
+          const deptEmployees = targetHead
+            ? allUsers
+                .filter(u => u.role === 'OPERATOR' && u.managerId === targetHead.id)
+                .map(u => {
+                  const userBlocks = trainerBlocks.filter(b => b && b.userId === u.id);
+                  const trainerBlockLayouts = [...new Set(userBlocks.map(b => String(b.layoutId)))];
+                  return {
+                    id: u.id,
+                    login: u.login,
+                    displayName: u.displayName || u.login,
+                    blocked: Boolean(u.blocked),
+                    scriptAccess: Array.isArray(u.scriptAccess) ? u.scriptAccess.map(String) : null,
+                    trainerBlockLayouts,
+                    trainerBlocksCount: userBlocks.length
+                  };
+                })
+            : [];
           return sendJson(res, 200, {
             headId: targetHead?.id || null,
             headLogin: targetHead?.login || null,
             headDisplayName: targetHead?.displayName || targetHead?.login || null,
             scriptIds,
+            employees: deptEmployees,
             layouts: allLayouts.map(l => ({ id: l.id, name: l.name, savedAt: l.savedAt, stagesCount: l.data?.stages?.length || 0 }))
           });
         }
@@ -1428,6 +1720,20 @@ function createAppServer(options = {}) {
           const cleanIds = [...new Set(body.scriptIds.map(String).filter(Boolean))];
           targetHead.departmentScripts = cleanIds;
           targetHead.updatedAt = Date.now();
+          const allLayoutIdSet = new Set(allLayouts.map(l => String(l.id)));
+          const poolSet = cleanIds.length > 0 ? new Set(cleanIds) : allLayoutIdSet;
+          if (body.employeeAccess && typeof body.employeeAccess === 'object') {
+            for (const [empId, accessVal] of Object.entries(body.employeeAccess)) {
+              const emp = allUsers.find(u => u.id === empId && u.role === 'OPERATOR' && u.managerId === targetHead.id);
+              if (!emp) continue;
+              if (accessVal === null) {
+                emp.scriptAccess = null;
+              } else if (Array.isArray(accessVal)) {
+                emp.scriptAccess = [...new Set(accessVal.map(String).filter(id => poolSet.has(id)))];
+              }
+              emp.updatedAt = Date.now();
+            }
+          }
           store.saveUsers();
           store.logEvent({
             action: 'department.scripts.update',
@@ -1653,10 +1959,11 @@ function createAppServer(options = {}) {
         }
         if (method === 'POST' || method === 'PUT') {
           const body = await readBody(req);
+          const cleanedLayoutData = stripTrainerArtifactsFromData(body.data || {});
           const layout = {
             id: id || ('l' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex')),
             name: String(body.name || 'Без названия').slice(0, 120),
-            data: { ...(body.data || {}), gifts: [] },
+            data: { ...(cleanedLayoutData || {}), gifts: [] },
             savedAt: Date.now()
           };
           let list = appData.layouts || [];
@@ -1802,25 +2109,104 @@ function createAppServer(options = {}) {
         });
       }
 
-      // Users management: GET /api/users, POST /api/users, PATCH /api/users/:id, DELETE /api/users/:id
+      // Users management: GET /api/users, POST /api/users, PATCH /api/users/:id, DELETE /api/users/:id, PUT /api/users/:id/script-access
       if (pathname === '/api/users' || pathname.startsWith('/api/users/')) {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
-        const targetId = pathname.split('/')[3] || null;
+        const parts = pathname.split('/');
+        const targetId = parts[3] || null;
+        const subAction = parts[4] || null;
         const isOwner = auth.user.role === 'OWNER';
         const isHead = auth.user.role === 'HEAD';
-        const canManageAllUsers = isOwner || (!isHead && hasPermission(auth.user, 'users.manage'));
+        const isTrainer = auth.user.role === 'TRAINER';
+        const canManageAllUsers = isOwner || (!isHead && !isTrainer && hasPermission(auth.user, 'users.manage'));
         const canManageOwnTeam = isHead && hasPermission(auth.user, 'users.manage');
 
-        // List users: OWNER, HEAD, or user with users.view / users.manage permission
+        // Per-employee script access checkboxes: PUT /api/users/:id/script-access
+        if (method === 'PUT' && targetId && subAction === 'script-access') {
+          if (!canManageAllUsers && !isHead) {
+            store.logEvent({
+              action: 'users.script_access.denied',
+              actor: auth.user,
+              target: targetId,
+              ip,
+              userAgent,
+              status: 'denied'
+            });
+            return sendJson(res, 403, { error: 'Настройка доступных скриптов сотрудника разрешена только Руководителю отдела и Владельцу/Администратору.' });
+          }
+          const targetUser = store.findUserById(targetId);
+          if (!targetUser) {
+            return sendJson(res, 404, { error: 'Сотрудник не найден.' });
+          }
+          if (targetUser.role !== 'OPERATOR') {
+            return sendJson(res, 400, { error: 'Индивидуальный доступ к скриптам настраивается только для Менеджеров обзвона (OPERATOR).' });
+          }
+          if (isHead && targetUser.managerId !== auth.user.id) {
+            return sendJson(res, 403, { error: 'Руководитель отдела может настраивать доступ к скриптам только для сотрудников своего отдела.' });
+          }
+          const body = await readBody(req);
+          if (body.scriptAccess !== null && !Array.isArray(body.scriptAccess)) {
+            return sendJson(res, 400, { error: 'Поле scriptAccess должно быть массивом ID скриптов или null (все скрипты отдела).' });
+          }
+          const allUsers = store.getUsers();
+          const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+          const allLayoutIds = allLayouts.map(l => String(l.id));
+          let deptPool = allLayoutIds;
+          if (targetUser.managerId) {
+            const mgr = allUsers.find(u => u.id === targetUser.managerId);
+            if (mgr && Array.isArray(mgr.departmentScripts) && mgr.departmentScripts.length > 0) {
+              const mgrSet = new Set(mgr.departmentScripts.map(String));
+              const filtered = allLayoutIds.filter(id => mgrSet.has(id));
+              if (filtered.length > 0) deptPool = filtered;
+            }
+          }
+          const poolSet = new Set(deptPool);
+          if (body.scriptAccess === null) {
+            targetUser.scriptAccess = null;
+          } else {
+            targetUser.scriptAccess = [...new Set(body.scriptAccess.map(String).filter(id => poolSet.has(id)))];
+          }
+          targetUser.updatedAt = Date.now();
+          store.saveUsers();
+          const effectiveScriptIds = getEffectiveScriptIdsForOperator(targetUser, allUsers, allLayouts);
+          store.logEvent({
+            action: 'users.script_access.update',
+            actor: auth.user,
+            target: targetUser.login,
+            ip,
+            userAgent,
+            details: {
+              userId: targetUser.id,
+              scriptAccess: targetUser.scriptAccess,
+              effectiveCount: effectiveScriptIds.length
+            }
+          });
+          return sendJson(res, 200, {
+            ok: true,
+            user: sanitizeUser(targetUser),
+            effectiveScriptIds
+          });
+        }
+
+        // List users: OWNER, HEAD, TRAINER, or user with users.view / users.manage permission
         if (method === 'GET' && !targetId) {
-          if (!isOwner && !isHead && !hasPermission(auth.user, 'users.view') && !hasPermission(auth.user, 'users.manage')) {
-            return sendJson(res, 403, { error: 'Доступ к списку пользователей разрешён только Владельцу, Администраторам и Руководителям отдела.' });
+          if (!isOwner && !isHead && !isTrainer && !hasPermission(auth.user, 'users.view') && !hasPermission(auth.user, 'users.manage')) {
+            return sendJson(res, 403, { error: 'Доступ к списку пользователей разрешён только Владельцу, Администраторам, Бизнес-тренеру и Руководителям отдела.' });
           }
           const activeSessions = store.getSessions();
           const allUsers = store.getUsers();
-          const visibleUsers = isHead
-            ? allUsers.filter(u => u.id === auth.user.id || (u.role === 'OPERATOR' && u.managerId === auth.user.id))
-            : allUsers;
+          const headIds = new Set(allUsers.filter(u => u.role === 'HEAD' || u.role === 'OWNER').map(u => u.id));
+          let visibleUsers = allUsers;
+          if (isHead) {
+            visibleUsers = allUsers.filter(u => u.id === auth.user.id || (u.role === 'OPERATOR' && u.managerId === auth.user.id));
+          } else if (isTrainer && !canManageAllUsers) {
+            visibleUsers = allUsers.filter(u =>
+              u.id === auth.user.id ||
+              u.role === 'HEAD' ||
+              u.role === 'OWNER' ||
+              (u.role === 'OPERATOR' && u.managerId && headIds.has(u.managerId))
+            );
+          }
           const list = visibleUsers.map(u => ({
             ...sanitizeUser(u),
             activeSessionsCount: activeSessions.filter(s => s.userId === u.id).length
@@ -1880,7 +2266,7 @@ function createAppServer(options = {}) {
           }
           const role = isHead
             ? 'OPERATOR'
-            : (['ADMIN', 'EDITOR', 'HEAD', 'OPERATOR'].includes(body.role) ? body.role : 'OPERATOR');
+            : (['ADMIN', 'EDITOR', 'HEAD', 'TRAINER', 'OPERATOR'].includes(body.role) ? body.role : 'OPERATOR');
           const permissions = isHead
             ? [...(DEFAULT_ROLE_PERMISSIONS.OPERATOR || [])]
             : (Array.isArray(body.permissions)
@@ -1904,6 +2290,7 @@ function createAppServer(options = {}) {
             displayName: String(body.displayName || login).trim().slice(0, 100) || login,
             role,
             managerId,
+            scriptAccess: role === 'OPERATOR' && Array.isArray(body.scriptAccess) ? body.scriptAccess.map(String) : null,
             passwordHash: hashPassword(body.password),
             mustChangePassword: body.mustChangePassword !== undefined ? Boolean(body.mustChangePassword) : true,
             blocked: Boolean(body.blocked),
@@ -1991,7 +2378,7 @@ function createAppServer(options = {}) {
           }
 
           if (!isHead && body.role !== undefined && targetUser.role !== 'OWNER') {
-            if (!['ADMIN', 'EDITOR', 'HEAD', 'OPERATOR'].includes(body.role)) {
+            if (!['ADMIN', 'EDITOR', 'HEAD', 'TRAINER', 'OPERATOR'].includes(body.role)) {
               return sendJson(res, 400, { error: 'Недопустимая роль пользователя.' });
             }
             changes.role = { from: targetUser.role, to: body.role };
@@ -2016,6 +2403,11 @@ function createAppServer(options = {}) {
           if (body.departmentScripts !== undefined && (targetUser.role === 'HEAD' || targetUser.role === 'OWNER')) {
             targetUser.departmentScripts = Array.isArray(body.departmentScripts) ? body.departmentScripts.map(String) : [];
             changes.departmentScripts = targetUser.departmentScripts;
+          }
+
+          if (body.scriptAccess !== undefined && targetUser.role === 'OPERATOR') {
+            targetUser.scriptAccess = Array.isArray(body.scriptAccess) ? [...new Set(body.scriptAccess.map(String))] : null;
+            changes.scriptAccess = targetUser.scriptAccess;
           }
 
           if (!isHead && body.permissions !== undefined && targetUser.role !== 'OWNER') {
@@ -2102,6 +2494,335 @@ function createAppServer(options = {}) {
             details: { deletedUserId: targetUser.id, deletedRole: targetUser.role }
           });
           return sendJson(res, 200, { ok: true });
+        }
+      }
+
+      // =====================================================================
+      // BUSINESS TRAINER DPK ENDPOINTS (/api/trainer/managers, /api/trainer/blocks)
+      // =====================================================================
+      if (pathname === '/api/trainer/managers' || pathname === '/api/trainer/blocks' || pathname.startsWith('/api/trainer/blocks/')) {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        const canManageTrainerBlocks =
+          auth.user.role === 'TRAINER' ||
+          auth.user.role === 'OWNER' ||
+          auth.user.role === 'ADMIN' ||
+          (auth.user.role !== 'HEAD' && auth.user.role !== 'OPERATOR' && hasPermission(auth.user, 'scripts.trainer-blocks'));
+        if (!canManageTrainerBlocks) {
+          store.logEvent({
+            action: 'trainer.access.denied',
+            actor: auth.user,
+            ip,
+            userAgent,
+            status: 'denied',
+            details: { method, pathname }
+          });
+          return sendJson(res, 403, { error: 'Доступ к кабинету и блокам бизнес-тренера разрешён только Бизнес-тренеру ДПК, Владельцу и Администраторам.' });
+        }
+
+        const allUsers = store.getUsers();
+        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+        if (!Array.isArray(appData.trainerBlocks)) appData.trainerBlocks = [];
+        const trainerBlocks = appData.trainerBlocks;
+        const headUsers = allUsers.filter(u => u.role === 'HEAD' || u.role === 'OWNER');
+        const headMap = new Map(headUsers.map(h => [h.id, h]));
+
+        if (pathname === '/api/trainer/managers' && method === 'GET') {
+          const managersUnderHeads = allUsers
+            .filter(u => u.role === 'OPERATOR' && u.managerId && headMap.has(u.managerId))
+            .map(u => {
+              const head = headMap.get(u.managerId);
+              const effectiveScriptIds = getEffectiveScriptIdsForOperator(u, allUsers, allLayouts);
+              const userBlocks = trainerBlocks.filter(b => b && b.userId === u.id);
+              let relocatedBlocksCount = 0;
+              for (const b of userBlocks) {
+                const origL = allLayouts.find(l => String(l.id) === String(b.layoutId));
+                if (!origL || inspectTrainerBlockAnchor(origL, b).relocated) {
+                  relocatedBlocksCount++;
+                }
+              }
+              return {
+                id: u.id,
+                login: u.login,
+                displayName: u.displayName || u.login,
+                blocked: Boolean(u.blocked),
+                managerId: u.managerId,
+                managerLogin: head ? head.login : null,
+                managerDisplayName: head ? (head.displayName || head.login) : '—',
+                managerName: head ? (head.displayName || head.login) : '—',
+                scriptAccess: Array.isArray(u.scriptAccess) ? u.scriptAccess.map(String) : null,
+                effectiveScriptIds,
+                trainerBlocksCount: userBlocks.length,
+                relocatedBlocksCount,
+                trainerBlockLayouts: [...new Set(userBlocks.map(b => String(b.layoutId)))]
+              };
+            });
+
+          return sendJson(res, 200, {
+            heads: headUsers.map(h => ({
+              id: h.id,
+              login: h.login,
+              displayName: h.displayName || h.login,
+              role: h.role,
+              departmentScripts: Array.isArray(h.departmentScripts) ? h.departmentScripts.map(String) : []
+            })),
+            managers: managersUnderHeads,
+            layouts: allLayouts.map(l => ({
+              id: l.id,
+              name: l.name,
+              savedAt: l.savedAt,
+              stages: (l.data?.stages || []).map(s => ({
+                id: s.id,
+                title: s.title,
+                tip: s.tip || '',
+                lines: Array.isArray(s.lines) ? s.lines : [],
+                lineKinds: Array.isArray(s.lineKinds) ? s.lineKinds : [],
+                objectionIds: Array.isArray(s.objectionIds) ? s.objectionIds : []
+              })),
+              objections: Array.isArray(l.data?.objections) ? l.data.objections : []
+            }))
+          });
+        }
+
+        const blockId = pathname.split('/')[4] || null;
+
+        if (pathname === '/api/trainer/blocks' && method === 'GET') {
+          const qUserId = url.searchParams.get('userId') || '';
+          const qLayoutId = url.searchParams.get('layoutId') || '';
+          const filtered = trainerBlocks
+            .filter(b => b && (!qUserId || b.userId === qUserId) && (!qLayoutId || String(b.layoutId) === String(qLayoutId)))
+            .map(b => {
+              const origL = allLayouts.find(l => String(l.id) === String(b.layoutId));
+              const anchor = origL
+                ? inspectTrainerBlockAnchor(origL, b)
+                : { valid: false, relocated: true, reason: 'layout_missing', stageId: b.stageId, insertIndex: 0 };
+              return {
+                ...b,
+                type: b.type || b.kind || 'line',
+                kind: b.kind || b.type || 'line',
+                anchorLineSnapshot: b.anchorLineSnapshot !== undefined ? b.anchorLineSnapshot : (b.afterLineText || ''),
+                createdByLogin: b.createdByLogin || b.authorName || 'Бизнес-тренер ДПК',
+                relocated: anchor.relocated,
+                relocatedReason: anchor.reason,
+                resolvedStageId: anchor.stageId,
+                resolvedInsertIndex: anchor.insertIndex
+              };
+            });
+          let originalLayout = null;
+          let previewLayout = null;
+          if (qLayoutId) {
+            originalLayout = allLayouts.find(l => String(l.id) === String(qLayoutId)) || null;
+            if (originalLayout && qUserId) {
+              const userBlocks = trainerBlocks.filter(b => b && b.userId === qUserId && String(b.layoutId) === String(qLayoutId));
+              previewLayout = applyTrainerBlocksToLayout(originalLayout, userBlocks);
+            }
+          }
+          return sendJson(res, 200, {
+            blocks: filtered,
+            originalLayout,
+            previewLayout
+          });
+        }
+
+        if (pathname === '/api/trainer/blocks' && method === 'POST') {
+          const body = await readBody(req);
+          const userId = String(body.userId || '').trim();
+          const layoutId = String(body.layoutId || '').trim();
+          const stageId = String(body.stageId || '').trim();
+          const rawKind = body.kind || body.type;
+          const kind = ['line', 'tip', 'objection'].includes(rawKind) ? rawKind : 'line';
+          const text = String(body.text || '').trim();
+          const title = String(body.title || '').trim().slice(0, 160);
+
+          if (!userId || !layoutId || !stageId) {
+            return sendJson(res, 400, { error: 'Необходимо указать сотрудника (userId), скрипт (layoutId) и этап (stageId).' });
+          }
+          if (!text) {
+            return sendJson(res, 400, { error: 'Текст блока тренера не может быть пустым.' });
+          }
+          const targetUser = allUsers.find(u => u.id === userId && u.role === 'OPERATOR' && u.managerId && headMap.has(u.managerId));
+          if (!targetUser) {
+            return sendJson(res, 404, { error: 'Менеджер под руководителем не найден.' });
+          }
+          const origLayout = allLayouts.find(l => String(l.id) === layoutId);
+          if (!origLayout) {
+            return sendJson(res, 404, { error: 'Скрипт (макет) не найден.' });
+          }
+          const stage = (origLayout.data?.stages || []).find(s => String(s?.id) === stageId);
+          if (!stage) {
+            return sendJson(res, 404, { error: 'Этап скрипта не найден.' });
+          }
+
+          let position = 'end';
+          if (kind !== 'objection') {
+            if (['start', 'after', 'end'].includes(body.position)) {
+              position = body.position;
+            } else if (body.afterLineIndex === -1) {
+              position = 'start';
+            } else if (typeof body.afterLineIndex === 'number' && Number.isInteger(body.afterLineIndex) && body.afterLineIndex >= 0) {
+              position = 'after';
+            } else {
+              position = 'end';
+            }
+          }
+          const origLines = Array.isArray(stage.lines) ? stage.lines : [];
+          let afterLineIndex = position === 'start' ? -1 : null;
+          let afterLineText = '';
+          if (position === 'after') {
+            const reqIdx = Number(body.afterLineIndex);
+            if (Number.isInteger(reqIdx) && reqIdx >= 0 && reqIdx < origLines.length) {
+              afterLineIndex = reqIdx;
+              afterLineText = String(origLines[reqIdx] || '').trim();
+            } else if (typeof body.afterLineText === 'string' && body.afterLineText.trim()) {
+              afterLineText = body.afterLineText.trim();
+              afterLineIndex = origLines.findIndex(l => String(l || '').trim() === afterLineText);
+            }
+          }
+
+          const now = Date.now();
+          const authorDisplay = auth.user.displayName || auth.user.login;
+          const newBlock = {
+            id: 'tb_' + crypto.randomUUID(),
+            userId: targetUser.id,
+            layoutId: String(origLayout.id),
+            stageId: String(stage.id),
+            kind,
+            type: kind,
+            position,
+            afterLineIndex,
+            afterLineText,
+            anchorLineSnapshot: afterLineText,
+            title: kind === 'objection' ? (title || 'Возражение (от тренера)') : title,
+            text,
+            authorId: auth.user.id,
+            authorName: authorDisplay,
+            createdByLogin: authorDisplay,
+            createdAt: now,
+            updatedAt: now
+          };
+
+          appData.trainerBlocks.push(newBlock);
+          store.saveAppData();
+          store.logEvent({
+            action: 'trainer.block.create',
+            actor: auth.user,
+            target: targetUser.login,
+            ip,
+            userAgent,
+            details: {
+              blockId: newBlock.id,
+              userId: targetUser.id,
+              layoutId: origLayout.id,
+              stageId: stage.id,
+              kind
+            }
+          });
+          const anchor = inspectTrainerBlockAnchor(origLayout, newBlock);
+          const userBlocks = appData.trainerBlocks.filter(b => b && b.userId === targetUser.id && String(b.layoutId) === String(origLayout.id));
+          return sendJson(res, 201, {
+            ok: true,
+            block: { ...newBlock, relocated: anchor.relocated, relocatedReason: anchor.reason },
+            previewLayout: applyTrainerBlocksToLayout(origLayout, userBlocks)
+          });
+        }
+
+        if (method === 'PUT' && blockId) {
+          const existing = appData.trainerBlocks.find(b => b && b.id === blockId);
+          if (!existing) {
+            return sendJson(res, 404, { error: 'Блок тренера не найден.' });
+          }
+          const body = await readBody(req);
+          const origLayout = allLayouts.find(l => String(l.id) === String(existing.layoutId));
+          if (body.stageId !== undefined && origLayout) {
+            const st = (origLayout.data?.stages || []).find(s => String(s?.id) === String(body.stageId));
+            if (st) existing.stageId = String(st.id);
+          }
+          const nextKind = body.kind || body.type;
+          if (nextKind !== undefined && ['line', 'tip', 'objection'].includes(nextKind)) {
+            existing.kind = nextKind;
+            existing.type = nextKind;
+          }
+          if (body.text !== undefined) {
+            const nextText = String(body.text || '').trim();
+            if (!nextText) {
+              return sendJson(res, 400, { error: 'Текст блока тренера не может быть пустым.' });
+            }
+            existing.text = nextText;
+          }
+          if (body.title !== undefined) {
+            existing.title = String(body.title || '').trim().slice(0, 160);
+          }
+          const stage = (origLayout?.data?.stages || []).find(s => String(s?.id) === String(existing.stageId));
+          const origLines = Array.isArray(stage?.lines) ? stage.lines : [];
+          if (existing.kind === 'objection') {
+            existing.position = 'end';
+            existing.afterLineIndex = null;
+            existing.afterLineText = '';
+            existing.anchorLineSnapshot = '';
+          } else if (body.position !== undefined || body.afterLineIndex !== undefined || body.afterLineText !== undefined) {
+            let nextPos = existing.position || 'end';
+            if (['start', 'after', 'end'].includes(body.position)) {
+              nextPos = body.position;
+            } else if (body.afterLineIndex === -1) {
+              nextPos = 'start';
+            } else if (typeof body.afterLineIndex === 'number' && Number.isInteger(body.afterLineIndex) && body.afterLineIndex >= 0) {
+              nextPos = 'after';
+            } else if (body.afterLineIndex === null) {
+              nextPos = 'end';
+            }
+            existing.position = nextPos;
+            if (nextPos === 'after') {
+              const reqIdx = body.afterLineIndex !== undefined ? Number(body.afterLineIndex) : existing.afterLineIndex;
+              if (Number.isInteger(reqIdx) && reqIdx >= 0 && reqIdx < origLines.length) {
+                existing.afterLineIndex = reqIdx;
+                existing.afterLineText = String(origLines[reqIdx] || '').trim();
+              } else if (typeof body.afterLineText === 'string') {
+                existing.afterLineText = body.afterLineText.trim();
+                existing.afterLineIndex = origLines.findIndex(l => String(l || '').trim() === existing.afterLineText);
+              }
+              existing.anchorLineSnapshot = existing.afterLineText;
+            } else {
+              existing.afterLineIndex = nextPos === 'start' ? -1 : null;
+              existing.afterLineText = '';
+              existing.anchorLineSnapshot = '';
+            }
+          }
+          existing.updatedAt = Date.now();
+          store.saveAppData();
+          const targetUser = store.findUserById(existing.userId);
+          store.logEvent({
+            action: 'trainer.block.update',
+            actor: auth.user,
+            target: targetUser?.login || existing.userId,
+            ip,
+            userAgent,
+            details: { blockId: existing.id, userId: existing.userId, layoutId: existing.layoutId, stageId: existing.stageId, kind: existing.kind }
+          });
+          const anchor = origLayout ? inspectTrainerBlockAnchor(origLayout, existing) : { relocated: false, reason: null };
+          const userBlocks = appData.trainerBlocks.filter(b => b && b.userId === existing.userId && String(b.layoutId) === String(existing.layoutId));
+          return sendJson(res, 200, {
+            ok: true,
+            block: { ...existing, relocated: anchor.relocated, relocatedReason: anchor.reason },
+            previewLayout: origLayout ? applyTrainerBlocksToLayout(origLayout, userBlocks) : null
+          });
+        }
+
+        if (method === 'DELETE' && blockId) {
+          const idx = appData.trainerBlocks.findIndex(b => b && b.id === blockId);
+          if (idx < 0) {
+            return sendJson(res, 404, { error: 'Блок тренера не найден.' });
+          }
+          const [removed] = appData.trainerBlocks.splice(idx, 1);
+          store.saveAppData();
+          const targetUser = store.findUserById(removed.userId);
+          store.logEvent({
+            action: 'trainer.block.delete',
+            actor: auth.user,
+            target: targetUser?.login || removed.userId,
+            ip,
+            userAgent,
+            details: { blockId: removed.id, userId: removed.userId, layoutId: removed.layoutId }
+          });
+          return sendJson(res, 200, { ok: true, deletedId: removed.id });
         }
       }
 

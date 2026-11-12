@@ -1223,5 +1223,275 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.ok(html.includes('getScheduleViewingWeek'), 'Must support flipping and viewing any week in schedule');
     assert.ok(html.includes('duplicateSlotToConstructors'), 'Must sync selected slot into invitation constructors');
   });
+
+  await t.test('18. Per-Employee Script Access Matrix (scriptAccess) for Department Heads and TRAINER (Бизнес-тренер ДПК) role with personal trainer blocks', async () => {
+    const adminClient = createTestClient(baseUrl);
+    await adminClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'admin_full', password: 'AdminPass123' }
+    });
+
+    const headClient = createTestClient(baseUrl);
+    await headClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'head_sergey', password: 'HeadPass123' }
+    });
+
+    // Ensure we have at least 2 layouts and a second operator in head_sergey's department (Петров П.П.)
+    const allScriptsRes = await adminClient.request('/api/scripts');
+    assert.equal(allScriptsRes.status, 200);
+    const layouts = allScriptsRes.data.allLayouts;
+    assert.ok(layouts.length >= 2, 'Need at least 2 layouts');
+    const scriptA = layouts[0];
+    const scriptB = layouts[1];
+    const stage0Id = scriptA.data.stages[0].id;
+    const origFirstLine = scriptA.data.stages[0].lines[0];
+
+    // Head creates a second manager in their department (Петров П.П.)
+    const createPetrovRes = await headClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'petrov_pp',
+        displayName: 'Петров П.П.',
+        role: 'OPERATOR',
+        password: 'PetrovPass123!',
+        mustChangePassword: false
+      }
+    });
+    assert.equal(createPetrovRes.status, 201);
+    const petrovId = createPetrovRes.data.user.id;
+
+    // Get Ivanov (op_dept_test)
+    const usersRes = await adminClient.request('/api/users');
+    const ivanovUser = usersRes.data.users.find(u => u.login === 'op_dept_test');
+    assert.ok(ivanovUser, 'op_dept_test must exist');
+    const ivanovId = ivanovUser.id;
+    const ownerObj = usersRes.data.users.find(u => u.role === 'OWNER');
+    const ownerOp = usersRes.data.users.find(u => u.login === 'op_owner_dept');
+
+    const ivanovClient = createTestClient(baseUrl);
+    await ivanovClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'op_dept_test', password: 'Pass1234!' }
+    });
+
+    const petrovClient = createTestClient(baseUrl);
+    await petrovClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'petrov_pp', password: 'PetrovPass123!' }
+    });
+
+    // 1. Head sets department pool to [scriptA.id, scriptB.id], and restricts Ivanov to ONLY [scriptA.id] via employeeAccess matrix
+    const putDeptRes = await headClient.request('/api/department/scripts', {
+      method: 'PUT',
+      body: {
+        scriptIds: [scriptA.id, scriptB.id],
+        employeeAccess: {
+          [ivanovId]: [scriptA.id],
+          [petrovId]: null // Petrov has all department scripts checked
+        }
+      }
+    });
+    assert.equal(putDeptRes.status, 200);
+
+    // Ivanov sees ONLY scriptA in both layouts and allLayouts
+    const ivanovScripts1 = await ivanovClient.request('/api/scripts');
+    assert.equal(ivanovScripts1.status, 200);
+    assert.deepEqual(ivanovScripts1.data.layouts.map(l => l.id), [scriptA.id]);
+    assert.deepEqual(ivanovScripts1.data.allLayouts.map(l => l.id), [scriptA.id]);
+
+    // Petrov sees BOTH scriptA and scriptB
+    const petrovScripts1 = await petrovClient.request('/api/scripts');
+    assert.equal(petrovScripts1.status, 200);
+    assert.deepEqual(petrovScripts1.data.layouts.map(l => l.id).sort(), [scriptA.id, scriptB.id].sort());
+
+    // Head cannot change scriptAccess for an employee from another department (ownerOp) -> 403
+    const crossDeptAccess = await headClient.request(`/api/users/${ownerOp.id}/script-access`, {
+      method: 'PUT',
+      body: { scriptAccess: [scriptA.id] }
+    });
+    assert.equal(crossDeptAccess.status, 403);
+
+    // 2. Admin creates a new user with role TRAINER («Бизнес-тренер ДПК»)
+    const createTrainerRes = await adminClient.request('/api/users', {
+      method: 'POST',
+      body: {
+        login: 'trainer_dpk',
+        displayName: 'Смирнова Е.В. (Бизнес-тренер ДПК)',
+        role: 'TRAINER',
+        password: 'TrainerPass123!',
+        mustChangePassword: false
+      }
+    });
+    assert.equal(createTrainerRes.status, 201);
+    assert.equal(createTrainerRes.data.user.role, 'TRAINER');
+    assert.ok(createTrainerRes.data.user.permissions.includes('scripts.trainer-blocks'));
+    assert.ok(!createTrainerRes.data.user.permissions.includes('layouts.manage'));
+    assert.ok(!createTrainerRes.data.user.permissions.includes('users.manage'));
+
+    const trainerClient = createTestClient(baseUrl);
+    const trainerLogin = await trainerClient.request('/api/admin/login', {
+      method: 'POST',
+      body: { login: 'trainer_dpk', password: 'TrainerPass123!' }
+    });
+    assert.equal(trainerLogin.status, 200);
+
+    // 3. Trainer sees all managers under department heads via GET /api/trainer/managers
+    const mgrsRes = await trainerClient.request('/api/trainer/managers');
+    assert.equal(mgrsRes.status, 200);
+    const mgrLogins = mgrsRes.data.managers.map(m => m.login);
+    assert.ok(mgrLogins.includes('op_dept_test'), 'Trainer must see Ivanov under head_sergey');
+    assert.ok(mgrLogins.includes('petrov_pp'), 'Trainer must see Petrov under head_sergey');
+    assert.ok(mgrLogins.includes('op_owner_dept'), 'Trainer must see manager under Owner');
+    // Unassigned operator (temp_user_test has managerId: null) should not be in managers under heads
+    assert.ok(!mgrLogins.includes('temp_user_test'), 'Trainer only sees managers assigned under department heads');
+
+    // 4. Trainer is STRICTLY forbidden from modifying original layouts, managing users, or changing scriptAccess
+    const trainerHackLayout = await trainerClient.request(`/api/layouts/${scriptA.id}`, {
+      method: 'PUT',
+      body: { name: 'Hacked by Trainer', data: scriptA.data }
+    });
+    assert.equal(trainerHackLayout.status, 403);
+
+    const trainerHackUsers = await trainerClient.request('/api/users', {
+      method: 'POST',
+      body: { login: 'hack_u', password: '1234', role: 'OPERATOR' }
+    });
+    assert.equal(trainerHackUsers.status, 403);
+
+    const trainerHackAccess = await trainerClient.request(`/api/users/${ivanovId}/script-access`, {
+      method: 'PUT',
+      body: { scriptAccess: [scriptA.id, scriptB.id] }
+    });
+    assert.equal(trainerHackAccess.status, 403);
+
+    // 5. Trainer creates personal blocks (line, tip, objection) specifically for Ivanov (op_dept_test) on scriptA
+    const addLineRes = await trainerClient.request('/api/trainer/blocks', {
+      method: 'POST',
+      body: {
+        userId: ivanovId,
+        layoutId: scriptA.id,
+        stageId: stage0Id,
+        afterLineIndex: 0,
+        type: 'line',
+        title: 'Персональный переход для Иванова',
+        text: 'Иван Алексеевич, специально для вас уточню детали программы!'
+      }
+    });
+    assert.equal(addLineRes.status, 201);
+    const lineBlockId = addLineRes.data.block.id;
+    assert.equal(addLineRes.data.block.anchorLineSnapshot, origFirstLine.trim());
+
+    const addTipRes = await trainerClient.request('/api/trainer/blocks', {
+      method: 'POST',
+      body: {
+        userId: ivanovId,
+        layoutId: scriptA.id,
+        stageId: stage0Id,
+        afterLineIndex: -1,
+        type: 'tip',
+        title: 'Совет по интонации',
+        text: 'Держи паузу 2 секунды после приветствия, не торопись!'
+      }
+    });
+    assert.equal(addTipRes.status, 201);
+
+    const addObRes = await trainerClient.request('/api/trainer/blocks', {
+      method: 'POST',
+      body: {
+        userId: ivanovId,
+        layoutId: scriptA.id,
+        stageId: stage0Id,
+        type: 'objection',
+        title: 'Персональное возражение Иванова: Посоветуюсь с супругой',
+        text: 'Отлично! Давайте как раз возьмём приглашение на двоих.'
+      }
+    });
+    assert.equal(addObRes.status, 201);
+
+    // 6. Verify Ivanov receives his personal trainer blocks merged into scriptA, while Petrov and original layout remain untouched
+    const ivanovAfterBlocks = await ivanovClient.request('/api/scripts');
+    assert.equal(ivanovAfterBlocks.status, 200);
+    const ivanovScriptA = ivanovAfterBlocks.data.layouts.find(l => l.id === scriptA.id);
+    const ivanovStage0 = ivanovScriptA.data.stages[0];
+
+    // Tip was inserted at index 0 (afterLineIndex: -1), original line 0 is now at index 1, trainer line is at index 2
+    assert.equal(ivanovStage0.lineKinds[0], 'trainer-tip');
+    assert.equal(ivanovStage0.lines[0], 'Держи паузу 2 секунды после приветствия, не торопись!');
+    assert.equal(ivanovStage0.lines[1], origFirstLine);
+    assert.equal(ivanovStage0.lineKinds[2], 'trainer-line');
+    assert.equal(ivanovStage0.lines[2], 'Иван Алексеевич, специально для вас уточню детали программы!');
+
+    // Trainer objection is appended and linked by integer index in stage.objectionIds
+    const trainerObIdx = ivanovScriptA.data.objections.findIndex(o => o.origin === 'trainer');
+    assert.ok(trainerObIdx >= 0, 'Trainer objection must be in Ivanov scriptA objections');
+    assert.ok(ivanovStage0.objectionIds.includes(trainerObIdx), 'Stage 0 objectionIds must contain numeric index of trainer objection');
+
+    // Petrov does NOT see any of Ivanov's trainer blocks
+    const petrovAfterBlocks = await petrovClient.request('/api/scripts');
+    const petrovScriptA = petrovAfterBlocks.data.layouts.find(l => l.id === scriptA.id);
+    assert.ok(!petrovScriptA.data.stages[0].lineKinds.includes('trainer-line'));
+    assert.ok(!petrovScriptA.data.stages[0].lineKinds.includes('trainer-tip'));
+    assert.ok(!petrovScriptA.data.objections.some(o => o.origin === 'trainer'));
+
+    // 7. Department Head (head_sergey) cannot edit/delete trainer blocks (403), sees 🎓 indicator in GET /api/department/scripts,
+    //    and can uncheck scriptA for Ivanov to disable it (and re-check to restore it with trainer blocks intact)
+    const headHackTrainer = await headClient.request(`/api/trainer/blocks/${lineBlockId}`, {
+      method: 'DELETE'
+    });
+    assert.equal(headHackTrainer.status, 403);
+
+    const headDeptInfo = await headClient.request('/api/department/scripts');
+    assert.equal(headDeptInfo.status, 200);
+    const ivanovEmpInfo = headDeptInfo.data.employees.find(e => e.id === ivanovId);
+    assert.ok(ivanovEmpInfo, 'Department scripts response must include employees list');
+    assert.ok(ivanovEmpInfo.trainerBlockLayouts.includes(scriptA.id), 'Head must see trainerBlockLayouts indicator on scriptA for Ivanov');
+
+    // Head unchecks scriptA and enables only scriptB for Ivanov
+    const headSwitchIvanov = await headClient.request(`/api/users/${ivanovId}/script-access`, {
+      method: 'PUT',
+      body: { scriptAccess: [scriptB.id] }
+    });
+    assert.equal(headSwitchIvanov.status, 200);
+
+    const ivanovOnlyB = await ivanovClient.request('/api/scripts');
+    assert.deepEqual(ivanovOnlyB.data.layouts.map(l => l.id), [scriptB.id]);
+
+    // Head re-enables scriptA for Ivanov -> trainer blocks are still preserved!
+    await headClient.request(`/api/users/${ivanovId}/script-access`, {
+      method: 'PUT',
+      body: { scriptAccess: [scriptA.id, scriptB.id] }
+    });
+    const ivanovRestored = await ivanovClient.request('/api/scripts');
+    const restoredA = ivanovRestored.data.layouts.find(l => l.id === scriptA.id);
+    assert.ok(restoredA.data.stages[0].lineKinds.includes('trainer-line'), 'Trainer blocks must be preserved after re-enabling script');
+
+    // 8. Original layout update: when original anchor line is edited, original update appears for Ivanov AND trainer block falls back to stage end with relocated: true
+    const updatedLayoutData = structuredClone(scriptA.data);
+    updatedLayoutData.stages[0].lines[0] = 'ОБНОВЛЁННАЯ ПЕРВАЯ РЕПЛИКА ОРИГИНАЛА';
+    const updateOrigRes = await adminClient.request(`/api/layouts/${scriptA.id}`, {
+      method: 'PUT',
+      body: { name: scriptA.name, data: updatedLayoutData }
+    });
+    assert.equal(updateOrigRes.status, 200);
+
+    // Ivanov sees both the updated original line and his trainer blocks
+    const ivanovAfterOrigUpdate = await ivanovClient.request('/api/scripts');
+    const ivanovUpdatedA = ivanovAfterOrigUpdate.data.layouts.find(l => l.id === scriptA.id);
+    assert.ok(ivanovUpdatedA.data.stages[0].lines.includes('ОБНОВЛЁННАЯ ПЕРВАЯ РЕПЛИКА ОРИГИНАЛА'));
+    assert.ok(ivanovUpdatedA.data.stages[0].lines.includes('Иван Алексеевич, специально для вас уточню детали программы!'));
+
+    // Trainer sees relocated: true on the block whose anchor line was modified
+    const trainerBlocksCheck = await trainerClient.request(`/api/trainer/blocks?userId=${ivanovId}&layoutId=${scriptA.id}`);
+    assert.equal(trainerBlocksCheck.status, 200);
+    const relocatedBlk = trainerBlocksCheck.data.blocks.find(b => b.id === lineBlockId);
+    assert.equal(relocatedBlk.relocated, true, 'Block anchored to modified line must report relocated: true');
+
+    // Restore department scripts to empty so state is clean
+    await headClient.request('/api/department/scripts', {
+      method: 'PUT',
+      body: { scriptIds: [] }
+    });
+  });
 });
 
