@@ -39,8 +39,8 @@ const DEFAULT_ROLE_PERMISSIONS = {
   OWNER: [...ALL_PERMISSIONS, 'admins.manage', 'owner.full'],
   ADMIN: [...ALL_PERMISSIONS],
   EDITOR: ['content.edit', 'layouts.manage', 'layouts.delete', 'gifts.manage', 'addresses.manage', 'settings.manage'],
-  HEAD: ['content.edit', 'layouts.manage', 'users.view', 'users.manage', 'sessions.manage'],
-  TRAINER: ['users.view', 'scripts.trainer-blocks', 'settings.manage'],
+  HEAD: ['content.edit', 'layouts.manage', 'users.view', 'users.manage', 'sessions.manage', 'scripts.trainer-blocks'],
+  TRAINER: ['content.edit', 'layouts.manage', 'users.view', 'scripts.trainer-blocks', 'settings.manage'],
   OPERATOR: ['settings.manage']
 };
 
@@ -331,6 +331,15 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
           u.permissions = [...new Set([...(u.permissions || []), 'settings.manage'])];
         }
         u.permissionsMigratedV3 = true;
+        migrated = true;
+      }
+      if (u.role === 'HEAD' && !u.permissionsMigratedV4) {
+        u.permissions = [...new Set([...(u.permissions || []), 'content.edit', 'layouts.manage', 'scripts.trainer-blocks'])];
+        u.permissionsMigratedV4 = true;
+        migrated = true;
+      } else if (u.role === 'TRAINER' && !u.permissionsMigratedV4) {
+        u.permissions = [...new Set([...(u.permissions || []), 'content.edit', 'layouts.manage', 'scripts.trainer-blocks', 'users.view', 'settings.manage'])];
+        u.permissionsMigratedV4 = true;
         migrated = true;
       }
     });
@@ -1940,7 +1949,7 @@ function createAppServer(options = {}) {
           return sendJson(res, 403, { error: 'Недостаточно прав для сохранения или удаления макетов.' });
         }
         if (method === 'DELETE') {
-          if (auth.user.role === 'HEAD' || !hasPermission(auth.user, 'layouts.delete')) {
+          if (auth.user.role === 'HEAD' || auth.user.role === 'TRAINER' || !hasPermission(auth.user, 'layouts.delete')) {
             store.logEvent({ action: 'layouts.delete.denied', actor: auth.user, target: id, ip, userAgent, status: 'denied' });
             return sendJson(res, 403, { error: 'У вашей роли нет прав на удаление макетов.' });
           }
@@ -2502,11 +2511,13 @@ function createAppServer(options = {}) {
       // =====================================================================
       if (pathname === '/api/trainer/managers' || pathname === '/api/trainer/blocks' || pathname.startsWith('/api/trainer/blocks/')) {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        const isHead = auth.user.role === 'HEAD';
         const canManageTrainerBlocks =
           auth.user.role === 'TRAINER' ||
           auth.user.role === 'OWNER' ||
           auth.user.role === 'ADMIN' ||
-          (auth.user.role !== 'HEAD' && auth.user.role !== 'OPERATOR' && hasPermission(auth.user, 'scripts.trainer-blocks'));
+          isHead ||
+          (auth.user.role !== 'OPERATOR' && hasPermission(auth.user, 'scripts.trainer-blocks'));
         if (!canManageTrainerBlocks) {
           store.logEvent({
             action: 'trainer.access.denied',
@@ -2516,7 +2527,7 @@ function createAppServer(options = {}) {
             status: 'denied',
             details: { method, pathname }
           });
-          return sendJson(res, 403, { error: 'Доступ к кабинету и блокам бизнес-тренера разрешён только Бизнес-тренеру ДПК, Владельцу и Администраторам.' });
+          return sendJson(res, 403, { error: 'Доступ к персональным блокам и советам разрешён только Бизнес-тренеру ДПК, Руководителю отдела, Владельцу и Администраторам.' });
         }
 
         const allUsers = store.getUsers();
@@ -2528,7 +2539,7 @@ function createAppServer(options = {}) {
 
         if (pathname === '/api/trainer/managers' && method === 'GET') {
           const managersUnderHeads = allUsers
-            .filter(u => u.role === 'OPERATOR' && u.managerId && headMap.has(u.managerId))
+            .filter(u => u.role === 'OPERATOR' && u.managerId && headMap.has(u.managerId) && (!isHead || u.managerId === auth.user.id))
             .map(u => {
               const head = headMap.get(u.managerId);
               const effectiveScriptIds = getEffectiveScriptIdsForOperator(u, allUsers, allLayouts);
@@ -2557,8 +2568,9 @@ function createAppServer(options = {}) {
               };
             });
 
+          const visibleHeads = isHead ? headUsers.filter(h => h.id === auth.user.id) : headUsers;
           return sendJson(res, 200, {
-            heads: headUsers.map(h => ({
+            heads: visibleHeads.map(h => ({
               id: h.id,
               login: h.login,
               displayName: h.displayName || h.login,
@@ -2589,7 +2601,16 @@ function createAppServer(options = {}) {
           const qUserId = url.searchParams.get('userId') || '';
           const qLayoutId = url.searchParams.get('layoutId') || '';
           const filtered = trainerBlocks
-            .filter(b => b && (!qUserId || b.userId === qUserId) && (!qLayoutId || String(b.layoutId) === String(qLayoutId)))
+            .filter(b => {
+              if (!b) return false;
+              if (qUserId && b.userId !== qUserId) return false;
+              if (qLayoutId && String(b.layoutId) !== String(qLayoutId)) return false;
+              if (isHead) {
+                const tu = allUsers.find(u => u.id === b.userId);
+                if (!tu || tu.managerId !== auth.user.id) return false;
+              }
+              return true;
+            })
             .map(b => {
               const origL = allLayouts.find(l => String(l.id) === String(b.layoutId));
               const anchor = origL
@@ -2629,7 +2650,7 @@ function createAppServer(options = {}) {
           const layoutId = String(body.layoutId || '').trim();
           const stageId = String(body.stageId || '').trim();
           const rawKind = body.kind || body.type;
-          const kind = ['line', 'tip', 'objection'].includes(rawKind) ? rawKind : 'line';
+          const kind = ['line', 'tip', 'objection'].includes(rawKind) ? rawKind : (isHead ? 'tip' : 'line');
           const text = String(body.text || '').trim();
           const title = String(body.title || '').trim().slice(0, 160);
 
@@ -2637,11 +2658,14 @@ function createAppServer(options = {}) {
             return sendJson(res, 400, { error: 'Необходимо указать сотрудника (userId), скрипт (layoutId) и этап (stageId).' });
           }
           if (!text) {
-            return sendJson(res, 400, { error: 'Текст блока тренера не может быть пустым.' });
+            return sendJson(res, 400, { error: 'Текст блока или совета не может быть пустым.' });
           }
           const targetUser = allUsers.find(u => u.id === userId && u.role === 'OPERATOR' && u.managerId && headMap.has(u.managerId));
           if (!targetUser) {
             return sendJson(res, 404, { error: 'Менеджер под руководителем не найден.' });
+          }
+          if (isHead && targetUser.managerId !== auth.user.id) {
+            return sendJson(res, 403, { error: 'Руководитель отдела может добавлять советы только сотрудникам своего отдела.' });
           }
           const origLayout = allLayouts.find(l => String(l.id) === layoutId);
           if (!origLayout) {
@@ -2694,7 +2718,9 @@ function createAppServer(options = {}) {
             title: kind === 'objection' ? (title || 'Возражение (от тренера)') : title,
             text,
             authorId: auth.user.id,
+            authorRole: auth.user.role,
             authorName: authorDisplay,
+            createdBy: auth.user.id,
             createdByLogin: authorDisplay,
             createdAt: now,
             updatedAt: now
@@ -2729,6 +2755,9 @@ function createAppServer(options = {}) {
           const existing = appData.trainerBlocks.find(b => b && b.id === blockId);
           if (!existing) {
             return sendJson(res, 404, { error: 'Блок тренера не найден.' });
+          }
+          if (isHead && existing.authorId !== auth.user.id && existing.createdBy !== auth.user.id) {
+            return sendJson(res, 403, { error: 'Руководитель отдела может редактировать только свои собственные советы, но не блоки бизнес-тренера ДПК.' });
           }
           const body = await readBody(req);
           const origLayout = allLayouts.find(l => String(l.id) === String(existing.layoutId));
@@ -2810,6 +2839,10 @@ function createAppServer(options = {}) {
           const idx = appData.trainerBlocks.findIndex(b => b && b.id === blockId);
           if (idx < 0) {
             return sendJson(res, 404, { error: 'Блок тренера не найден.' });
+          }
+          const existing = appData.trainerBlocks[idx];
+          if (isHead && existing.authorId !== auth.user.id && existing.createdBy !== auth.user.id) {
+            return sendJson(res, 403, { error: 'Руководитель отдела может удалять только свои собственные советы, но не блоки бизнес-тренера ДПК.' });
           }
           const [removed] = appData.trainerBlocks.splice(idx, 1);
           store.saveAppData();

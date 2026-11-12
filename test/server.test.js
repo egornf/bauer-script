@@ -1326,7 +1326,9 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.equal(createTrainerRes.status, 201);
     assert.equal(createTrainerRes.data.user.role, 'TRAINER');
     assert.ok(createTrainerRes.data.user.permissions.includes('scripts.trainer-blocks'));
-    assert.ok(!createTrainerRes.data.user.permissions.includes('layouts.manage'));
+    assert.ok(createTrainerRes.data.user.permissions.includes('layouts.manage'));
+    assert.ok(createTrainerRes.data.user.permissions.includes('content.edit'));
+    assert.ok(!createTrainerRes.data.user.permissions.includes('layouts.delete'));
     assert.ok(!createTrainerRes.data.user.permissions.includes('users.manage'));
 
     const trainerClient = createTestClient(baseUrl);
@@ -1346,12 +1348,21 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     // Unassigned operator (temp_user_test has managerId: null) should not be in managers under heads
     assert.ok(!mgrLogins.includes('temp_user_test'), 'Trainer only sees managers assigned under department heads');
 
-    // 4. Trainer is STRICTLY forbidden from modifying original layouts, managing users, or changing scriptAccess
-    const trainerHackLayout = await trainerClient.request(`/api/layouts/${scriptA.id}`, {
-      method: 'PUT',
-      body: { name: 'Hacked by Trainer', data: scriptA.data }
+    // 4. Trainer CAN create/save scripts (layouts.manage + content.edit), but is forbidden from deleting scripts, managing users, or changing scriptAccess
+    const trainerCreateLayout = await trainerClient.request('/api/layouts', {
+      method: 'POST',
+      body: { name: 'Скрипт от Бизнес-тренера', data: scriptA.data }
     });
-    assert.equal(trainerHackLayout.status, 403);
+    assert.equal(trainerCreateLayout.status, 200);
+    const trainerCreatedLayoutId = trainerCreateLayout.data.layout.id;
+
+    const trainerDeleteLayout = await trainerClient.request(`/api/layouts/${trainerCreatedLayoutId}`, {
+      method: 'DELETE'
+    });
+    assert.equal(trainerDeleteLayout.status, 403);
+
+    // Clean up test layout as Owner
+    await ownerClient.request(`/api/layouts/${trainerCreatedLayoutId}`, { method: 'DELETE' });
 
     const trainerHackUsers = await trainerClient.request('/api/users', {
       method: 'POST',
@@ -1434,12 +1445,32 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.ok(!petrovScriptA.data.stages[0].lineKinds.includes('trainer-tip'));
     assert.ok(!petrovScriptA.data.objections.some(o => o.origin === 'trainer'));
 
-    // 7. Department Head (head_sergey) cannot edit/delete trainer blocks (403), sees 🎓 indicator in GET /api/department/scripts,
-    //    and can uncheck scriptA for Ivanov to disable it (and re-check to restore it with trainer blocks intact)
+    // 7. Department Head (head_sergey) cannot edit/delete trainer blocks (403), CAN add/delete their own tips for their employees,
+    //    sees 🎓 indicator in GET /api/department/scripts, and can uncheck scriptA for Ivanov to disable it
     const headHackTrainer = await headClient.request(`/api/trainer/blocks/${lineBlockId}`, {
       method: 'DELETE'
     });
     assert.equal(headHackTrainer.status, 403);
+
+    const headAddTip = await headClient.request('/api/trainer/blocks', {
+      method: 'POST',
+      body: {
+        userId: ivanovId,
+        layoutId: scriptA.id,
+        stageId: stage0Id,
+        afterLineIndex: 'end',
+        type: 'tip',
+        title: 'Совет от руководителя отдела',
+        text: 'Уточняй удобное время звонка с первой минуты.'
+      }
+    });
+    assert.equal(headAddTip.status, 201);
+    const headTipId = headAddTip.data.block.id;
+
+    const headDeleteOwnTip = await headClient.request(`/api/trainer/blocks/${headTipId}`, {
+      method: 'DELETE'
+    });
+    assert.equal(headDeleteOwnTip.status, 200);
 
     const headDeptInfo = await headClient.request('/api/department/scripts');
     assert.equal(headDeptInfo.status, 200);

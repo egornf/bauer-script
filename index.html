@@ -3447,8 +3447,8 @@ const VAULT_ROLE_DEFAULTS={
   OWNER:[...VAULT_PERMISSIONS,'admins.manage','owner.full'],
   ADMIN:[...VAULT_PERMISSIONS],
   EDITOR:['content.edit','layouts.manage','layouts.delete','gifts.manage','addresses.manage','settings.manage'],
-  HEAD:['content.edit','layouts.manage','users.view','audit.view'],
-  TRAINER:['users.view','scripts.trainer-blocks','settings.manage'],
+  HEAD:['content.edit','layouts.manage','users.view','audit.view','scripts.trainer-blocks'],
+  TRAINER:['content.edit','layouts.manage','users.view','scripts.trainer-blocks','settings.manage'],
   OPERATOR:['settings.manage']
 };
 function stripTrainerArtifactsFromData(data){
@@ -3529,7 +3529,7 @@ function isScriptTextUnchanged(originalData, nextData) {
 function canDeleteContent(){
   if(!currentUser)return true;
   if(currentUser.role==='OWNER')return true;
-  if(currentUser.role==='HEAD')return false;
+  if(currentUser.role==='HEAD'||currentUser.role==='TRAINER')return false;
   return (currentUser.permissions||[]).includes('layouts.delete');
 }
 
@@ -3719,6 +3719,18 @@ async function api_local_vault(rawPath,options={}){
     owners[0].blocked=false;
     owners[0].permissions=[...VAULT_ROLE_DEFAULTS.OWNER];
   }
+  users.forEach(u=>{
+    if(u.role==='HEAD'&&!u.permissionsMigratedV4){
+      u.permissions=[...new Set([...(u.permissions||[]),'content.edit','layouts.manage','scripts.trainer-blocks'])];
+      u.permissionsMigratedV4=true;
+      usersChanged=true;
+    }else if(u.role==='TRAINER'&&!u.permissionsMigratedV4){
+      u.permissions=[...new Set([...(u.permissions||[]),'content.edit','layouts.manage','scripts.trainer-blocks','users.view','settings.manage'])];
+      u.permissionsMigratedV4=true;
+      usersChanged=true;
+    }
+  });
+  if(usersChanged)await VaultDB.set('users',users);
 
   const saveUsers=async()=>{
     if(users.filter(u=>u.role==='OWNER').length>1)throw fail('Нарушение инварианта: в системе может быть только один OWNER.',403);
@@ -4004,8 +4016,10 @@ async function api_local_vault(rawPath,options={}){
     const lines=Array.isArray(stage.lines)?stage.lines:[];
     if(block.type==='objection')return {stage,stageIdx,insertIdx:lines.length,relocated};
     let insertIdx=lines.length;
-    if(block.afterLineIndex===-1||block.afterLineIndex===null||block.afterLineIndex===undefined){
+    if(block.afterLineIndex===-1){
       insertIdx=0;
+    }else if(block.afterLineIndex===null||block.afterLineIndex===undefined){
+      insertIdx=lines.length;
     }else if(typeof block.afterLineIndex==='number'&&block.afterLineIndex>=0){
       const expected=(block.anchorLineSnapshot||'').trim();
       if(block.afterLineIndex<lines.length){
@@ -4066,8 +4080,10 @@ async function api_local_vault(rawPath,options={}){
       }
       const origLines=origStageLines.get(targetStage.id)||[];
       let insertAt=targetStage.lines.length;
-      if(blk.afterLineIndex===-1||blk.afterLineIndex===null||blk.afterLineIndex===undefined){
+      if(blk.afterLineIndex===-1){
         let k=0;while(k<targetStage.lineTrainerMeta.length&&targetStage.lineTrainerMeta[k]!==null)k++;insertAt=k;
+      }else if(blk.afterLineIndex===null||blk.afterLineIndex===undefined){
+        insertAt=targetStage.lines.length;
       }else if(typeof blk.afterLineIndex==='number'&&blk.afterLineIndex>=0){
         const expected=(blk.anchorLineSnapshot||'').trim();
         let targetOrigText=null;
@@ -4170,7 +4186,7 @@ async function api_local_vault(rawPath,options={}){
         }
       }
       if(role==='HEAD')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
-      if(role==='TRAINER')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='layouts.manage'&&p!=='users.manage');
+      if(role==='TRAINER')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
       const nu={
         id:'usr_'+VaultCrypto.randomHex(8),
         login,
@@ -4243,7 +4259,7 @@ async function api_local_vault(rawPath,options={}){
       if(body.permissions!==undefined&&tu.role!=='OWNER'){
         let np=[...new Set((body.permissions||[]).filter(p=>VAULT_PERMISSIONS.includes(p)))];
         if(tu.role==='HEAD')np=np.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
-        if(tu.role==='TRAINER')np=np.filter(p=>p!=='layouts.delete'&&p!=='layouts.manage'&&p!=='users.manage');
+        if(tu.role==='TRAINER')np=np.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
         tu.permissions=np;
         changes.permissions=tu.permissions;
       }
@@ -4642,7 +4658,7 @@ async function api_local_vault(rawPath,options={}){
     if(!hasPerm(authUser,'layouts.manage'))throw fail('Недостаточно прав для сохранения или удаления макетов (layouts.manage).',403);
     let list=await getStoredLayouts();
     if(method==='DELETE'){
-      if(authUser.role==='HEAD'||!hasPerm(authUser,'layouts.delete'))throw fail('Руководитель отдела не может удалять скрипты и макеты.',403);
+      if(authUser.role==='HEAD'||authUser.role==='TRAINER'||!hasPerm(authUser,'layouts.delete'))throw fail('Руководитель отдела и Бизнес-тренер не могут удалять скрипты и макеты.',403);
       list=list.filter(l=>l.id!==id);
       await VaultDB.set('layouts',list);
       await logEvent({action:'layouts.delete',actor:authUser,target:id});
@@ -4661,12 +4677,13 @@ async function api_local_vault(rawPath,options={}){
 
   if(pathname==='/api/trainer/managers'&&method==='GET'){
     if(!authUser)throw fail('Требуется авторизация.',401);
-    const canTrainer=authUser.role==='TRAINER'||authUser.role==='OWNER'||authUser.role==='ADMIN'||hasPerm(authUser,'scripts.trainer-blocks');
-    if(!canTrainer)throw fail('Доступно только Бизнес-тренеру ДПК и руководству.',403);
+    const isHeadCaller=authUser.role==='HEAD';
+    const canTrainer=authUser.role==='TRAINER'||authUser.role==='OWNER'||authUser.role==='ADMIN'||isHeadCaller||hasPerm(authUser,'scripts.trainer-blocks');
+    if(!canTrainer)throw fail('Доступно только Бизнес-тренеру ДПК, Руководителю отдела и руководству.',403);
     const allLayouts=await getStoredLayouts();
     const heads=users.filter(u=>u.role==='HEAD'||u.role==='OWNER');
     const headMap=new Map(heads.map(h=>[h.id,h]));
-    const managersUnderHeads=users.filter(u=>u.role==='OPERATOR'&&Boolean(u.managerId)&&headMap.has(u.managerId));
+    const managersUnderHeads=users.filter(u=>u.role==='OPERATOR'&&Boolean(u.managerId)&&headMap.has(u.managerId)&&(!isHeadCaller||u.managerId===authUser.id));
     const managersResult=managersUnderHeads.map(op=>{
       const head=headMap.get(op.managerId);
       const effectiveIds=getEffectiveOperatorScriptIds(op,allLayouts);
@@ -4690,9 +4707,10 @@ async function api_local_vault(rawPath,options={}){
         relocatedBlocksCount:relocatedCount
       };
     });
+    const visibleHeads=isHeadCaller?heads.filter(h=>h.id===authUser.id):heads;
     return {
       managers:managersResult,
-      heads:heads.map(h=>({
+      heads:visibleHeads.map(h=>({
         id:h.id,
         login:h.login,
         displayName:h.displayName||h.login,
@@ -4716,15 +4734,18 @@ async function api_local_vault(rawPath,options={}){
 
   if(pathname==='/api/trainer/blocks'||pathname.startsWith('/api/trainer/blocks/')){
     if(!authUser)throw fail('Требуется авторизация.',401);
-    const canTrainer=authUser.role==='TRAINER'||authUser.role==='OWNER'||authUser.role==='ADMIN'||hasPerm(authUser,'scripts.trainer-blocks');
-    if(!canTrainer)throw fail('Управление персональными блоками доступно только Бизнес-тренеру ДПК и руководству.',403);
+    const isHeadCaller=authUser.role==='HEAD';
+    const canTrainer=authUser.role==='TRAINER'||authUser.role==='OWNER'||authUser.role==='ADMIN'||isHeadCaller||hasPerm(authUser,'scripts.trainer-blocks');
+    if(!canTrainer)throw fail('Управление персональными блоками доступно только Бизнес-тренеру ДПК, Руководителю отдела и руководству.',403);
     const blockId=pathname.split('/')[4]||null;
     const allLayouts=await getStoredLayouts();
     if(method==='GET'&&!blockId){
       const filterUserId=uObj.searchParams.get('userId')||'';
       const filterLayoutId=uObj.searchParams.get('layoutId')||'';
+      const myMgrIds=isHeadCaller?new Set(users.filter(u=>u.role==='OPERATOR'&&u.managerId===authUser.id).map(u=>u.id)):null;
       const list=trainerBlocks.filter(b=>{
         if(!b)return false;
+        if(myMgrIds&&!myMgrIds.has(b.userId))return false;
         if(filterUserId&&b.userId!==filterUserId)return false;
         if(filterLayoutId&&b.layoutId!==filterLayoutId)return false;
         return true;
@@ -4739,13 +4760,17 @@ async function api_local_vault(rawPath,options={}){
       const userId=String(body.userId||'').trim();
       const layoutId=String(body.layoutId||'').trim();
       const stageId=String(body.stageId||'').trim();
-      const type=['line','tip','objection'].includes(body.type)?body.type:'line';
+      const rawType=body.type||body.kind||'line';
+      const type=['line','tip','objection'].includes(rawType)?rawType:'line';
       const text=String(body.text||'').trim();
       const title=String(body.title||'').trim();
       if(!userId||!layoutId||!stageId)throw fail('Необходимо указать сотрудника, скрипт и этап.',400);
       if(!text)throw fail('Текст блока не может быть пустым.',400);
       const targetUser=users.find(u=>u.id===userId&&u.role==='OPERATOR');
       if(!targetUser)throw fail('Менеджер не найден.',404);
+      if(isHeadCaller&&targetUser.managerId!==authUser.id){
+        throw fail('Руководитель отдела может добавлять советы и блоки только сотрудникам своего отдела.',403);
+      }
       const layout=allLayouts.find(l=>l.id===layoutId);
       if(!layout)throw fail('Скрипт не найден.',404);
       const stage=(layout.data?.stages||[]).find(s=>s.id===stageId);
@@ -4772,6 +4797,7 @@ async function api_local_vault(rawPath,options={}){
         text,
         keywords:Array.isArray(body.keywords)?body.keywords.map(k=>String(k||'').trim()).filter(Boolean):[],
         createdBy:authUser.id,
+        createdByRole:authUser.role,
         createdByLogin:authUser.displayName||authUser.login,
         createdAt:Date.now(),
         updatedAt:Date.now()
@@ -4784,6 +4810,11 @@ async function api_local_vault(rawPath,options={}){
     if(method==='PUT'&&blockId){
       const blk=trainerBlocks.find(b=>b&&b.id===blockId);
       if(!blk)throw fail('Персональный блок не найден.',404);
+      if(isHeadCaller){
+        const targetUser=users.find(u=>u.id===blk.userId);
+        if(!targetUser||targetUser.managerId!==authUser.id)throw fail('Руководитель отдела может управлять блоками только своих сотрудников.',403);
+        if(blk.createdBy!==authUser.id&&blk.authorId!==authUser.id)throw fail('Руководитель отдела не может редактировать персональные блоки бизнес-тренера ДПК.',403);
+      }
       if(body.type!==undefined&&['line','tip','objection'].includes(body.type))blk.type=body.type;
       if(body.stageId!==undefined)blk.stageId=String(body.stageId||'').trim()||blk.stageId;
       if(body.text!==undefined){
@@ -4814,6 +4845,12 @@ async function api_local_vault(rawPath,options={}){
     if(method==='DELETE'&&blockId){
       const idx=trainerBlocks.findIndex(b=>b&&b.id===blockId);
       if(idx<0)throw fail('Персональный блок не найден.',404);
+      const targetBlk=trainerBlocks[idx];
+      if(isHeadCaller){
+        const targetUser=users.find(u=>u.id===targetBlk.userId);
+        if(!targetUser||targetUser.managerId!==authUser.id)throw fail('Руководитель отдела может управлять блоками только своих сотрудников.',403);
+        if(targetBlk.createdBy!==authUser.id&&targetBlk.authorId!==authUser.id)throw fail('Руководитель отдела не может удалять персональные блоки бизнес-тренера ДПК.',403);
+      }
       const removed=trainerBlocks.splice(idx,1)[0];
       await saveTrainerBlocks();
       await logEvent({action:'trainer.block.delete',actor:authUser,target:removed.userLogin,details:{blockId:removed.id,layoutId:removed.layoutId}});
@@ -5220,7 +5257,7 @@ async function pick(id,silent){
     }
     renderCards();
     if(!$('#layouts-view').hidden)renderLayouts();
-    else showScript(0);
+    else if(!silent||!$('.workspace').hidden)showScript(0);
     if(!silent)toast('Скрипт: '+l.name);
   }catch(e){toast(e.message)}
 }
@@ -8757,7 +8794,7 @@ async function loadOwnerData(){
     const canSessions=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('sessions.manage');
     const canAudit=currentUser.role==='OWNER'||currentUser.role==='HEAD'||perms.includes('audit.view');
     const canDeptScripts=currentUser.role==='OWNER'||currentUser.role==='HEAD'||currentUser.role==='ADMIN';
-    const canTrainer=currentUser.role==='TRAINER'||currentUser.role==='OWNER'||currentUser.role==='ADMIN'||perms.includes('scripts.trainer-blocks');
+    const canTrainer=currentUser.role==='TRAINER'||currentUser.role==='HEAD'||currentUser.role==='OWNER'||currentUser.role==='ADMIN'||perms.includes('scripts.trainer-blocks');
     const tasks=[];
     if(canUsers)tasks.push(api('/api/users').then(uRes=>{
       usersList=uRes.users||[];
@@ -9038,6 +9075,7 @@ function renderDepartmentScriptsSection(){
                     </td>`;
                   }).join('')}
                   <td style="text-align:right;white-space:nowrap">
+                    <button type="button" data-head-open-trainer-user="${E(emp.id)}" style="min-height:28px;padding:0 10px;font-size:11px;border-radius:7px;background:rgba(124,58,237,0.12);color:#6d28d9;border:1px solid rgba(124,58,237,0.3);font-weight:700" title="Добавить персональный совет или блок для этого сотрудника">+ 💡 Совет</button>
                     <button type="button" data-emp-row-all="${E(emp.id)}" style="min-height:28px;padding:0 10px;font-size:11px;border-radius:7px">Все</button>
                     <button type="button" data-emp-row-none="${E(emp.id)}" style="min-height:28px;padding:0 10px;font-size:11px;border-radius:7px">Снять</button>
                   </td>
@@ -9052,10 +9090,13 @@ function renderDepartmentScriptsSection(){
 }
 
 function renderTrainerWorkspaceSection(){
-  const filteredManagers=trainerHeadFilter==='all'
-    ?trainerManagersList
-    :trainerManagersList.filter(m=>m.managerId===trainerHeadFilter);
-  const selectedMgr=trainerManagersList.find(m=>m.id===trainerSelectedUserId)||filteredManagers[0]||null;
+  const isHead=currentUser?.role==='HEAD';
+  const filteredManagers=isHead
+    ?trainerManagersList.filter(m=>m.managerId===currentUser.id)
+    :(trainerHeadFilter==='all'
+      ?trainerManagersList
+      :trainerManagersList.filter(m=>m.managerId===trainerHeadFilter));
+  const selectedMgr=filteredManagers.find(m=>m.id===trainerSelectedUserId)||filteredManagers[0]||null;
   if(selectedMgr&&selectedMgr.id!==trainerSelectedUserId){
     trainerSelectedUserId=selectedMgr.id;
   }
@@ -9067,7 +9108,7 @@ function renderTrainerWorkspaceSection(){
 
   const typeLabels={
     line:'🎓 Доп. реплика для менеджера',
-    tip:'🎓 Совет бизнес-тренера',
+    tip:'💡 Персональный совет',
     objection:'🎓 Отработка возражения'
   };
 
@@ -9075,14 +9116,17 @@ function renderTrainerWorkspaceSection(){
     <div class="owner-card-head">
       <div>
         <h2 style="display:flex;align-items:center;gap:10px">
-          <span>🎓 Кабинет бизнес-тренера ДПК · Персональные блоки</span>
-          <span class="role-pill trainer">Только добавление своих блоков</span>
+          <span>${isHead?'💡 Персональные советы и блоки для сотрудников отдела':'🎓 Кабинет бизнес-тренера ДПК · Персональные блоки'}</span>
+          <span class="role-pill trainer">${isHead?'Советы руководителя отдела':'Бизнес-тренер ДПК'}</span>
         </h2>
-        <p>Выберите менеджера обзвона (под руководителем отдела) и скрипт. Оригинальный макет скрипта защищён от изменений — вы добавляете <b>персональные реплики, советы и возражения</b>, которые видит только выбранный сотрудник. При обновлении оригинала ваши блоки автоматически сохраняются на своих местах.</p>
+        <p>${isHead
+          ?'Выберите сотрудника вашего отдела и скрипт, чтобы добавить ему <b>персональный совет, подсказку или дополнительную реплику</b>. Блоки бизнес-тренера ДПК защищены от удаления руководителем, а свои советы вы можете свободно редактировать и удалять.'
+          :'Выберите менеджера обзвона (под руководителем отдела) и скрипт. Вы можете добавлять <b>персональные реплики, советы и возражения</b>, которые видит только выбранный сотрудник, а также создавать общие скрипты во вкладке «Макеты».'}</p>
       </div>
       <button type="button" data-owner-act="refresh">↻ Обновить</button>
     </div>
 
+    ${isHead?'':`
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-size:12px;font-weight:700;color:var(--muted)">Фильтр по руководителю отдела:</span>
       <button type="button" class="emp-filter-btn ${trainerHeadFilter==='all'?'active':''}" data-trainer-head-filter="all">Все менеджеры под руководителями (${trainerManagersList.length})</button>
@@ -9091,6 +9135,7 @@ function renderTrainerWorkspaceSection(){
         return `<button type="button" class="emp-filter-btn ${trainerHeadFilter===h.id?'active':''}" data-trainer-head-filter="${E(h.id)}">${h.role==='OWNER'?'★ ':''}${E(h.displayName||h.login)} (${cnt})</button>`;
       }).join('')}
     </div>
+    `}
 
     <div class="trainer-workspace-layout">
       <aside class="trainer-managers-list">
@@ -9147,7 +9192,9 @@ function renderTrainerWorkspaceSection(){
                 const endBlocks=stBlocks.filter(b=>b.type!=='objection'&&(b.afterLineIndex===null||b.afterLineIndex===undefined||b.afterLineIndex>=(st.lines||[]).length));
                 const obBlocks=stBlocks.filter(b=>b.type==='objection');
 
-                const renderBlockCard=b=>`<div class="trainer-block-card">
+                const renderBlockCard=b=>{
+                  const canModifyThisBlock=!isHead||(b.createdBy===currentUser?.id||b.authorId===currentUser?.id);
+                  return `<div class="trainer-block-card">
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                       <span class="role-pill trainer">${E(typeLabels[b.type]||'🎓 Блок тренера')}</span>
@@ -9155,13 +9202,16 @@ function renderTrainerWorkspaceSection(){
                       ${b.relocated?`<span class="trainer-relocated-badge">⚠ Место блока изменилось — проверьте привязку</span>`:''}
                     </div>
                     <div style="display:flex;gap:6px">
-                      <button type="button" data-trainer-edit-block="${E(b.id)}" style="min-height:28px;padding:0 10px;font-size:11.5px;border-radius:7px">✎ Изменить</button>
-                      <button type="button" class="danger-text" data-trainer-del-block="${E(b.id)}" style="min-height:28px;padding:0 10px;font-size:11.5px;border-radius:7px">🗑 Удалить</button>
+                      ${canModifyThisBlock?`
+                        <button type="button" data-trainer-edit-block="${E(b.id)}" style="min-height:28px;padding:0 10px;font-size:11.5px;border-radius:7px">✎ Изменить</button>
+                        <button type="button" class="danger-text" data-trainer-del-block="${E(b.id)}" style="min-height:28px;padding:0 10px;font-size:11.5px;border-radius:7px">🗑 Удалить</button>
+                      `:`<span style="font-size:11px;color:var(--muted);padding:2px 8px">🔒 Блок бизнес-тренера</span>`}
                     </div>
                   </div>
                   <div style="font-size:13.5px;line-height:1.5;white-space:pre-wrap;color:var(--ink)">${E(b.text)}</div>
                   <div style="margin-top:6px;font-size:11px;color:var(--muted)">Автор: ${E(b.createdByLogin||'Бизнес-тренер ДПК')} · Обновлено: ${fmtTime(b.updatedAt||b.createdAt)}</div>
                 </div>`;
+                };
 
                 return `<div style="border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--surface)">
                   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)">
@@ -9220,7 +9270,8 @@ function openTrainerBlockModal(opts={}){
   const stages=selectedLayout.stages||[];
   const curStageId=editBlock?.stageId||opts.stageId||stages[0]?.id||'';
   const curStage=stages.find(s=>s.id===curStageId)||stages[0];
-  const curType=editBlock?.type||opts.type||'line';
+  const defaultType=currentUser?.role==='HEAD'?'tip':'line';
+  const curType=editBlock?.type||opts.type||defaultType;
   const curAfter=(editBlock!==null&&editBlock!==undefined)
     ?(editBlock.afterLineIndex===null||editBlock.afterLineIndex===undefined?'end':String(editBlock.afterLineIndex))
     :(opts.afterLine!==undefined?String(opts.afterLine):'end');
@@ -9584,7 +9635,7 @@ function renderOwnerView(){
   const canViewSessions=isOwner||isHead||perms.includes('sessions.manage');
   const canViewAudit=isOwner||isHead||perms.includes('audit.view');
   const canDeptScripts=isOwner||isHead||currentUser.role==='ADMIN';
-  const canTrainer=isTrainer||isOwner||currentUser.role==='ADMIN'||perms.includes('scripts.trainer-blocks');
+  const canTrainer=isTrainer||isHead||isOwner||currentUser.role==='ADMIN'||perms.includes('scripts.trainer-blocks');
   if(ownerTab==='users'&&!canViewUsers)ownerTab=canTrainer?'trainer':'design';
   if(ownerTab==='sessions'&&!canViewSessions)ownerTab=canTrainer?'trainer':'design';
   if(ownerTab==='audit'&&!canViewAudit)ownerTab=canTrainer?'trainer':'design';
@@ -9594,7 +9645,7 @@ function renderOwnerView(){
   if(canTrainer&&isTrainer)navItems.push(['trainer',`🎓 Бизнес-тренер ДПК · Персональные блоки (${trainerManagersList.length})`]);
   if(canViewUsers)navItems.push(['users',`👥 ${isHead&&!perms.includes('users.manage')?'Мой отдел (сотрудники)':'Сотрудники компании'} (${usersList.length})`]);
   if(canDeptScripts)navItems.push(['dept-scripts',`📋 Скрипты отдела ${deptScriptsIds.length?'('+deptScriptsIds.length+')':''}`]);
-  if(canTrainer&&!isTrainer)navItems.push(['trainer',`🎓 Бизнес-тренер ДПК (${trainerManagersList.length})`]);
+  if(canTrainer&&!isTrainer)navItems.push(['trainer',isHead?`💡 Советы и блоки сотрудникам (${trainerManagersList.length})`:`🎓 Бизнес-тренер ДПК (${trainerManagersList.length})`]);
   if(canViewSessions)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
   if(canViewAudit)navItems.push(['audit',`📋 Журнал действий`]);
   navItems.push(['design',`🎨 Персональный дизайн`]);
@@ -9809,7 +9860,7 @@ function openUserModal(editUser=null){
       if(r==='HEAD'&&(cb.value==='layouts.delete'||cb.value==='users.manage')){
         cb.checked=false;
         cb.disabled=true;
-      }else if(r==='TRAINER'&&(cb.value==='layouts.delete'||cb.value==='layouts.manage'||cb.value==='users.manage'||cb.value==='content.edit')){
+      }else if(r==='TRAINER'&&(cb.value==='layouts.delete'||cb.value==='users.manage')){
         cb.checked=false;
         cb.disabled=true;
       }else{
@@ -10082,6 +10133,20 @@ document.addEventListener('click',async e=>{
   if(trainerHeadBtn){
     trainerHeadFilter=trainerHeadBtn.dataset.trainerHeadFilter;
     renderOwnerView();
+    return;
+  }
+
+  const headOpenTrainerBtn=e.target.closest('[data-head-open-trainer-user]');
+  if(headOpenTrainerBtn){
+    trainerSelectedUserId=headOpenTrainerBtn.dataset.headOpenTrainerUser;
+    const mgr=trainerManagersList.find(m=>m.id===trainerSelectedUserId);
+    if(mgr&&Array.isArray(mgr.effectiveScriptIds)&&mgr.effectiveScriptIds.length&&!mgr.effectiveScriptIds.includes(trainerSelectedLayoutId)){
+      trainerSelectedLayoutId=mgr.effectiveScriptIds[0];
+    }
+    ownerTab='trainer';
+    await loadTrainerBlocksForCurrent();
+    renderOwnerView();
+    openTrainerBlockModal({type:'tip',afterLine:'end'});
     return;
   }
 
