@@ -1700,7 +1700,7 @@ function createAppServer(options = {}) {
             headDisplayName: targetHead?.displayName || targetHead?.login || null,
             scriptIds,
             employees: deptEmployees,
-            layouts: allLayouts.map(l => ({ id: l.id, name: l.name, savedAt: l.savedAt, stagesCount: l.data?.stages?.length || 0 }))
+            layouts: allLayouts.map(l => ({ id: l.id, name: l.name, channel: l.channel || '', variant: l.variant || '', savedAt: l.savedAt, stagesCount: l.data?.stages?.length || 0 }))
           });
         }
 
@@ -1966,12 +1966,36 @@ function createAppServer(options = {}) {
           });
           return sendJson(res, 200, { ok: true });
         }
+        if (method === 'PATCH' && pathname.endsWith('/meta')) {
+          const metaId = pathname.split('/')[3] || null;
+          const target = (appData.layouts || []).find(l => l.id === metaId);
+          if (!target) return sendJson(res, 404, { error: 'Макет не найден.' });
+          const body = await readBody(req);
+          if (body.channel !== undefined) target.channel = String(body.channel || '').trim().slice(0, 60);
+          if (body.variant !== undefined) target.variant = String(body.variant || '').trim().slice(0, 60);
+          if (body.name !== undefined && String(body.name || '').trim()) {
+            target.name = String(body.name).trim().slice(0, 120);
+          }
+          store.saveAppData();
+          store.logEvent({
+            action: 'layouts.meta.update',
+            actor: auth.user,
+            target: target.name,
+            ip,
+            userAgent,
+            details: { layoutId: target.id, channel: target.channel || '', variant: target.variant || '' }
+          });
+          return sendJson(res, 200, { layout: target });
+        }
         if (method === 'POST' || method === 'PUT') {
           const body = await readBody(req);
           const cleanedLayoutData = stripTrainerArtifactsFromData(body.data || {});
+          const existing = id ? (appData.layouts || []).find(l => l.id === id) : null;
           const layout = {
             id: id || ('l' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex')),
             name: String(body.name || 'Без названия').slice(0, 120),
+            channel: body.channel !== undefined ? String(body.channel || '').trim().slice(0, 60) : (existing?.channel || ''),
+            variant: body.variant !== undefined ? String(body.variant || '').trim().slice(0, 60) : (existing?.variant || ''),
             data: { ...(cleanedLayoutData || {}), gifts: [] },
             savedAt: Date.now()
           };
@@ -2599,6 +2623,8 @@ function createAppServer(options = {}) {
             layouts: allLayouts.map(l => ({
               id: l.id,
               name: l.name,
+              channel: l.channel || '',
+              variant: l.variant || '',
               savedAt: l.savedAt,
               stages: (l.data?.stages || []).map(s => ({
                 id: s.id,

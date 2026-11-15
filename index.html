@@ -4982,7 +4982,7 @@ async function api_local_vault(rawPath,options={}){
         headDisplayName:targetHead?.displayName||targetHead?.login||null,
         scriptIds,
         employees:deptEmployees,
-        layouts:allLayouts.map(l=>({id:l.id,name:l.name,savedAt:l.savedAt,stagesCount:l.data?.stages?.length||0}))
+        layouts:allLayouts.map(l=>({id:l.id,name:l.name,channel:l.channel||'',variant:l.variant||'',savedAt:l.savedAt,stagesCount:l.data?.stages?.length||0}))
       };
     }
     if(method==='PUT'){
@@ -5108,9 +5108,21 @@ async function api_local_vault(rawPath,options={}){
       await logEvent({action:'layouts.delete',actor:authUser,target:id});
       return {ok:true};
     }
+    if(method==='PATCH'&&pathname.endsWith('/meta')){
+      const metaId=pathname.split('/')[3]||null;
+      const target=list.find(l=>l.id===metaId);
+      if(!target)throw fail('Макет не найден.',404);
+      if(body.channel!==undefined)target.channel=String(body.channel||'').trim().slice(0,60);
+      if(body.variant!==undefined)target.variant=String(body.variant||'').trim().slice(0,60);
+      if(body.name!==undefined&&String(body.name||'').trim())target.name=String(body.name).trim().slice(0,120);
+      await VaultDB.set('layouts',list);
+      await logEvent({action:'layouts.meta.update',actor:authUser,target:target.name});
+      return {layout:target};
+    }
     if(method==='POST'||method==='PUT'){
       const cleanedData=stripTrainerArtifactsFromData(body.data||{});
-      const layout={id:id||('l'+Date.now().toString(36)+VaultCrypto.randomHex(3)),name:String(body.name||'Без названия').slice(0,120),data:{...cleanedData,gifts:[]},savedAt:Date.now()};
+      const existing=id?list.find(l=>l.id===id):null;
+      const layout={id:id||('l'+Date.now().toString(36)+VaultCrypto.randomHex(3)),name:String(body.name||'Без названия').slice(0,120),channel:body.channel!==undefined?String(body.channel||'').trim().slice(0,60):(existing?.channel||''),variant:body.variant!==undefined?String(body.variant||'').trim().slice(0,60):(existing?.variant||''),data:{...cleanedData,gifts:[]},savedAt:Date.now()};
       if(list.some(l=>l.id===layout.id))list=list.map(l=>l.id===layout.id?layout:l);
       else list=[layout,...list].slice(0,50);
       await VaultDB.set('layouts',list);
@@ -5164,6 +5176,8 @@ async function api_local_vault(rawPath,options={}){
       layouts:allLayouts.map(l=>({
         id:l.id,
         name:l.name,
+        channel:l.channel||'',
+        variant:l.variant||'',
         savedAt:l.savedAt,
         stages:(l.data?.stages||[]).map(st=>({
           id:st.id,
@@ -5362,6 +5376,52 @@ async function publishCurrent(snapshot=data){
   try{const result=await api('/api/content',{method:'PUT',body:JSON.stringify({data:snapshot})});data.updatedAt=result.updatedAt;data.schemaVersion=4;try{localStorage.setItem(KEY,JSON.stringify({...data,gifts:[]}));$('#status').textContent='Рабочая версия сохранена';}catch{$('#status').textContent='Сохранено на сайте';}return result;}finally{isPublishing=false;}
 }
 function dateLabel(timestamp){return new Intl.DateTimeFormat('ru-RU',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Moscow'}).format(new Date(timestamp));}
+const SCRIPT_CHANNEL_PRESETS=['А1','Д1','СС25','СКД','Карточка','Договор','Прайм'];
+const SCRIPT_VARIANT_PRESETS=['с КШ','без КШ','Доп. вариант'];
+function renderGroupedLayoutOptions(layouts,selectedId='',includeMetaSuffix=false){
+  const list=Array.isArray(layouts)?layouts:[];
+  const hasAnyGroup=list.some(l=>String(l?.channel||'').trim());
+  if(!hasAnyGroup){
+    return list.map(l=>`<option value="${escapeHTML(l.id)}" ${l.id===selectedId?'selected':''}>${escapeHTML(l.name)}${includeMetaSuffix&&l.variant?` (${escapeHTML(l.variant)})`:''}</option>`).join('');
+  }
+  const groups=new Map();
+  const ungrouped=[];
+  for(const l of list){
+    const ch=String(l?.channel||'').trim();
+    if(!ch){ungrouped.push(l);continue;}
+    if(!groups.has(ch))groups.set(ch,[]);
+    groups.get(ch).push(l);
+  }
+  const sortByVariant=(a,b)=>{
+    const va=String(a?.variant||'').trim(),vb=String(b?.variant||'').trim();
+    if(va!==vb){if(!va)return 1;if(!vb)return -1;return va.localeCompare(vb,'ru');}
+    return String(a?.name||'').localeCompare(String(b?.name||''),'ru');
+  };
+  let html='';
+  for(const [ch,items] of groups.entries()){
+    const sorted=[...items].sort(sortByVariant);
+    html+=`<optgroup label="📁 ${escapeHTML(ch)}">${sorted.map(l=>{
+      const v=String(l?.variant||'').trim();
+      const label=v?`[${v}] ${l.name}`:l.name;
+      return `<option value="${escapeHTML(l.id)}" ${l.id===selectedId?'selected':''}>${escapeHTML(label)}</option>`;
+    }).join('')}</optgroup>`;
+  }
+  if(ungrouped.length){
+    html+=`<optgroup label="📂 Без группы">${ungrouped.map(l=>`<option value="${escapeHTML(l.id)}" ${l.id===selectedId?'selected':''}>${escapeHTML(l.name)}</option>`).join('')}</optgroup>`;
+  }
+  return html;
+}
+async function saveLayoutMeta(id,patch){
+  const res=await api('/api/layouts/'+id+'/meta',{method:'PATCH',body:JSON.stringify(patch)});
+  const upd=res.layout;
+  if(upd){
+    savedLayouts=savedLayouts.map(s=>s.id===upd.id?{...s,channel:upd.channel||'',variant:upd.variant||'',name:upd.name||s.name}:s);
+    if(typeof allLayoutsList!=='undefined')allLayoutsList=allLayoutsList.map(s=>s.id===upd.id?{...s,channel:upd.channel||'',variant:upd.variant||'',name:upd.name||s.name}:s);
+    if(typeof trainerLayoutsList!=='undefined')trainerLayoutsList=trainerLayoutsList.map(s=>s.id===upd.id?{...s,channel:upd.channel||'',variant:upd.variant||'',name:upd.name||s.name}:s);
+    dispatchEvent(new Event('layouts-changed'));
+  }
+  return upd;
+}
 async function saveNamedLayout(name,snapshot=data,id=null){const result=await api('/api/layouts'+(id?'/'+id:''),{method:id?'PUT':'POST',body:JSON.stringify({name,data:clone(snapshot)})});savedLayouts=savedLayouts.filter(s=>s.id!==result.layout.id);savedLayouts.unshift(result.layout);dispatchEvent(new Event('layouts-changed'));return result.layout;}
 async function resizeGift(file){
   if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Выберите фотографию JPG, PNG или WebP.');
@@ -5683,7 +5743,7 @@ async function load(applyCurrent=false){
     cur=list[0]?.id||'prime-ksh';
     localStorage.setItem(CH,cur);
   }
-  sel.innerHTML=list.map(l=>`<option value="${escapeHTML(l.id)}">${escapeHTML(l.name)}</option>`).join('');
+  sel.innerHTML=renderGroupedLayoutOptions(list,cur);
   sel.value=cur;
   if(applyCurrent&&cur&&list.some(l=>l.id===cur))await pick(cur,true);
 }
@@ -6525,10 +6585,40 @@ function giftsTab(){
   const count=d.gifts.filter(g=>!qNorm||[g.title,g.condition,g.script].join(' ').toLocaleLowerCase('ru').includes(qNorm)).length;
   return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">БАЗА ПОДАРКОВ</div><h2>Общая база для всех скриптов</h2><p class="v4-sub">${d.gifts.length} из 60. Фото, условие и текст реплики хранятся здесь один раз и подставляются в любые макеты.</p><p class="v4-hint" id="gift-saved">Изменения сохраняются автоматически и сразу действуют во всех скриптах.</p></div><div class="v4-stage-tools">${fromStageFlag&&s?`<button data-v4="back-to-stage">← Вернуться к блоку «${E(s.title)}»</button>`:''}<button class="primary" data-v4="giftbulk">Загрузить фото (сразу несколько)</button><button data-v4="giftadd" ${d.gifts.length>=60?'disabled':''}>+ Подарок</button></div></div><div class="v4-db-bar"><input type="search" data-v4-dbsearch placeholder="🔍 Фильтр по базе подарков (название, условие, текст описания)…" value="${E(dbQuery)}" autocomplete="off"><span id="v4-db-count">Показано: ${count} из ${d.gifts.length}</span></div><input type="file" id="v4-bulk" data-v4-file="bulk" accept="image/jpeg,image/png,image/webp" multiple hidden><div class="v4-gift-grid" id="v4-gift-grid">${renderGiftDbCards()}</div></section>`;
 }
+let savedChannelFilter='all';
 function savedTab(){
   const all=savedLayouts||[],mine=all.filter(l=>!/^Перед изменением/.test(l.name)),bk=all.filter(l=>/^Перед изменением/.test(l.name));
-  const row=(l,i=-1,n=0)=>`<div class="v4-srow ${l.id===editorLayoutId?'on':''}"${i>=0?` draggable="true" data-lid="${l.id}"`:''}><div class="v4-sleft">${i>=0?`<span class="v4-ord"><span class="v4-grip" title="Перетащите, чтобы изменить порядок">⠿</span><b>${i+1}</b></span>`:''}<div class="v4-sname"><strong>${E(l.name)}</strong><small>${dateLabel(l.savedAt)}${l.id===editorLayoutId?' · открыт сейчас':''}</small></div></div><div class="v4-sact">${i>=0?`<button data-v4="lmove" data-id="${l.id}" data-d="top" title="В начало списка" ${i===0?'disabled':''}>⤒</button><button data-v4="lmove" data-id="${l.id}" data-d="-1" title="Выше" ${i===0?'disabled':''}>↑</button><button data-v4="lmove" data-id="${l.id}" data-d="1" title="Ниже" ${i===n-1?'disabled':''}>↓</button>`:''}<button data-action="edit-layout" data-id="${l.id}">Открыть</button>${canDeleteContent()?(`<button data-action="delete-layout" data-id="${l.id}">Удалить</button>`):''}</div></div>`;
-  return `<section class="v4-card v4-pad"><h2 style="margin:0 0 6px">Мои макеты</h2><p class="v4-sub" style="margin:0 0 14px">Порядок здесь такой же, как в списке «Выбор скрипта» вверху. Перетащите строку за ⠿ или нажмите ↑ ↓ ⤒.</p><div class="v4-newbar" id="new-layout-bar"><input id="new-layout-name" maxlength="100" placeholder="Название нового макета, например: Холодный обзвон" aria-label="Название нового макета"><button data-new-layout="blank">+ Пустой</button><button class="primary" data-new-layout="copy">+ Копия текущего</button></div>${mine.map((l,i)=>row(l,i,mine.length)).join('')||'<p class="v4-empty">Сохранённых макетов пока нет.</p>'}${bk.length?`<details style="margin-top:14px"><summary>Автокопии перед изменениями (${bk.length})</summary>${bk.map(row).join('')}</details>`:''}</section>`;
+  const usedChannels=[...new Set(mine.map(l=>String(l.channel||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const allChannels=[...new Set([...SCRIPT_CHANNEL_PRESETS,...usedChannels])];
+  const usedVariants=[...new Set(mine.map(l=>String(l.variant||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const allVariants=[...new Set([...SCRIPT_VARIANT_PRESETS,...usedVariants])];
+  const filteredMine=savedChannelFilter==='all'?mine:(savedChannelFilter==='__none__'?mine.filter(l=>!String(l.channel||'').trim()):mine.filter(l=>String(l.channel||'').trim()===savedChannelFilter));
+  const row=(l,i=-1,n=0)=>{
+    const ch=String(l.channel||'').trim(),vr=String(l.variant||'').trim();
+    return `<div class="v4-srow ${l.id===editorLayoutId?'on':''}"${i>=0?` draggable="true" data-lid="${l.id}"`:''} style="flex-wrap:wrap;gap:10px">
+      <div class="v4-sleft" style="min-width:220px;flex:1">${i>=0?`<span class="v4-ord"><span class="v4-grip" title="Перетащите, чтобы изменить порядок">⠿</span><b>${i+1}</b></span>`:''}<div class="v4-sname"><strong>${E(l.name)}</strong><small>${dateLabel(l.savedAt)}${l.id===editorLayoutId?' · открыт сейчас':''}${ch?` · 📁 ${E(ch)}`:''}${vr?` · 🏷 ${E(vr)}`:''}</small></div></div>
+      ${i>=0?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <input type="text" list="v4-channel-presets" data-v4-layout-channel="${E(l.id)}" value="${E(ch)}" placeholder="Канал (А1, Д1, СКД…)" title="Канал / группа скрипта" style="width:150px;height:32px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:12px;font-weight:600">
+        <input type="text" list="v4-variant-presets" data-v4-layout-variant="${E(l.id)}" value="${E(vr)}" placeholder="Вариант (с КШ, без КШ…)" title="Вариант / подгруппа (с КШ, без КШ и т.д.)" style="width:165px;height:32px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:12px;font-weight:600">
+      </div>`:''}
+      <div class="v4-sact">${i>=0?`<button data-v4="lmove" data-id="${l.id}" data-d="top" title="В начало списка" ${i===0?'disabled':''}>⤒</button><button data-v4="lmove" data-id="${l.id}" data-d="-1" title="Выше" ${i===0?'disabled':''}>↑</button><button data-v4="lmove" data-id="${l.id}" data-d="1" title="Ниже" ${i===n-1?'disabled':''}>↓</button>`:''}<button data-action="edit-layout" data-id="${l.id}">Открыть</button>${canDeleteContent()?(`<button data-action="delete-layout" data-id="${l.id}">Удалить</button>`):''}</div>
+    </div>`;
+  };
+  return `<section class="v4-card v4-pad">
+    <datalist id="v4-channel-presets">${allChannels.map(c=>`<option value="${E(c)}">`).join('')}</datalist>
+    <datalist id="v4-variant-presets">${allVariants.map(v=>`<option value="${E(v)}">`).join('')}</datalist>
+    <h2 style="margin:0 0 6px">Мои макеты</h2>
+    <p class="v4-sub" style="margin:0 0 12px">Настройте <b>Канал</b> (например: А1, Д1, СС25, СКД, Карточка, Договор) и <b>Вариант</b> (например: с КШ, без КШ) — тогда во всех списках и у руководителей скрипты будут сгруппированы.</p>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <span style="font-size:12px;font-weight:700;color:var(--muted)">Фильтр по каналу:</span>
+      <button type="button" data-v4-saved-filter="all" style="min-height:28px;padding:0 10px;font-size:12px;border-radius:8px;${savedChannelFilter==='all'?'background:var(--teal);color:#fff;border-color:var(--teal)':''}">Все (${mine.length})</button>
+      ${usedChannels.map(c=>`<button type="button" data-v4-saved-filter="${E(c)}" style="min-height:28px;padding:0 10px;font-size:12px;border-radius:8px;${savedChannelFilter===c?'background:var(--teal);color:#fff;border-color:var(--teal)':''}">📁 ${E(c)} (${mine.filter(l=>String(l.channel||'').trim()===c).length})</button>`).join('')}
+      <button type="button" data-v4-saved-filter="__none__" style="min-height:28px;padding:0 10px;font-size:12px;border-radius:8px;${savedChannelFilter==='__none__'?'background:var(--teal);color:#fff;border-color:var(--teal)':''}">Без группы (${mine.filter(l=>!String(l.channel||'').trim()).length})</button>
+    </div>
+    <div class="v4-newbar" id="new-layout-bar"><input id="new-layout-name" maxlength="100" placeholder="Название нового макета, например: Холодный обзвон" aria-label="Название нового макета"><button data-new-layout="blank">+ Пустой</button><button class="primary" data-new-layout="copy">+ Копия текущего</button></div>
+    ${filteredMine.map((l,i)=>row(l,mine.indexOf(l),mine.length)).join('')||'<p class="v4-empty">Макеты в этой группе не найдены.</p>'}
+    ${bk.length?`<details style="margin-top:14px"><summary>Автокопии перед изменениями (${bk.length})</summary>${bk.map(l=>row(l)).join('')}</details>`:''}
+  </section>`;
 }
 const visLayouts=()=>savedLayouts.filter(l=>!/^Перед изменением/.test(l.name)).map(l=>l.id);
 async function reorderLayouts(ids){try{await api('/api/layouts-order',{method:'PUT',body:JSON.stringify({ids})});savedLayouts=(await api('/api/layouts')).layouts;renderLayouts();toast('Порядок скриптов сохранён.');}catch(e){toast(e.message)}}
@@ -6724,6 +6814,16 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
       }
     });
   }
+  else if(f.matches('[data-v4-layout-channel]')){
+    const lid=f.dataset.v4LayoutChannel;
+    try{await saveLayoutMeta(lid,{channel:f.value.trim()});renderLayouts();toast('✓ Канал скрипта сохранён');}catch(err){toast(err.message);}
+    return;
+  }
+  else if(f.matches('[data-v4-layout-variant]')){
+    const lid=f.dataset.v4LayoutVariant;
+    try{await saveLayoutMeta(lid,{variant:f.value.trim()});renderLayouts();toast('✓ Вариант скрипта сохранён');}catch(err){toast(err.message);}
+    return;
+  }
   else if(f.matches('[data-v4-tbl-header]')){
     const idx=+f.dataset.v4TblHeader;
     mutateDraft(()=>{
@@ -6818,6 +6918,8 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
     catch(err){toast(err.message)}}
 });
 lv.addEventListener('click',async e=>{
+  const sf=e.target.closest('[data-v4-saved-filter]');
+  if(sf){savedChannelFilter=sf.dataset.v4SavedFilter||'all';renderLayouts();return;}
   const b=e.target.closest('[data-v4]');if(!b)return;const a=b.dataset.v4,id=b.dataset.id,i=Number(b.dataset.i),s=st(),M=mutateDraft;
   const ensureLineGifts=()=>{s.lineGifts=s.lineGifts||s.lines.map(()=>'')};
   const lineOp=fn=>M(()=>{ensureLineGifts();fn();edit=null;pickerOpen=null});
@@ -9764,6 +9866,20 @@ function renderUsersSection(){
   </div>`;
 }
 
+let deptFilterChannel='all',deptFilterVariant='all';
+function matchesDeptScriptFilter(l){
+  const ch=String(l?.channel||'').trim();
+  const vr=String(l?.variant||'').trim();
+  if(deptFilterChannel!=='all'){
+    if(deptFilterChannel==='__none__'){if(ch)return false;}
+    else if(ch!==deptFilterChannel)return false;
+  }
+  if(deptFilterVariant!=='all'){
+    if(deptFilterVariant==='__none__'){if(vr)return false;}
+    else if(vr!==deptFilterVariant)return false;
+  }
+  return true;
+}
 function renderDepartmentScriptsSection(){
   const isOwner=currentUser?.role==='OWNER';
   const isHead=currentUser?.role==='HEAD';
@@ -9776,6 +9892,63 @@ function renderDepartmentScriptsSection(){
   const activeHead=availHeads.find(h=>h.id===selectedDeptHeadId) || currentUser;
   const cleanLayouts=allLayoutsList.filter(l=>l&&l.name&&!/^Перед изменением/i.test(l.name));
   const poolLayouts=deptScriptsIds.length>0?cleanLayouts.filter(l=>deptScriptsIds.includes(l.id)):cleanLayouts;
+
+  const usedChannels=[...new Set(cleanLayouts.map(l=>String(l.channel||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const usedVariants=[...new Set(cleanLayouts.map(l=>String(l.variant||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const hasGroups=usedChannels.length>0||usedVariants.length>0;
+
+  const renderCard=l=>{
+    const isChecked=deptScriptsIds.includes(l.id);
+    const ch=String(l.channel||'').trim(),vr=String(l.variant||'').trim();
+    const vis=matchesDeptScriptFilter(l);
+    return `<label class="dept-script-item ${isChecked?'selected':''}" data-dept-ch="${E(ch)}" data-dept-vr="${E(vr)}" ${vis?'':'hidden'}>
+      <input type="checkbox" name="dept_script" value="${E(l.id)}" ${isChecked?'checked':''}>
+      <div class="dept-script-info">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+          ${ch?`<span style="font-size:10.5px;font-weight:800;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--teal) 14%,var(--surface));color:var(--teal);border:1px solid color-mix(in srgb,var(--teal) 30%,transparent)">📁 ${E(ch)}</span>`:''}
+          ${vr?`<span style="font-size:10.5px;font-weight:750;padding:1px 7px;border-radius:999px;background:var(--surface);color:var(--muted);border:1px solid var(--line)">${E(vr)}</span>`:''}
+        </div>
+        <strong>${E(l.name)}</strong>
+        <small>Блоков: ${l.stagesCount||'—'} · Сохранён: ${dateLabel(l.savedAt)}</small>
+        <span class="status-pill ${isChecked?'active':''}" style="margin-top:6px">${isChecked?'✓ В отделе':'Не выбран (скрыт, если есть выбор)'}</span>
+      </div>
+    </label>`;
+  };
+
+  let gridInnerHtml='';
+  if(!cleanLayouts.length){
+    gridInnerHtml='<p class="v4-empty" style="grid-column:1/-1">Макеты не найдены. Сохраните хотя бы один макет.</p>';
+  }else if(!usedChannels.length){
+    gridInnerHtml=cleanLayouts.map(renderCard).join('');
+  }else{
+    const groups=new Map();
+    const ungrouped=[];
+    for(const l of cleanLayouts){
+      const ch=String(l.channel||'').trim();
+      if(!ch){ungrouped.push(l);continue;}
+      if(!groups.has(ch))groups.set(ch,[]);
+      groups.get(ch).push(l);
+    }
+    const renderGroupBlock=(title,groupKey,items)=>{
+      const visibleItems=items.filter(matchesDeptScriptFilter);
+      return `<div class="dept-script-group" data-dept-group="${E(groupKey)}" style="grid-column:1/-1;margin-top:6px" ${visibleItems.length?'':'hidden'}>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 10px;margin-bottom:8px;border-radius:10px;background:var(--surface-alt);border:1px solid var(--line)">
+          <strong style="font-size:13px;color:var(--ink)">${E(title)} <span style="color:var(--muted);font-weight:600">(${items.length})</span></strong>
+          <div style="display:flex;gap:6px">
+            <button type="button" data-dept-group-act="all" data-dept-group-key="${E(groupKey)}" style="min-height:26px;padding:0 10px;font-size:11.5px;border-radius:7px">✓ Выбрать группу</button>
+            <button type="button" data-dept-group-act="none" data-dept-group-key="${E(groupKey)}" style="min-height:26px;padding:0 10px;font-size:11.5px;border-radius:7px">✕ Снять</button>
+          </div>
+        </div>
+        <div class="dept-script-grid">${items.map(renderCard).join('')}</div>
+      </div>`;
+    };
+    for(const [ch,items] of groups.entries()){
+      gridInnerHtml+=renderGroupBlock('📁 '+ch,ch,items);
+    }
+    if(ungrouped.length){
+      gridInnerHtml+=renderGroupBlock('📂 Без группы','__none__',ungrouped);
+    }
+  }
 
   return `<div class="owner-card">
     <div class="owner-card-head">
@@ -9801,18 +9974,29 @@ function renderDepartmentScriptsSection(){
       <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent-ink)">Отдел: ${isOwner?'★ Мелентьев Е.А. (Владелец)':E(currentUser.displayName+' (@'+currentUser.login+')')}</div>
     `}
 
+    ${hasGroups?`
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;margin-bottom:14px;border-radius:10px;background:var(--surface-alt);border:1px solid var(--line)">
+        <span style="font-size:12px;font-weight:800;color:var(--muted)">Фильтр скриптов:</span>
+        ${usedChannels.length?`
+          <select id="dept-filter-channel" style="height:32px;border-radius:8px;padding:0 10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;font-weight:700">
+            <option value="all" ${deptFilterChannel==='all'?'selected':''}>Все каналы (${cleanLayouts.length})</option>
+            ${usedChannels.map(c=>`<option value="${E(c)}" ${deptFilterChannel===c?'selected':''}>📁 ${E(c)} (${cleanLayouts.filter(l=>String(l.channel||'').trim()===c).length})</option>`).join('')}
+            <option value="__none__" ${deptFilterChannel==='__none__'?'selected':''}>Без группы</option>
+          </select>
+        `:''}
+        ${usedVariants.length?`
+          <select id="dept-filter-variant" style="height:32px;border-radius:8px;padding:0 10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px;font-weight:700">
+            <option value="all" ${deptFilterVariant==='all'?'selected':''}>Все варианты</option>
+            ${usedVariants.map(v=>`<option value="${E(v)}" ${deptFilterVariant===v?'selected':''}>🏷 ${E(v)}</option>`).join('')}
+            <option value="__none__" ${deptFilterVariant==='__none__'?'selected':''}>Без варианта</option>
+          </select>
+        `:''}
+        ${(deptFilterChannel!=='all'||deptFilterVariant!=='all')?`<button type="button" id="dept-filter-reset" style="min-height:30px;padding:0 10px;font-size:12px;border-radius:8px">Сбросить фильтр</button>`:''}
+      </div>
+    `:''}
+
     <div class="dept-script-grid" id="dept-script-grid">
-      ${cleanLayouts.map(l=>{
-        const isChecked=deptScriptsIds.includes(l.id);
-        return `<label class="dept-script-item ${isChecked?'selected':''}">
-          <input type="checkbox" name="dept_script" value="${E(l.id)}" ${isChecked?'checked':''}>
-          <div class="dept-script-info">
-            <strong>${E(l.name)}</strong>
-            <small>Блоков: ${l.stagesCount||'—'} · Сохранён: ${dateLabel(l.savedAt)}</small>
-            <span class="status-pill ${isChecked?'active':''}" style="margin-top:6px">${isChecked?'✓ В отделе':'Не выбран (скрыт, если есть выбор)'}</span>
-          </div>
-        </label>`;
-      }).join('')||'<p class="v4-empty" style="grid-column:1/-1">Макеты не найдены. Сохраните хотя бы один макет.</p>'}
+      ${gridInnerHtml}
     </div>
 
     <div style="margin-top:26px;padding-top:20px;border-top:1px solid var(--line)">
@@ -9842,7 +10026,11 @@ function renderDepartmentScriptsSection(){
             <thead>
               <tr>
                 <th>Сотрудник отдела (${deptEmployeesList.length})</th>
-                ${poolLayouts.map(l=>`<th style="text-align:center;min-width:130px">${E(l.name)}</th>`).join('')}
+                ${poolLayouts.map(l=>{
+                  const ch=String(l.channel||'').trim(),vr=String(l.variant||'').trim();
+                  const vis=matchesDeptScriptFilter(l);
+                  return `<th style="text-align:center;min-width:130px" ${vis?'':'hidden'}>${(ch||vr)?`<div style="font-size:10px;font-weight:750;color:var(--teal);margin-bottom:2px">${E([ch,vr].filter(Boolean).join(' · '))}</div>`:''}${E(l.name)}</th>`;
+                }).join('')}
                 <th style="text-align:right;min-width:150px">Быстрый выбор</th>
               </tr>
             </thead>
@@ -9859,7 +10047,8 @@ function renderDepartmentScriptsSection(){
                   ${poolLayouts.map(l=>{
                     const isEmpChecked=!hasCustomAccess||emp.scriptAccess.includes(l.id);
                     const hasTrainer=Array.isArray(emp.trainerBlockLayouts)&&emp.trainerBlockLayouts.includes(l.id);
-                    return `<td style="text-align:center">
+                    const vis=matchesDeptScriptFilter(l);
+                    return `<td style="text-align:center" ${vis?'':'hidden'}>
                       <label style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:4px 8px;border-radius:8px">
                         <input type="checkbox" data-emp-script-cb="1" data-user-id="${E(emp.id)}" data-layout-id="${E(l.id)}" ${isEmpChecked?'checked':''} style="width:18px;height:18px;accent-color:var(--teal);cursor:pointer">
                         ${hasTrainer?`<span class="role-pill trainer" style="font-size:10px;padding:1px 6px" title="У сотрудника есть персональные блоки от бизнес-тренера ДПК в этом скрипте">🎓 Тренер</span>`:''}
@@ -9960,10 +10149,7 @@ function renderTrainerWorkspaceSection(){
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <label for="trainer-layout-select" style="font-size:12px;font-weight:700">Скрипт:</label>
               <select id="trainer-layout-select" style="min-width:240px;height:38px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:700">
-                ${trainerLayoutsList.map(l=>{
-                  const isAllowed=mgrEffectiveIds.includes(l.id);
-                  return `<option value="${E(l.id)}" ${selectedLayout&&selectedLayout.id===l.id?'selected':''}>${E(l.name)}${isAllowed?'':' (скрыт руководителем)'}</option>`;
-                }).join('')}
+                ${renderGroupedLayoutOptions(trainerLayoutsList.map(l=>({...l,name:l.name+(mgrEffectiveIds.includes(l.id)?'':' (скрыт руководителем)')})),selectedLayout?.id||'')}
               </select>
               <button type="button" class="primary" data-trainer-add-block="1" data-stage-id="${E(selectedLayout?.stages?.[0]?.id||'')}" data-after-line="end">+ Добавить персональный блок</button>
             </div>
@@ -11007,6 +11193,37 @@ document.addEventListener('click',async e=>{
     return;
   }
 
+  if(e.target.id==='dept-filter-reset'){
+    deptScriptsIds=[...document.querySelectorAll('#dept-script-grid input[type=checkbox]:checked')].map(cb=>cb.value);
+    deptFilterChannel='all';
+    deptFilterVariant='all';
+    renderOwnerView();
+    return;
+  }
+
+  const deptGrpBtn=e.target.closest('[data-dept-group-act]');
+  if(deptGrpBtn){
+    const act=deptGrpBtn.dataset.deptGroupAct;
+    const grpEl=deptGrpBtn.closest('.dept-script-group');
+    if(grpEl){
+      const checked=(act==='all');
+      grpEl.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+        if(cb.closest('.dept-script-item')?.hidden)return;
+        cb.checked=checked;
+        const item=cb.closest('.dept-script-item');
+        if(item){
+          item.classList.toggle('selected',checked);
+          const pill=item.querySelector('.status-pill');
+          if(pill){
+            pill.classList.toggle('active',checked);
+            pill.textContent=checked?'✓ В отделе':'Не выбран (скрыт, если есть выбор)';
+          }
+        }
+      });
+    }
+    return;
+  }
+
   if(e.target.id==='dept-scripts-select-all'){
     document.querySelectorAll('#dept-script-grid input[type=checkbox]').forEach(cb=>{
       cb.checked=true;
@@ -11330,6 +11547,18 @@ document.addEventListener('change', async (e) => {
     } catch (err) {
       toast(err.message || 'Ошибка сохранения доступа сотрудника');
     }
+    return;
+  }
+  if (e.target.id === 'dept-filter-channel') {
+    deptScriptsIds = [...document.querySelectorAll('#dept-script-grid input[type=checkbox]:checked')].map(cb => cb.value);
+    deptFilterChannel = e.target.value || 'all';
+    renderOwnerView();
+    return;
+  }
+  if (e.target.id === 'dept-filter-variant') {
+    deptScriptsIds = [...document.querySelectorAll('#dept-script-grid input[type=checkbox]:checked')].map(cb => cb.value);
+    deptFilterVariant = e.target.value || 'all';
+    renderOwnerView();
     return;
   }
   if (e.target.id === 'dept-scripts-head-select') {
