@@ -2028,7 +2028,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 }
 .emp-script-matrix th,
 .emp-script-matrix td {
-  padding: 10px 12px;
+  padding: 5px 8px;
   border-bottom: 1px solid var(--line);
   border-right: 1px solid var(--line);
   text-align: center;
@@ -2041,7 +2041,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   left: 0;
   background: var(--surface);
   z-index: 2;
-  min-width: 210px;
+  min-width: 175px;
 }
 .emp-script-matrix thead th {
   background: var(--surface-alt);
@@ -10040,25 +10040,23 @@ function renderDepartmentScriptsSection(){
                 const checkedCount=poolLayouts.filter(l=>!hasCustomAccess||emp.scriptAccess.includes(l.id)).length;
                 return `<tr data-emp-matrix-row="${E(emp.id)}">
                   <td>
-                    <div style="font-weight:750;color:var(--ink)">${E(emp.displayName||emp.login)}</div>
-                    <div style="font-size:11px;color:var(--muted)">@${E(emp.login)} ${emp.blocked?'· <span style="color:#dc2626;font-weight:700">Заблокирован</span>':''}</div>
-                    ${checkedCount===0?`<div style="margin-top:4px;font-size:11px;font-weight:700;color:#b45309">⚠ Нет выбранных скриптов</div>`:`<div style="margin-top:3px;font-size:11px;color:var(--muted)">Доступно: <b>${checkedCount}</b> из ${poolLayouts.length}</div>`}
+                    <div style="font-weight:750;color:var(--ink);white-space:nowrap" title="@${E(emp.login)} · Доступно: ${checkedCount} из ${poolLayouts.length}">${E(emp.displayName||emp.login)}</div>
                   </td>
                   ${poolLayouts.map(l=>{
                     const isEmpChecked=!hasCustomAccess||emp.scriptAccess.includes(l.id);
                     const hasTrainer=Array.isArray(emp.trainerBlockLayouts)&&emp.trainerBlockLayouts.includes(l.id);
                     const vis=matchesDeptScriptFilter(l);
                     return `<td style="text-align:center" ${vis?'':'hidden'}>
-                      <label style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:4px 8px;border-radius:8px">
-                        <input type="checkbox" data-emp-script-cb="1" data-user-id="${E(emp.id)}" data-layout-id="${E(l.id)}" ${isEmpChecked?'checked':''} style="width:18px;height:18px;accent-color:var(--teal);cursor:pointer">
-                        ${hasTrainer?`<span class="role-pill trainer" style="font-size:10px;padding:1px 6px" title="У сотрудника есть персональные блоки от бизнес-тренера ДПК в этом скрипте">🎓 Тренер</span>`:''}
+                      <label style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:2px 4px;border-radius:6px">
+                        <input type="checkbox" data-emp-script-cb="1" data-user-id="${E(emp.id)}" data-layout-id="${E(l.id)}" ${isEmpChecked?'checked':''} style="width:16px;height:16px;accent-color:var(--teal);cursor:pointer">
+                        ${hasTrainer?`<span class="role-pill trainer" style="font-size:9.5px;padding:0px 5px" title="У сотрудника есть персональные блоки от бизнес-тренера ДПК в этом скрипте">🎓 Тренер</span>`:''}
                       </label>
                     </td>`;
                   }).join('')}
                   <td style="text-align:right;white-space:nowrap">
-                    <button type="button" data-head-open-trainer-user="${E(emp.id)}" style="min-height:28px;padding:0 10px;font-size:11px;border-radius:7px;background:rgba(124,58,237,0.12);color:#6d28d9;border:1px solid rgba(124,58,237,0.3);font-weight:700" title="Добавить персональный совет или блок для этого сотрудника">+ 💡 Совет</button>
-                    <button type="button" data-emp-row-all="${E(emp.id)}" style="min-height:28px;padding:0 10px;font-size:11px;border-radius:7px">Все</button>
-                    <button type="button" data-emp-row-none="${E(emp.id)}" style="min-height:28px;padding:0 10px;font-size:11px;border-radius:7px">Снять</button>
+                    <button type="button" data-head-open-trainer-user="${E(emp.id)}" style="min-height:24px;padding:0 8px;font-size:11px;border-radius:6px;background:rgba(124,58,237,0.12);color:#6d28d9;border:1px solid rgba(124,58,237,0.3);font-weight:700" title="Добавить персональный совет или блок для этого сотрудника">+ 💡 Совет</button>
+                    <button type="button" data-emp-row-all="${E(emp.id)}" style="min-height:24px;padding:0 8px;font-size:11px;border-radius:6px">Все</button>
+                    <button type="button" data-emp-row-none="${E(emp.id)}" style="min-height:24px;padding:0 8px;font-size:11px;border-radius:6px">Снять</button>
                   </td>
                 </tr>`;
               }).join('')}
