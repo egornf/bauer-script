@@ -2128,7 +2128,7 @@ function createAppServer(options = {}) {
         const isHead = auth.user.role === 'HEAD';
         const isTrainer = auth.user.role === 'TRAINER';
         const canManageAllUsers = isOwner || (!isHead && !isTrainer && hasPermission(auth.user, 'users.manage'));
-        const canManageOwnTeam = isHead && hasPermission(auth.user, 'users.manage');
+        const canManageOwnTeam = isHead;
 
         // Per-employee script access checkboxes: PUT /api/users/:id/script-access
         if (method === 'PUT' && targetId && subAction === 'script-access') {
@@ -2231,7 +2231,16 @@ function createAppServer(options = {}) {
               departmentScripts: Array.isArray(u.departmentScripts) ? u.departmentScripts : [],
               departmentScriptsCount: Array.isArray(u.departmentScripts) ? u.departmentScripts.length : 0
             }));
-          return sendJson(res, 200, { users: list, heads, availablePermissions: ALL_PERMISSIONS, roleDefaults: DEFAULT_ROLE_PERMISSIONS });
+          const unassignedOperators = allUsers
+            .filter(u => u.role === 'OPERATOR' && !u.managerId)
+            .map(u => ({
+              id: u.id,
+              login: u.login,
+              displayName: u.displayName || u.login,
+              role: u.role,
+              blocked: Boolean(u.blocked)
+            }));
+          return sendJson(res, 200, { users: list, heads, unassignedOperators, availablePermissions: ALL_PERMISSIONS, roleDefaults: DEFAULT_ROLE_PERMISSIONS });
         }
 
         if (!canManageAllUsers && !canManageOwnTeam) {
@@ -2346,8 +2355,9 @@ function createAppServer(options = {}) {
           }
 
           if (isHead) {
-            if (targetUser.role !== 'OPERATOR' || targetUser.managerId !== auth.user.id) {
-              return sendJson(res, 403, { error: 'Руководитель отдела может управлять только своими Менеджерами обзвона.' });
+            const isAttachingUnassigned = targetUser.role === 'OPERATOR' && !targetUser.managerId && body.managerId === auth.user.id;
+            if (targetUser.role !== 'OPERATOR' || (targetUser.managerId !== auth.user.id && !isAttachingUnassigned)) {
+              return sendJson(res, 403, { error: 'Руководитель отдела может управлять только своими Менеджерами обзвона или прикреплять свободных сотрудников к своему отделу.' });
             }
             if (body.role !== undefined && body.role !== 'OPERATOR') {
               return sendJson(res, 403, { error: 'Руководитель отдела не может менять роль сотрудника.' });
@@ -2397,15 +2407,23 @@ function createAppServer(options = {}) {
             }
           }
 
-          if (!isHead && body.managerId !== undefined && targetUser.role === 'OPERATOR') {
-            let nextMgr = null;
-            if (body.managerId) {
-              const mgr = store.findUserById(String(body.managerId));
-              if (mgr && (mgr.role === 'HEAD' || mgr.role === 'OWNER')) nextMgr = mgr.id;
-            }
-            if ((targetUser.managerId || null) !== nextMgr) {
-              changes.managerId = { from: targetUser.managerId || null, to: nextMgr };
-              targetUser.managerId = nextMgr;
+          if (body.managerId !== undefined && targetUser.role === 'OPERATOR') {
+            if (isHead) {
+              const nextMgr = body.managerId === auth.user.id ? auth.user.id : null;
+              if ((targetUser.managerId || null) !== nextMgr) {
+                changes.managerId = { from: targetUser.managerId || null, to: nextMgr };
+                targetUser.managerId = nextMgr;
+              }
+            } else {
+              let nextMgr = null;
+              if (body.managerId) {
+                const mgr = store.findUserById(String(body.managerId));
+                if (mgr && (mgr.role === 'HEAD' || mgr.role === 'OWNER')) nextMgr = mgr.id;
+              }
+              if ((targetUser.managerId || null) !== nextMgr) {
+                changes.managerId = { from: targetUser.managerId || null, to: nextMgr };
+                targetUser.managerId = nextMgr;
+              }
             }
           }
 

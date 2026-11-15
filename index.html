@@ -2110,6 +2110,119 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   color: #b45309;
   border: 1px solid rgba(245, 158, 11, 0.45);
 }
+.script-table-block {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  margin: 8px 0;
+}
+.script-table-title {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--teal);
+  margin-bottom: 8px;
+}
+.script-table-scroll {
+  overflow-x: auto;
+}
+.script-inline-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: var(--surface);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.script-inline-table th,
+.script-inline-table td {
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.script-inline-table th {
+  background: color-mix(in srgb, var(--teal) 14%, var(--surface-alt));
+  color: var(--ink);
+  font-weight: 800;
+}
+.v4-table-gen-bar,
+.v4-img-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+}
+.v4-tbl-cell-input {
+  width: 100%;
+  min-width: 90px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.v4-tbl-cell-input:focus {
+  outline: 2px solid var(--teal);
+  border-color: var(--teal);
+}
+.script-image-block {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  margin: 8px 0;
+  text-align: center;
+}
+.script-image-block img {
+  height: auto;
+  max-width: 100%;
+  border-radius: 10px;
+  display: block;
+  margin: 0 auto;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+}
+.script-image-caption {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.v4-img-size-btn {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.v4-img-size-btn.active {
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal);
+}
+.v4-img-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: var(--teal);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  cursor: pointer;
+}
 </style>
 
 </head>
@@ -2335,7 +2448,7 @@ function upgrade(value){
     const rawKinds=(stage.lines||[]).map((l,n)=>
       !stage.guestGiftVersion&&stage.showGifts&&/термос/iu.test(l)?'gift-plus-one':
       !stage.guestGiftVersion&&stage.showGifts&&/вафельниц/iu.test(l)?'gift-plus-two':
-      ['speech','gift','gift-plus-one','gift-plus-two','address','schedule','trainer-line','trainer-tip'].includes(stage.lineKinds?.[n])?stage.lineKinds[n]:
+      ['speech','gift','gift-plus-one','gift-plus-two','address','schedule','table','image','trainer-line','trainer-tip'].includes(stage.lineKinds?.[n])?stage.lineKinds[n]:
       (/ЭТО СПЕЦИАЛЬНЫЙ ПОДАРОК-СЮРПРИЗ|^Руководство подготовило для вас особенный подарок/iu.test(l.trim())?'gift':'speech')
     );
     const lines=[],lineKinds=[],lineFormats=[],lineGifts=[],lineTrainerMeta=[];
@@ -2376,6 +2489,8 @@ function upgrade(value){
         lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(gid);lineTrainerMeta.push(null);
       }else if(k==='schedule'){
         lines.push('');lineKinds.push('schedule');lineFormats.push(cleanFormat(stage.lineFormats?.[n],0));lineGifts.push('');lineTrainerMeta.push(null);
+      }else if(k==='table'||k==='image'){
+        lines.push(l);lineKinds.push(k);lineFormats.push(fmt);lineGifts.push('');lineTrainerMeta.push(null);
       }else if(k==='trainer-line'||k==='trainer-tip'){
         lines.push(l);lineKinds.push(k);lineFormats.push(fmt);lineGifts.push('');lineTrainerMeta.push(stage.lineTrainerMeta?.[n]||null);
       }else{
@@ -2410,7 +2525,7 @@ function normalize(value,now=Date.now()){
   const text=(s,max=16000)=>typeof s==='string'&&s.length<=max;
   const stageIds=new Set();
   for(const s of value.stages){
-    if(!s||!text(s.title,200)||!s.title.trim()||!text(s.tip,3000)||!Array.isArray(s.lines)||s.lines.length>100||!s.lines.every(l=>text(l))||!Array.isArray(s.objectionIds)||!s.objectionIds.every(id=>Number.isInteger(id)&&id>=0&&id<value.objections.length))return null;
+    if(!s||!text(s.title,200)||!s.title.trim()||!text(s.tip,3000)||!Array.isArray(s.lines)||s.lines.length>100||!s.lines.every((l,idx)=>text(l,s.lineKinds?.[idx]==='image'?750000:32000))||!Array.isArray(s.objectionIds)||!s.objectionIds.every(id=>Number.isInteger(id)&&id>=0&&id<value.objections.length))return null;
     if(value.schemaVersion>=4){if(!text(s.id,80)||!/^[A-Za-z0-9_-]{1,80}$/.test(s.id)||stageIds.has(s.id))return null;stageIds.add(s.id);}
     if(s.giftPhoto!==undefined&&(!text(s.giftPhoto,700000)||(s.giftPhoto&&!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(s.giftPhoto))))return null;
     for(const key of ['hidden','showGifts','showSms','showTip','scheduleRemoved'])if(s[key]!==undefined&&typeof s[key]!=='boolean')return null;
@@ -2560,15 +2675,11 @@ function currentSelectedCityName(){
 const BAUER_WEEK_DAYS = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс', 'Пн'];
 const BAUER_CALENDAR_YEAR = 2026;
 
-// Встроенный календарь недель 2026 года (неделя презентаций строится по дням: Вт, Ср, Чт, Пт, Сб, Вс, Пн; 44-я неделя 2026 = 03.11.2026 – 09.11.2026)
-function getBauerWeekStartTuesday(weekNum = 44, year = BAUER_CALENDAR_YEAR) {
-  const wn = Math.max(1, Math.min(53, Number(weekNum) || 44));
-  // В 2026 году 1-й вторник года — 6 января 2026 (44-я неделя начинается во вторник 3 ноября 2026)
-  const jan1 = new Date(year, 0, 1);
-  const jan1Day = jan1.getDay(); // 0=Вс..4=Чт
-  const firstMondayOffset = jan1Day === 1 ? 0 : (jan1Day === 0 ? 1 : 8 - jan1Day);
-  const firstTuesdayDate = 1 + firstMondayOffset + 1; // 6 января 2026
-  const d = new Date(year, 0, firstTuesdayDate + (wn - 1) * 7);
+// Встроенный календарь недель 2026 года (46-я текущая неделя 2026 = 09.11.2026 – 15.11.2026)
+function getBauerWeekStartTuesday(weekNum = 46, year = BAUER_CALENDAR_YEAR) {
+  const wn = Math.max(1, Math.min(53, Number(weekNum) || 46));
+  // 1-я неделя 2026 года: 29.12.2025 – 04.01.2026, поэтому 46-я неделя — это 09.11.2026 – 15.11.2026
+  const d = new Date(year, 0, -2 + (wn - 1) * 7);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const dt = String(d.getDate()).padStart(2, '0');
@@ -2586,33 +2697,34 @@ function getBauerWeekNumberFromDate(dateInput) {
     const now = new Date();
     d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
-  // Для 2026 года считаем номер недели по циклу Вт–Пн (где Неделя 44 = 03.11.2026 – 09.11.2026)
-  const refTue = new Date(BAUER_CALENDAR_YEAR, 0, 6); // Вт 06.01.2026 — старт 1-й недели
+  // Для 2026 года считаем номер недели так, что 09.11.2026 – 15.11.2026 = 46-я неделя
+  const refMon = new Date(BAUER_CALENDAR_YEAR, 0, -2); // Пн 29.12.2025 — старт 1-й недели 2026 года
   const targetIn2026 = new Date(BAUER_CALENDAR_YEAR, d.getMonth(), d.getDate());
-  const diffDays = Math.floor((targetIn2026.getTime() - refTue.getTime()) / 86400000);
+  const diffDays = Math.floor((targetIn2026.getTime() - refMon.getTime()) / 86400000);
   if (diffDays < 0) return 1;
   const wn = Math.floor(diffDays / 7) + 1;
-  return Math.max(1, Math.min(52, wn));
+  return Math.max(1, Math.min(53, wn));
 }
 
 function getCurrentBauerWeekNumber() {
   const wn = getBauerWeekNumberFromDate(new Date());
-  return wn || 44;
+  return wn || 46;
 }
 
-function getBauerWeekDaysCalendar(weekNum = 44, year = BAUER_CALENDAR_YEAR) {
-  const tueIso = getBauerWeekStartTuesday(weekNum, year);
-  const [y, m, dt] = tueIso.split('-').map(Number);
+function getBauerWeekDaysCalendar(weekNum = 46, year = BAUER_CALENDAR_YEAR) {
+  const monIso = getBauerWeekStartTuesday(weekNum, year);
+  const [y, m, dt] = monIso.split('-').map(Number);
+  const calendarDaysOrder = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
   const fullNames = {
+    'Пн': 'Понедельник',
     'Вт': 'Вторник',
     'Ср': 'Среда',
     'Чт': 'Четверг',
     'Пт': 'Пятница',
     'Сб': 'Суббота',
-    'Вс': 'Воскресенье',
-    'Пн': 'Понедельник'
+    'Вс': 'Воскресенье'
   };
-  return BAUER_WEEK_DAYS.map((dayCode, idx) => {
+  return calendarDaysOrder.map((dayCode, idx) => {
     const d = new Date(y, m - 1, dt + idx);
     const dy = d.getFullYear();
     const dm = String(d.getMonth() + 1).padStart(2, '0');
@@ -2623,7 +2735,8 @@ function getBauerWeekDaysCalendar(weekNum = 44, year = BAUER_CALENDAR_YEAR) {
       fullDay: fullNames[dayCode] || dayCode,
       iso,
       shortRu: formatRuShortDate(iso),
-      dmy: `${dd}.${dm}.${dy}`
+      dmy: `${dd}.${dm}.${dy}`,
+      dmShort: `${dd}.${dm}`
     };
   });
 }
@@ -2696,24 +2809,24 @@ let cityScheduleActiveHall = 0;
 let scheduleViewingWeek = null;
 
 function getScheduleViewingWeek() {
-  if (scheduleViewingWeek && scheduleViewingWeek >= 1 && scheduleViewingWeek <= 52) {
+  if (scheduleViewingWeek && scheduleViewingWeek >= 1 && scheduleViewingWeek <= 53) {
     return scheduleViewingWeek;
   }
   try {
-    const sw = Number(localStorage.getItem('bauer-schedule-viewing-week'));
-    if (sw >= 1 && sw <= 52) {
+    const sw = Number(localStorage.getItem('bauer-schedule-viewing-week-v46'));
+    if (sw >= 1 && sw <= 53) {
       scheduleViewingWeek = sw;
       return sw;
     }
   } catch {}
-  return activePresentationPlan?.weekNumber || getCurrentBauerWeekNumber();
+  return getCurrentBauerWeekNumber();
 }
 
 function setScheduleViewingWeek(wn) {
-  const num = Math.max(1, Math.min(52, Number(wn) || getCurrentBauerWeekNumber()));
+  const num = Math.max(1, Math.min(53, Number(wn) || getCurrentBauerWeekNumber()));
   scheduleViewingWeek = num;
   try {
-    localStorage.setItem('bauer-schedule-viewing-week', String(num));
+    localStorage.setItem('bauer-schedule-viewing-week-v46', String(num));
   } catch {}
 }
 
@@ -2759,16 +2872,15 @@ function getAllAvailableCities() {
 
 function renderScheduleWeekOptions(selectedWeek) {
   const currentWeek = getCurrentBauerWeekNumber();
-  const months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
   const opts = [];
-  for (let w = 1; w <= 52; w++) {
-    const startTue = getBauerWeekStartTuesday(w, BAUER_CALENDAR_YEAR);
-    const parts = startTue.split('-').map(Number);
-    const endMon = new Date(parts[0], parts[1] - 1, parts[2] + 6);
-    const startStr = `${parts[2]} ${months[parts[1] - 1]}`;
-    const endStr = `${endMon.getDate()} ${months[endMon.getMonth()]}`;
+  for (let w = 1; w <= 53; w++) {
+    const startMon = getBauerWeekStartTuesday(w, BAUER_CALENDAR_YEAR);
+    const parts = startMon.split('-').map(Number);
+    const endSun = new Date(parts[0], parts[1] - 1, parts[2] + 6);
+    const startStr = `${parts[2]}.${String(parts[1]).padStart(2, '0')}`;
+    const endStr = `${endSun.getDate()}.${String(endSun.getMonth() + 1).padStart(2, '0')}`;
     const isCurr = w === currentWeek;
-    opts.push(`<option value="${w}" ${w === selectedWeek ? 'selected' : ''}>${w}-я нед. (${startStr} – ${endStr})${isCurr ? ' ★ ТЕКУЩАЯ' : ''}</option>`);
+    opts.push(`<option value="${w}" ${w === selectedWeek ? 'selected' : ''}>${w}-я нед. (${startStr}–${endStr})${isCurr ? ' ★ ТЕКУЩАЯ' : ''}</option>`);
   }
   return opts.join('');
 }
@@ -3014,8 +3126,8 @@ function isTimeStage(stage) {
 
 function getCalculatedDateForDay(weekStart, dayName) {
   const shortDay = typeof dayName === 'string' ? dayName.trim().slice(0, 2) : '';
-  const idx = BAUER_WEEK_DAYS.indexOf(shortDay);
-  if (idx === -1) return '';
+  const dayOffsets = { 'Пн': 0, 'Вт': 1, 'Ср': 2, 'Чт': 3, 'Пт': 4, 'Сб': 5, 'Вс': 6 };
+  if (!(shortDay in dayOffsets)) return '';
   try {
     let baseIso = weekStart;
     if (!baseIso || !/^\d{4}-\d{2}-\d{2}$/.test(String(baseIso).trim())) {
@@ -3025,12 +3137,11 @@ function getCalculatedDateForDay(weekStart, dayName) {
     const parts = String(baseIso).trim().split('-').map(Number);
     if (parts.length !== 3) return '';
     const d = new Date(parts[0], parts[1] - 1, parts[2]);
-    // Если weekStart был указан как понедельник (день недели = 1), сдвигаем старт презентационной недели на вторник (+1 день),
-    // чтобы цикл Вт -> Ср -> Чт -> Пт -> Сб -> Вс -> Пн всегда строился со вторника по понедельник
-    if (d.getDay() === 1) {
-      d.setDate(d.getDate() + 1);
+    // Если weekStart в старой записи был вторником (день недели = 2), выравниваем на понедельник текущей недели (-1 день)
+    if (d.getDay() === 2) {
+      d.setDate(d.getDate() - 1);
     }
-    d.setDate(d.getDate() + idx);
+    d.setDate(d.getDate() + dayOffsets[shortDay]);
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
@@ -3244,6 +3355,59 @@ function fillVenueHtml(html){
   return html.replace(/\{(город|зал|адрес|ориентиры)\}/giu,(m,k)=>{const x=val[k.toLowerCase()];return x?`<mark class="addr-fill">${escapeHTML(x)}</mark>`:`<mark class="addr-empty">[${k.toLowerCase()}: выберите город и зал вверху]</mark>`;});
 }
 function addressLineHtml(text,fmt,bCss,attrs=''){const v=currentVenue();return `<div class="line line-address"${bCss?` style="${bCss}"`:''}${attrs}><div class="addr-tag">📍 АДРЕС${v?' · '+escapeHTML(v.city+', '+v.hall):' · выберите город и зал вверху'}</div><div>${fillPlanHtml(fillVenueHtml(LayoutModel.renderText(text,fmt)))}</div></div>`;}
+function createDefaultTableJson(rowsCount=3,colsCount=3){
+  const r=Math.max(1,Math.min(30,Number(rowsCount)||3));
+  const c=Math.max(1,Math.min(12,Number(colsCount)||3));
+  const rows=[];
+  for(let i=0;i<r;i++){
+    const row=[];
+    for(let j=0;j<c;j++){
+      row.push(i===0?`Столбец ${j+1}`:`Ячейка ${i}.${j+1}`);
+    }
+    rows.push(row);
+  }
+  return JSON.stringify({title:'',hasHeader:true,rows});
+}
+function parseScriptTableData(rawStr){
+  try{
+    const obj=JSON.parse(rawStr||'{}');
+    if(obj&&Array.isArray(obj.rows)&&obj.rows.length>0){
+      const cols=Math.max(1,Math.min(12,Array.isArray(obj.rows[0])?obj.rows[0].length:3));
+      const rows=obj.rows.slice(0,30).map(r=>{
+        const arr=Array.isArray(r)?r.map(x=>String(x??'')):[];
+        while(arr.length<cols)arr.push('');
+        return arr.slice(0,cols);
+      });
+      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows};
+    }
+  }catch{}
+  return JSON.parse(createDefaultTableJson(3,3));
+}
+function renderScriptTableBlock(rawStr,bCss=''){
+  const tbl=parseScriptTableData(rawStr);
+  const headRow=tbl.hasHeader?tbl.rows[0]:null;
+  const bodyRows=tbl.hasHeader?tbl.rows.slice(1):tbl.rows;
+  return `<div class="line script-table-block"${bCss?` style="${bCss}"`:''}>${tbl.title.trim()?`<div class="script-table-title">📊 ${escapeHTML(tbl.title)}</div>`:''}<div class="script-table-scroll"><table class="script-inline-table">${headRow?`<thead><tr>${headRow.map(cell=>`<th>${fillPlanHtml(fillVenueHtml(escapeHTML(cell)))}</th>`).join('')}</tr></thead>`:''}<tbody>${bodyRows.map(row=>`<tr>${row.map(cell=>`<td>${fillPlanHtml(fillVenueHtml(escapeHTML(cell)))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+}
+function parseScriptImageData(rawStr){
+  try{
+    const obj=JSON.parse(rawStr||'{}');
+    if(obj&&typeof obj==='object'){
+      const size=['small','medium','large','full'].includes(obj.size)?obj.size:'medium';
+      const defaultPct=size==='small'?25:(size==='medium'?50:(size==='large'?75:100));
+      const widthPct=Math.max(15,Math.min(100,Number(obj.widthPct)||defaultPct));
+      return {src:String(obj.src||''),size,widthPct,caption:String(obj.caption||'')};
+    }
+  }catch{}
+  return {src:'',size:'medium',widthPct:50,caption:''};
+}
+function renderScriptImageBlock(rawStr,bCss=''){
+  const img=parseScriptImageData(rawStr);
+  if(!img.src){
+    return `<figure class="line script-image-block"${bCss?` style="${bCss}"`:''}><span class="v4-empty">🖼 Картинка ещё не загружена (добавьте изображение в редакторе макетов)</span></figure>`;
+  }
+  return `<figure class="line script-image-block"${bCss?` style="${bCss}"`:''}><img src="${escapeHTML(img.src)}" alt="${escapeHTML(img.caption||'Изображение')}" style="width:${img.widthPct}%;max-width:100%">${img.caption.trim()?`<figcaption class="script-image-caption">${escapeHTML(img.caption)}</figcaption>`:''}</figure>`;
+}
 function renderStageLines(stage,readonly=false,gifts=data.gifts){
   let html='';
   stage.lines.forEach((line,n)=>{
@@ -3265,6 +3429,8 @@ function renderStageLines(stage,readonly=false,gifts=data.gifts){
     const bCss=LayoutModel.blockCSS(stage.lineFormats?.[n]);
     if(kind==='schedule'){html+=presentationScheduleMarkup(stage,bCss);return;}
     if(kind==='address'){html+=addressLineHtml(line,stage.lineFormats?.[n],bCss);return;}
+    if(kind==='table'){html+=renderScriptTableBlock(line,bCss);return;}
+    if(kind==='image'){html+=renderScriptImageBlock(line,bCss);return;}
     if(kind==='trainer-line'||kind==='trainer-tip'){
       const tMeta=stage.lineTrainerMeta?.[n]||null;
       const badgeLbl=kind==='trainer-tip'?'🎓 Совет бизнес-тренера':'🎓 Доп. реплика от бизнес-тренера';
@@ -4144,16 +4310,18 @@ async function api_local_vault(rawPath,options={}){
   if(pathname==='/api/users'||pathname.startsWith('/api/users/')){
     if(!authUser)throw fail('Требуется авторизация.',401);
     const tid=pathname.split('/')[3]||null;
-    const isFullUserMgr=authUser.role==='OWNER'||hasPerm(authUser,'users.manage');
     const isHead=authUser.role==='HEAD';
+    const isFullUserMgr=authUser.role==='OWNER'||(!isHead&&authUser.role!=='TRAINER'&&hasPerm(authUser,'users.manage'));
     if(method==='GET'&&!tid){
-      if(!isFullUserMgr&&!isHead&&!hasPerm(authUser,'users.view'))throw fail('Недостаточно прав для просмотра пользователей.',403);
+      if(!isFullUserMgr&&!isHead&&authUser.role!=='TRAINER'&&!hasPerm(authUser,'users.view'))throw fail('Недостаточно прав для просмотра пользователей.',403);
       const visible=(isHead&&!isFullUserMgr)
         ?users.filter(u=>u.id===authUser.id||(u.role==='OPERATOR'&&u.managerId===authUser.id))
         :users;
+      const unassignedOperators=users.filter(u=>u.role==='OPERATOR'&&!u.managerId).map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,blocked:Boolean(u.blocked)}));
       return {
         users:visible.map(u=>({...sanitize(u),activeSessionsCount:sessions.filter(s=>s.userId===u.id).length})),
         heads:users.filter(u=>u.role==='HEAD'||u.role==='OWNER').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,isOwner:u.role==='OWNER',departmentScriptsCount:Array.isArray(u.departmentScripts)?u.departmentScripts.length:0})),
+        unassignedOperators,
         availablePermissions:VAULT_PERMISSIONS,
         roleDefaults:VAULT_ROLE_DEFAULTS
       };
@@ -4217,12 +4385,12 @@ async function api_local_vault(rawPath,options={}){
         }
       }
       if(isHead&&!isFullUserMgr){
-        if(tu.role!=='OPERATOR'||tu.managerId!==authUser.id){
-          throw fail('Руководитель отдела может управлять только своими Менеджерами обзвона.',403);
+        const isAttachingFree=tu.role==='OPERATOR'&&!tu.managerId&&body.managerId===authUser.id;
+        if(tu.role!=='OPERATOR'||(tu.managerId!==authUser.id&&!isAttachingFree)){
+          throw fail('Руководитель отдела может управлять только своими Менеджерами обзвона или прикреплять свободных сотрудников к своему отделу.',403);
         }
         if(body.role!==undefined&&body.role!=='OPERATOR')throw fail('Руководитель отдела не может менять роль сотрудника.',403);
         delete body.permissions;
-        delete body.managerId;
       }
       if(body.role==='OWNER'&&tu.role!=='OWNER')throw fail('В системе может быть только один OWNER.',403);
       const changes={};
@@ -4240,8 +4408,11 @@ async function api_local_vault(rawPath,options={}){
         if(prevRole==='HEAD'&&tu.role!=='HEAD')users.forEach(u=>{if(u.managerId===tu.id)u.managerId=null;});
         if(tu.role!=='OPERATOR')tu.managerId=null;
       }
-      if(body.managerId!==undefined&&tu.role==='OPERATOR'&&isFullUserMgr){
-        if(!body.managerId){tu.managerId=null;changes.managerId=null;}
+      if(body.managerId!==undefined&&tu.role==='OPERATOR'&&(isFullUserMgr||isHead)){
+        if(isHead&&!isFullUserMgr){
+          const nextMgr=body.managerId===authUser.id?authUser.id:null;
+          tu.managerId=nextMgr;changes.managerId=nextMgr;
+        }else if(!body.managerId){tu.managerId=null;changes.managerId=null;}
         else{
           const hu=users.find(u=>u.id===body.managerId&&(u.role==='HEAD'||u.role==='OWNER'));
           if(!hu)throw fail('Выбранный руководитель отдела не найден.',400);
@@ -5880,7 +6051,7 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 const lv=document.getElementById('layouts-view'),E=escapeHTML,q=(s)=>lv.querySelector(s);
 let tab='stage',edit=null,obSel=null,sel={s:1e9,e:1e9},start=null,timer=null,del=null;
 let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false;
-const KINDS={speech:'Речь',gift:'🎁 Подарок',address:'📍 Адрес',schedule:'📅 График времени'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
+const KINDS={speech:'Речь',gift:'🎁 Подарок',address:'📍 Адрес',schedule:'📅 График времени',table:'📊 Таблица',image:'🖼 Картинка'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
 const TXT=['auto','#0b7a6e','#c0392b','#d68910','#1f5fbf','#7d3c98'],BG=['#fff3b0','#d5f5e3','#fadbd8','#d6eaf8','#e8daef','none'];
 const BLOCK_BG=[['#e2f3ef','Мятный'],['#daf5e4','Зелёный'],['#fff6de','Жёлтый'],['#fdeee8','Персиковый'],['#e6f0fa','Голубой'],['#f1edff','Лавандовый'],['#ffffff','Белый'],['none','Стандартный']];
 const st=()=>selectedEditorStage(),gid=()=>'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -5905,14 +6076,65 @@ function renderPickerOptions(i,curGiftId,queryStr){
 }
 
 function lineBlock(s,i){
-  const rawKind=s.lineKinds[i]||'speech',isGift=['gift','gift-plus-one','gift-plus-two'].includes(rawKind),kind=isGift?'gift':(rawKind==='address'?'address':(rawKind==='schedule'?'schedule':'speech'));
+  const rawKind=s.lineKinds[i]||'speech',isGift=['gift','gift-plus-one','gift-plus-two'].includes(rawKind),kind=isGift?'gift':(['address','schedule','table','image'].includes(rawKind)?rawKind:'speech');
   const isOp=currentUser&&currentUser.role==='OPERATOR';
-  const on=!isGift&&kind!=='schedule'&&!isOp&&edit&&edit.t==='line'&&edit.i===i;
+  const on=!isGift&&!['schedule','table','image'].includes(kind)&&!isOp&&edit&&edit.t==='line'&&edit.i===i;
   const lineFmt=s.lineFormats?.[i]||LayoutModel.cleanFormat(null,0);
   if(kind==='schedule'){
     const curBg=lineFmt?.style?.blockBg||'';
     const bStyle=LayoutModel.blockCSS(lineFmt);
     return `<div class="v4-line is-schedule"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-tlbl" style="font-weight:700;color:var(--teal)">📅 График презентаций (перемещайте ↑ ↓)</span>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Переместить выше">↑</button><button data-v4="down" data-i="${i}" title="Переместить ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить блок графика">✕</button>`):''}</div>${presentationScheduleMarkup(s,bStyle)}</div>`;
+  }
+  if(kind==='table'){
+    const curBg=lineFmt?.style?.blockBg||'';
+    const bStyle=LayoutModel.blockCSS(lineFmt);
+    const tbl=parseScriptTableData(s.lines[i]);
+    const rCount=tbl.rows.length;
+    const cCount=tbl.rows[0]?.length||3;
+    return `<div class="v4-line is-table"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-tlbl" style="font-weight:700;color:var(--teal)">📊 Генератор таблиц (${rCount}×${cCount})</span>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Переместить выше">↑</button><button data-v4="down" data-i="${i}" title="Переместить ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить таблицу">✕</button>`):''}</div>
+      <div class="v4-table-gen-bar">
+        <label style="display:inline-flex;align-items:center;gap:4px;font-weight:700">Строк: <input type="number" min="1" max="30" value="${rCount}" id="v4-tbl-rows-${i}" style="width:58px;height:30px;padding:0 6px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)"></label>
+        <label style="display:inline-flex;align-items:center;gap:4px;font-weight:700">Столбцов: <input type="number" min="1" max="12" value="${cCount}" id="v4-tbl-cols-${i}" style="width:58px;height:30px;padding:0 6px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)"></label>
+        <button type="button" class="primary" data-v4="tbl-generate" data-i="${i}" style="min-height:30px;padding:0 10px;font-size:12px">Сгенерировать размер</button>
+        <button type="button" data-v4="tbl-add-row" data-i="${i}" style="min-height:30px;padding:0 8px;font-size:12px">+ Строка</button>
+        <button type="button" data-v4="tbl-del-row" data-i="${i}" style="min-height:30px;padding:0 8px;font-size:12px" ${rCount<=1?'disabled':''}>− Строка</button>
+        <button type="button" data-v4="tbl-add-col" data-i="${i}" style="min-height:30px;padding:0 8px;font-size:12px">+ Столбец</button>
+        <button type="button" data-v4="tbl-del-col" data-i="${i}" style="min-height:30px;padding:0 8px;font-size:12px" ${cCount<=1?'disabled':''}>− Столбец</button>
+        <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:700"><input type="checkbox" data-v4-tbl-header="${i}" ${tbl.hasHeader?'checked':''}> Выделить 1-ю строку как шапку</label>
+        <input type="text" data-v4-tbl-title="${i}" placeholder="Заголовок таблицы (необязательно)" value="${E(tbl.title)}" style="flex:1;min-width:190px;height:30px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)">
+      </div>
+      <div class="script-table-block"${bStyle?` style="${bStyle}"`:''}>
+        ${tbl.title.trim()?`<div class="script-table-title">📊 ${E(tbl.title)}</div>`:''}
+        <div class="script-table-scroll">
+          <table class="script-inline-table">
+            <tbody>
+              ${tbl.rows.map((row,rIdx)=>{
+                const isHdr=tbl.hasHeader&&rIdx===0;
+                const tag=isHdr?'th':'td';
+                return `<tr>${row.map((cell,cIdx)=>`<${tag}><input type="text" class="v4-tbl-cell-input" data-v4-tbl-cell="${i},${rIdx},${cIdx}" value="${E(cell)}" placeholder="${isHdr?'Заголовок '+(cIdx+1):'Ячейка'}"></${tag}>`).join('')}</tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  }
+  if(kind==='image'){
+    const curBg=lineFmt?.style?.blockBg||'';
+    const bStyle=LayoutModel.blockCSS(lineFmt);
+    const imgData=parseScriptImageData(s.lines[i]);
+    const sizes=[['small','Маленькая (25%)',25],['medium','Средняя (50%)',50],['large','Большая (75%)',75],['full','На всю ширину (100%)',100]];
+    return `<div class="v4-line is-image"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-tlbl" style="font-weight:700;color:var(--teal)">🖼 Картинка (${imgData.widthPct}%)</span>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Переместить выше">↑</button><button data-v4="down" data-i="${i}" title="Переместить ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить картинку">✕</button>`):''}</div>
+      <div class="v4-img-bar">
+        <label class="v4-img-upload-btn" for="v4-imgfile-${i}">📁 ${imgData.src?'Заменить картинку':'Загрузить картинку'}</label>
+        <input type="file" id="v4-imgfile-${i}" data-v4-imgfile="${i}" accept="image/jpeg,image/png,image/webp" hidden>
+        <span style="font-weight:700;color:var(--muted)">Размер:</span>
+        ${sizes.map(([sz,lbl,pct])=>`<button type="button" class="v4-img-size-btn ${imgData.widthPct===pct?'active':''}" data-v4="img-size" data-i="${i}" data-size="${sz}" data-pct="${pct}">${lbl}</button>`).join('')}
+        <label style="display:inline-flex;align-items:center;gap:6px;font-weight:700">Ширина: <input type="range" min="15" max="100" step="5" value="${imgData.widthPct}" data-v4-img-pct="${i}" style="width:90px"> <span>${imgData.widthPct}%</span></label>
+        <input type="text" data-v4-img-caption="${i}" placeholder="Подпись к картинке (необязательно)" value="${E(imgData.caption)}" style="flex:1;min-width:190px;height:30px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)">
+      </div>
+      ${renderScriptImageBlock(s.lines[i],bStyle)}
+    </div>`;
   }
   if(isGift){
     const curGiftId=s.lineGifts?.[i]||lineGiftId(rawKind)||(rawKind==='gift'?'surprise':'');
@@ -5949,7 +6171,7 @@ function stageTab(s){
   const others=d.objections.map((o,i)=>[o,i]).filter(([,i])=>!s.objectionIds.includes(i));
   return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">ЭТАП ${String(ix+1).padStart(2,'0')} · РЕДАКТИРОВАНИЕ</div><input class="v4-title" data-v4-title maxlength="190" value="${E(s.title)}" aria-label="Название этапа"></div><div class="v4-stage-tools"><button data-v4="mvl" ${ix===0?'disabled':''} title="Сдвинуть влево">←</button><button data-v4="mvr" ${ix===d.stages.length-1?'disabled':''} title="Сдвинуть вправо">→</button><button data-v4="dup">Дублировать</button><button data-v4="hide">${s.hidden?'Показать на сайте':'Скрыть с сайта'}</button>${canDeleteContent()?'<button data-v4="rm">Удалить блок</button>':''}</div></div>
 ${isOperator?'<div class="v4-operator-banner">🎨 <b>Режим оформления для Менеджера обзвона:</b> вы можете настраивать размер шрифта, тему и цветовую заливку блоков. Текст реплик защищён от изменений.</div>':''}
-<div class="v4-body"><div class="v4-script"><div class="pane-label">Реплики оператора</div>${s.lines.map((_,i)=>lineBlock(s,i)).join('')}<div class="v4-add-row"><button data-v4="addline" data-i="${s.lines.length-1}">+ Добавить реплику</button><button class="v4-add-gift-btn" data-v4="addgiftline" data-i="${s.lines.length-1}">+ 🎁 Добавить подарок из базы</button><button class="v4-add-gift-btn" data-v4="addaddrline" data-i="${s.lines.length-1}">+ 📍 Добавить адрес</button><button class="v4-add-gift-btn" data-v4="addschedline" data-i="${s.lines.length-1}">+ 📅 Добавить график времени</button></div>
+<div class="v4-body"><div class="v4-script"><div class="pane-label">Реплики оператора</div>${s.lines.map((_,i)=>lineBlock(s,i)).join('')}<div class="v4-add-row"><button data-v4="addline" data-i="${s.lines.length-1}">+ Добавить реплику</button><button class="v4-add-gift-btn" data-v4="addgiftline" data-i="${s.lines.length-1}">+ 🎁 Добавить подарок из базы</button><button class="v4-add-gift-btn" data-v4="addaddrline" data-i="${s.lines.length-1}">+ 📍 Добавить адрес</button><button class="v4-add-gift-btn" data-v4="addschedline" data-i="${s.lines.length-1}">+ 📅 Добавить график времени</button><button class="v4-add-gift-btn" data-v4="addtableline" data-i="${s.lines.length-1}">+ 📊 Добавить таблицу</button><button class="v4-add-gift-btn" data-v4="addimageline" data-i="${s.lines.length-1}">+ 🖼 Добавить картинку</button></div>
 <div class="v4-tipbox"><label class="v4-switch"><input type="checkbox" data-v4-tipshow ${s.showTip?'checked':''}> Показывать подсказку оператору</label><div class="tip"><strong>ПОДСКАЗКА ОПЕРАТОРУ</strong>${edit&&edit.t==='tip'?editBox(s.tip,s.tipFormat):view('tip',0,s.tip,s.tipFormat)}</div></div></div>
 <aside class="objections-pane v4-obj"><h3>Частые возражения</h3><p class="sub">Нажмите на возражение, чтобы изменить ответ</p><div class="objection-list">${s.objectionIds.map(id=>d.objections[id]?`<button class="objection-button ${obSel===id?'on':''}" data-v4="obsel" data-id="${id}"><span>${E(d.objections[id].title)}</span><span aria-hidden="true">✎</span></button>`:'').join('')||'<p class="empty">Пока нет возражений.</p>'}</div>
 ${ob?`<div class="v4-oed"><label>Возражение клиента</label><input data-v4-ob="title" maxlength="290" value="${E(ob.title)}"><label>Ответ оператора</label><textarea data-v4-ob="text" rows="7">${E(ob.text)}</textarea><label>После ответа вернуть к этапу</label><select data-v4-ob="next"><option value="">Остаться на этом этапе</option>${d.stages.map(x=>`<option value="${x.id}" ${x.id===ob.nextStageId?'selected':''}>${E(x.title)}</option>`).join('')}</select><button data-v4="obunlink">Убрать из этого блока</button></div>`:''}
@@ -6030,9 +6252,55 @@ async function applyNow(){
   }catch(e){toast(e.message)}
 }
 lv.addEventListener('mousedown',e=>{if(e.target.closest('.v4-tools button,.v4-ins button'))e.preventDefault()});
-lv.addEventListener('focusin',e=>{if(!start&&e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift]'))start=historyState()});
-lv.addEventListener('focusout',e=>{if(!start||!e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift]'))return;const p=start;start=null;if(JSON.stringify(p.data)!==JSON.stringify(editorDraft)){pushUndo(p);rememberDraft()}});
+lv.addEventListener('focusin',e=>{if(!start&&e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))start=historyState()});
+lv.addEventListener('focusout',e=>{if(!start||!e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))return;const p=start;start=null;if(JSON.stringify(p.data)!==JSON.stringify(editorDraft)){pushUndo(p);rememberDraft()}});
 lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
+  if(f.matches('[data-v4-tbl-cell]')){
+    const [li,ri,ci]=f.dataset.v4TblCell.split(',').map(Number);
+    const tbl=parseScriptTableData(s.lines[li]);
+    if(tbl.rows[ri]&&tbl.rows[ri][ci]!==undefined){
+      tbl.rows[ri][ci]=f.value;
+      s.lines[li]=JSON.stringify(tbl);
+      later();
+    }
+    return;
+  }
+  if(f.matches('[data-v4-tbl-title]')){
+    const li=+f.dataset.v4TblTitle;
+    const tbl=parseScriptTableData(s.lines[li]);
+    tbl.title=f.value;
+    s.lines[li]=JSON.stringify(tbl);
+    later();
+    return;
+  }
+  if(f.matches('[data-v4-img-caption]')){
+    const li=+f.dataset.v4ImgCaption;
+    const img=parseScriptImageData(s.lines[li]);
+    img.caption=f.value;
+    s.lines[li]=JSON.stringify(img);
+    later();
+    return;
+  }
+  if(f.matches('[data-v4-img-pct]')){
+    const li=+f.dataset.v4ImgPct;
+    const pct=Math.max(15,Math.min(100,Number(f.value)||50));
+    const img=parseScriptImageData(s.lines[li]);
+    img.widthPct=pct;
+    img.size=pct<=30?'small':(pct<=60?'medium':(pct<=85?'large':'full'));
+    s.lines[li]=JSON.stringify(img);
+    const lineEl=f.closest('.v4-line.is-image');
+    if(lineEl){
+      const previewImg=lineEl.querySelector('.script-image-block img');
+      if(previewImg)previewImg.style.width=pct+'%';
+      const pctSpan=f.parentElement?.querySelector('span');
+      if(pctSpan)pctSpan.textContent=pct+'%';
+      const tlbl=lineEl.querySelector('.v4-meta .v4-tlbl');
+      if(tlbl)tlbl.textContent=`🖼 Картинка (${pct}%)`;
+      lineEl.querySelectorAll('.v4-img-size-btn').forEach(btn=>btn.classList.toggle('active',Number(btn.dataset.pct)===pct));
+    }
+    later();
+    return;
+  }
   if(f.matches('[data-v4-picksearch]')){
     pickerQuery=f.value;
     const idx=+f.dataset.v4Picksearch,curGiftId=s.lineGifts?.[idx]||'';
@@ -6072,12 +6340,44 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
         s.scheduleRemoved=false;
         edit=null;
         if(pickerOpen===idx)pickerOpen=null;
+      }else if(val==='table'){
+        s.lineKinds[idx]='table';
+        s.lines[idx]=createDefaultTableJson(3,3);
+        edit=null;
+        if(pickerOpen===idx)pickerOpen=null;
+      }else if(val==='image'){
+        s.lineKinds[idx]='image';
+        s.lines[idx]=JSON.stringify({src:'',size:'medium',widthPct:50,caption:''});
+        edit=null;
+        if(pickerOpen===idx)pickerOpen=null;
       }else{
         s.lineKinds[idx]=val==='address'?'address':'speech';
-        if(!s.lines[idx]?.trim()||(val==='address'&&/^(Введите реплику оператора\.|Новая реплика)$/.test(s.lines[idx].trim())))s.lines[idx]=val==='address'?ADDR_TPL:'Введите реплику оператора.';
+        if(!s.lines[idx]?.trim()||(val==='address'&&/^(Введите реплику оператора\.|Новая реплика)$/.test(s.lines[idx].trim()))||s.lines[idx].startsWith('{'))s.lines[idx]=val==='address'?ADDR_TPL:'Введите реплику оператора.';
         if(pickerOpen===idx)pickerOpen=null;
       }
     });
+  }
+  else if(f.matches('[data-v4-tbl-header]')){
+    const idx=+f.dataset.v4TblHeader;
+    mutateDraft(()=>{
+      const tbl=parseScriptTableData(s.lines[idx]);
+      tbl.hasHeader=f.checked;
+      s.lines[idx]=JSON.stringify(tbl);
+    });
+  }
+  else if(f.matches('[data-v4-imgfile]')){
+    const idx=+f.dataset.v4Imgfile;
+    const files=[...f.files];f.value='';
+    if(!files.length)return;
+    try{
+      const p=await shrink(files[0]);
+      mutateDraft(()=>{
+        const img=parseScriptImageData(s.lines[idx]);
+        img.src=p;
+        s.lines[idx]=JSON.stringify(img);
+      });
+      toast('✓ Картинка добавлена в блок скрипта');
+    }catch(err){toast(err.message)}
   }
   else if(f.matches('[data-v4-blockcolor]')){const idx=+f.dataset.v4Blockcolor,val=f.value;mutateDraft(()=>{s.lineFormats[idx]=LayoutModel.applyFormat(s.lineFormats[idx],(s.lines[idx]||'').length,0,0,{blockBg:val},false)});}
   else if(f.matches('[data-v4-tipshow]'))mutateDraft(()=>{s.showTip=f.checked});
@@ -6115,6 +6415,33 @@ lv.addEventListener('click',async e=>{
     case 'ins':{const ta=q('[data-v4-ta]');if(!ta)return;ta.setRangeText('{'+b.dataset.k+'}',ta.selectionStart,ta.selectionEnd,'end');ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();return}
     case 'addaddrline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,ADDR_TPL);s.lineKinds.splice(j,0,'address');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
     case 'addschedline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'');s.lineKinds.splice(j,0,'schedule');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');s.scheduleRemoved=false;edit=null;pickerOpen=null});return;
+    case 'addtableline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,createDefaultTableJson(3,3));s.lineKinds.splice(j,0,'table');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit=null;pickerOpen=null});return;
+    case 'addimageline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,JSON.stringify({src:'',size:'medium',widthPct:50,caption:''}));s.lineKinds.splice(j,0,'image');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit=null;pickerOpen=null});return;
+    case 'tbl-generate':{
+      const rInp=document.getElementById('v4-tbl-rows-'+i);
+      const cInp=document.getElementById('v4-tbl-cols-'+i);
+      const newR=Math.max(1,Math.min(30,Number(rInp?.value)||3));
+      const newC=Math.max(1,Math.min(12,Number(cInp?.value)||3));
+      M(()=>{
+        const tbl=parseScriptTableData(s.lines[i]);
+        const nextRows=[];
+        for(let r=0;r<newR;r++){
+          const row=[];
+          for(let c=0;c<newC;c++){
+            row.push(tbl.rows[r]?.[c]!==undefined?tbl.rows[r][c]:(r===0?`Столбец ${c+1}`:''));
+          }
+          nextRows.push(row);
+        }
+        tbl.rows=nextRows;
+        s.lines[i]=JSON.stringify(tbl);
+      });
+      return;
+    }
+    case 'tbl-add-row':M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.rows.length<30){const cols=tbl.rows[0]?.length||3;tbl.rows.push(Array(cols).fill(''));s.lines[i]=JSON.stringify(tbl);}});return;
+    case 'tbl-del-row':M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.rows.length>1){tbl.rows.pop();s.lines[i]=JSON.stringify(tbl);}});return;
+    case 'tbl-add-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols<12){tbl.rows.forEach((r,ri)=>r.push(ri===0?`Столбец ${cols+1}`:''));s.lines[i]=JSON.stringify(tbl);}});return;
+    case 'tbl-del-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols>1){tbl.rows.forEach(r=>r.pop());s.lines[i]=JSON.stringify(tbl);}});return;
+    case 'img-size':M(()=>{const img=parseScriptImageData(s.lines[i]);img.size=b.dataset.size||'medium';img.widthPct=Number(b.dataset.pct)||50;s.lines[i]=JSON.stringify(img);});return;
     case 'lmove':moveLayout(id,b.dataset.d);return;
     case 'addline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'Новая реплика');s.lineKinds.splice(j,0,'speech');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
     case 'addgiftline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'');s.lineKinds.splice(j,0,'gift');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,editorDraft.gifts[0]?.id||'');edit=null;pickerOpen=j;pickerQuery=''});return;
@@ -8799,6 +9126,7 @@ async function loadOwnerData(){
     if(canUsers)tasks.push(api('/api/users').then(uRes=>{
       usersList=uRes.users||[];
       headsList=uRes.heads||usersList.filter(u=>u.role==='HEAD'||u.role==='OWNER').map(u=>({id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,isOwner:u.role==='OWNER'}));
+      window.unassignedOperatorsList=uRes.unassignedOperators||[];
       roleDefaults=uRes.roleDefaults||roleDefaults;
     }));
     if(canDeptScripts){
@@ -8853,8 +9181,9 @@ async function loadOwnerData(){
 function renderUsersSection(){
   const isOwner=currentUser?.role==='OWNER';
   const isHead=currentUser?.role==='HEAD';
-  const canManageAll=isOwner||(currentUser?.permissions||[]).includes('users.manage');
+  const canManageAll=isOwner||(!isHead&&(currentUser?.permissions||[]).includes('users.manage'));
   const canCreate=canManageAll||isHead;
+  const freeOps=Array.isArray(window.unassignedOperatorsList)?window.unassignedOperatorsList:[];
   const headMap=new Map(headsList.map(h=>[h.id,h]));
   usersList.forEach(u=>{if((u.role==='HEAD'||u.role==='OWNER')&&!headMap.has(u.id))headMap.set(u.id,{id:u.id,login:u.login,displayName:u.displayName||u.login,role:u.role,isOwner:u.role==='OWNER'});});
 
@@ -8882,10 +9211,10 @@ function renderUsersSection(){
       <div>
         <h2>${isHead&&!canManageAll?'Таблица сотрудников моего отдела':'Таблица сотрудников и отделов'} (${displayedUsers.length})</h2>
         <p>${isHead&&!canManageAll
-          ?'Сотрудники вашего отдела: просмотр статуса, управление паролем и сессиями, добавление менеджеров обзвона.'
+          ?'Сотрудники вашего отдела: добавление новых менеджеров в отдел, прикрепление свободных сотрудников, управление паролем и сессиями.'
           :'Иерархия отделов: <b>Владелец (отдел Мелентьев Е.А.)</b>, <b>Администраторы</b>, <b>Редакторы</b>, <b>Бизнес-тренеры ДПК</b>, <b>Руководители отделов</b> и <b>Менеджеры обзвона</b>.'}</p>
       </div>
-      ${canCreate?`<button type="button" class="primary" data-owner-act="create-user">${isHead&&!canManageAll?'+ Добавить менеджера обзвона':'+ Добавить сотрудника'}</button>`:''}
+      ${canCreate?`<button type="button" class="primary" data-owner-act="create-user">${isHead&&!canManageAll?'+ Добавить сотрудника в отдел':'+ Добавить сотрудника'}</button>`:''}
     </div>
 
     ${isOwner||canManageAll?`
@@ -8895,7 +9224,18 @@ function renderUsersSection(){
         ${otherHeads.map(h=>`<button type="button" class="emp-filter-btn ${empFilter===h.id?'active':''}" data-emp-filter="${h.id}">Отдел ${E(h.displayName||h.login)} (${h.count})</button>`).join('')}
       </div>
     `:`
-      <div class="emp-filters"><span class="perm-chip all">Руководитель отдела: @${E(currentUser.login)} (${E(currentUser.displayName||currentUser.login)})</span></div>
+      <div class="emp-filters" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <span class="perm-chip all">Руководитель отдела: @${E(currentUser.login)} (${E(currentUser.displayName||currentUser.login)})</span>
+        ${freeOps.length?`
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--surface-alt);padding:8px 12px;border-radius:10px;border:1px solid var(--line)">
+            <span style="font-size:12px;font-weight:700;color:var(--ink)">Свободные сотрудники без отдела (${freeOps.length}):</span>
+            <select id="head-attach-free-op-select" style="height:34px;border-radius:8px;padding:0 10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:12.5px">
+              ${freeOps.map(op=>`<option value="${E(op.id)}">${E(op.displayName||op.login)} (@${E(op.login)})</option>`).join('')}
+            </select>
+            <button type="button" class="primary" data-owner-act="head-attach-op" style="min-height:34px;padding:0 12px;font-size:12px">+ Прикрепить к моему отделу</button>
+          </div>
+        `:''}
+      </div>
     `}
 
     <div class="emp-table-wrap">
@@ -9034,11 +9374,13 @@ function renderDepartmentScriptsSection(){
             Значок <span class="role-pill trainer" style="font-size:10px;padding:1px 6px">🎓 Блоки тренера</span> означает, что бизнес-тренер ДПК добавил персональные блоки для этого сотрудника в данный скрипт. Руководитель может отключить весь скрипт галочкой, но не меняет блоки тренера.
           </p>
         </div>
+        <button type="button" class="primary" data-owner-act="create-user">+ Добавить сотрудника в отдел</button>
       </div>
 
       ${deptEmployeesList.length===0?`
-        <div style="padding:18px;border-radius:12px;background:var(--surface-alt);border:1px dashed var(--line);color:var(--muted);font-size:13px">
-          В этом отделе пока нет закреплённых менеджеров обзвона. Добавьте сотрудников во вкладке «Сотрудники», чтобы настраивать для них индивидуальный доступ к скриптам.
+        <div style="padding:18px;border-radius:12px;background:var(--surface-alt);border:1px dashed var(--line);color:var(--muted);font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <span>В этом отделе пока нет закреплённых менеджеров обзвона. Нажмите «+ Добавить сотрудника в отдел», чтобы добавить сотрудника и настраивать для него доступ к скриптам.</span>
+          <button type="button" class="primary" data-owner-act="create-user">+ Добавить сотрудника в отдел</button>
         </div>
       `:poolLayouts.length===0?`
         <div style="padding:18px;border-radius:12px;background:var(--surface-alt);border:1px dashed var(--line);color:var(--muted);font-size:13px">
@@ -9782,7 +10124,7 @@ function showChangeTempPasswordModal(){
 function openUserModal(editUser=null){
   const dlg=document.getElementById('user-modal');
   const isEdit=Boolean(editUser);
-  const isHeadOnly=currentUser?.role==='HEAD'&&!(currentUser?.permissions||[]).includes('users.manage');
+  const isHeadOnly=currentUser?.role==='HEAD';
   const role=isHeadOnly?'OPERATOR':(editUser?editUser.role:'OPERATOR');
   const perms=editUser?editUser.permissions:(roleDefaults[role]||[]);
   const curManagerId=isHeadOnly?currentUser.id:(editUser?.managerId||'');
@@ -10300,6 +10642,17 @@ document.addEventListener('click',async e=>{
     return;
   }
   if(act==='create-user'){openUserModal(null);return;}
+  if(act==='head-attach-op'){
+    const selEl=document.getElementById('head-attach-free-op-select');
+    const opId=selEl?.value;
+    if(!opId)return;
+    try{
+      await api('/api/users/'+encodeURIComponent(opId),{method:'PATCH',body:JSON.stringify({managerId:currentUser.id})});
+      await loadOwnerData();renderOwnerView();
+      toast('✓ Сотрудник прикреплён к вашему отделу');
+    }catch(err){toast(err.message);}
+    return;
+  }
   if(act==='edit-user'){
     const u=usersList.find(x=>x.id===actBtn.dataset.id);
     if(u)openUserModal(u);
@@ -10862,16 +11215,14 @@ function normalizeAndMigratePlanObject(rawPlan) {
   const plan = JSON.parse(JSON.stringify(rawPlan));
   const currentWeek = getCurrentBauerWeekNumber();
   if (!plan.calendarYear) plan.calendarYear = BAUER_CALENDAR_YEAR;
-  if (!plan.weekNumber) {
-    plan.weekNumber = plan.weekStart ? getBauerWeekNumberFromDate(plan.weekStart) : currentWeek;
+  if (!plan.weekNumber || !plan.weekNumberingV46) {
+    plan.weekNumber = currentWeek;
+    plan.weekNumberingV46 = true;
   }
   plan.weekStart = getBauerWeekStartTuesday(plan.weekNumber, plan.calendarYear);
 
   plan.cities = plan.cities.map(c => {
     if (!c || !c.cityName) return c;
-    if (c.cityName.trim().toLowerCase() === 'москва') {
-      return createDefaultMoscowCityPlan(c);
-    }
     (c.halls || []).forEach(h => ensureHallDayTimes(h));
     return c;
   });
@@ -11119,15 +11470,15 @@ function renderPlanView() {
   planDraft.weekNumber = activeWeekNum;
   planDraft.weekStart = weekStartDate;
   const weekCalendarDays = getBauerWeekDaysCalendar(activeWeekNum, BAUER_CALENDAR_YEAR);
-  const weekRangeLabel = `${weekCalendarDays[0]?.dmy || ''} (Вт) – ${weekCalendarDays[6]?.dmy || ''} (Пн)`;
+  const weekRangeLabel = `${weekCalendarDays[0]?.dmy || ''} (Пн) – ${weekCalendarDays[6]?.dmy || ''} (Вс)`;
 
-  // Опции выпадающего календаря недель 2026 года (с акцентом на текущую 44-ю неделю и соседние)
-  const weekOptionsHtml = Array.from({ length: 52 }, (_, i) => {
+  // Опции выпадающего календаря недель 2026 года (46-я текущая неделя: 09.11–15.11)
+  const weekOptionsHtml = Array.from({ length: 53 }, (_, i) => {
     const w = i + 1;
     const cal = getBauerWeekDaysCalendar(w, BAUER_CALENDAR_YEAR);
     const isCur = w === currentSystemWeek;
     const hasSaved = Boolean(planDraft.weeklyPlans?.[String(w)]);
-    return `<option value="${w}" ${w === activeWeekNum ? 'selected' : ''}>Неделя ${w} (${BAUER_CALENDAR_YEAR}) · ${cal[0].shortRu} (Вт) – ${cal[6].shortRu} (Пн)${isCur ? ' ★ Текущая' : ''}${hasSaved ? ' ✓' : ''}</option>`;
+    return `<option value="${w}" ${w === activeWeekNum ? 'selected' : ''}>Неделя ${w} (${BAUER_CALENDAR_YEAR}) · ${cal[0].dmShort}–${cal[6].dmShort} (${cal[0].shortRu} – ${cal[6].shortRu})${isCur ? ' ★ Текущая' : ''}${hasSaved ? ' ✓' : ''}</option>`;
   }).join('');
 
   // 3 шага мастера (Дни работы и времена презентаций объединены в единый удобный Шаг 3!)
@@ -11393,7 +11744,7 @@ function renderPlanView() {
     <header class="plan-header">
       <div style="flex:1;min-width:300px">
         <h1>📅 План презентаций BAUER · Календарь недель ${BAUER_CALENDAR_YEAR}</h1>
-        <p>Встроенный календарь текущих недель ${BAUER_CALENDAR_YEAR} года (с 44-й недели · цикл дней: <strong>Вт, Ср, Чт, Пт, Сб, Вс, Пн</strong>). Если не менять расписание на следующую неделю, времена презентаций автоматически дублируются и сохраняются.</p>
+        <p>Встроенный календарь недель ${BAUER_CALENDAR_YEAR} года (текущая 46-я неделя: <strong>09.11–15.11</strong>). Если не менять расписание на следующую неделю, времена презентаций автоматически дублируются и сохраняются.</p>
 
         <!-- Встроенный календарь недель 2026 года -->
         <div style="margin-top:14px;background:var(--surface-alt);border:1.5px solid color-mix(in srgb, var(--teal) 35%, var(--line));border-radius:14px;padding:12px 16px">
