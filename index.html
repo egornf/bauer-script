@@ -12798,8 +12798,9 @@ function renderPlanView() {
           ` : ''}
         </div>
       </div>
-      <div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:stretch">
         <button type="button" class="plan-save-btn" id="plan-save-top-btn">💾 Сохранить план презентаций</button>
+        <button type="button" class="plan-week-btn" id="plan-save-forward-top-btn" style="padding:10px 18px;font-size:13px;font-weight:800;color:var(--teal);border-color:var(--teal)" title="Сохранить план этой недели и скопировать его на все последующие недели года">⏩ Сохранить для последующих недель</button>
       </div>
     </header>
 
@@ -12828,6 +12829,7 @@ function renderPlanView() {
             Следующий этап: ${steps[planWizardStep]?.title || 'Далее'} →
           </button>
         ` : ''}
+        <button type="button" class="plan-week-btn" id="plan-save-forward-bottom-btn" style="padding:10px 18px;font-size:13px;font-weight:800;color:var(--teal);border-color:var(--teal)" title="Сохранить план этой недели и скопировать его на все последующие недели года">⏩ Сохранить для последующих недель</button>
         <button type="button" class="plan-save-btn" id="plan-save-bottom-btn">💾 Сохранить план презентаций</button>
       </div>
     </div>
@@ -12862,9 +12864,18 @@ function refreshScheduleViewsWithoutScroll() {
   }
 }
 
-async function savePresentationPlanToServer() {
+async function savePresentationPlanToServer(opts = {}) {
   if (!planDraft) return;
+  const copyForward = Boolean(opts && opts.copyForward);
   const wn = planDraft.weekNumber || getCurrentBauerWeekNumber();
+  if (copyForward) {
+    if (wn >= 53) {
+      toast('Это последняя неделя года — копировать дальше некуда');
+      return;
+    }
+    const ok = confirm(`Скопировать план ${wn}-й недели на все последующие недели (${wn + 1}–53)?\n\nДанные этих недель будут заменены планом ${wn}-й недели.`);
+    if (!ok) return;
+  }
   planDraft.weekNumber = wn;
   planDraft.calendarYear = BAUER_CALENDAR_YEAR;
   planDraft.weekStart = getBauerWeekStartTuesday(wn, BAUER_CALENDAR_YEAR);
@@ -12880,8 +12891,19 @@ async function savePresentationPlanToServer() {
     updatedAt: Date.now()
   };
 
-  // Если включено автодублирование — копируем на все последующие недели (до первой отдельно заполненной вручную)
-  if (planDraft.autoDuplicateNextWeek !== false && wn < 53) {
+  if (copyForward) {
+    // Явное копирование: перезаписываем ВСЕ последующие недели планом текущей недели
+    for (let w = wn + 1; w <= 53; w++) {
+      planDraft.weeklyPlans[String(w)] = {
+        weekNumber: w,
+        weekStart: getBauerWeekStartTuesday(w, BAUER_CALENDAR_YEAR),
+        cities: JSON.parse(JSON.stringify(planDraft.cities || [])),
+        copiedFromWeek: wn,
+        updatedAt: Date.now()
+      };
+    }
+  } else if (planDraft.autoDuplicateNextWeek !== false && wn < 53) {
+    // Если включено автодублирование — копируем на все последующие недели (до первой отдельно заполненной вручную)
     propagateWeekPlanForward(planDraft, wn, planDraft.cities || []);
   }
 
@@ -12916,7 +12938,9 @@ async function savePresentationPlanToServer() {
       localStorage.setItem('bauer-presentation-plan', JSON.stringify(activePresentationPlan));
       localStorage.setItem('bauer-presentation-plan-draft', JSON.stringify(planDraft));
     } catch {}
-    toast(`✓ План презентаций на ${wn}-ю неделю ${BAUER_CALENDAR_YEAR} успешно сохранён!`);
+    toast(copyForward
+      ? `✓ План ${wn}-й недели сохранён и скопирован на недели ${wn + 1}–53`
+      : `✓ План презентаций на ${wn}-ю неделю ${BAUER_CALENDAR_YEAR} успешно сохранён!`);
     renderPlanView();
     refreshScheduleViewsWithoutScroll();
   } catch (e) {
@@ -12935,6 +12959,10 @@ document.addEventListener('click', e => {
   }
 
   // Save buttons
+  if (e.target.closest('#plan-save-forward-top-btn') || e.target.closest('#plan-save-forward-bottom-btn')) {
+    savePresentationPlanToServer({ copyForward: true });
+    return;
+  }
   if (e.target.closest('#plan-save-top-btn') || e.target.closest('#plan-save-bottom-btn')) {
     savePresentationPlanToServer();
     return;
