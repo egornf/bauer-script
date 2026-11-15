@@ -2267,6 +2267,84 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   background: transparent;
   border-color: rgba(148, 163, 184, 0.4);
 }
+.v4-tbl-cell-gift-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  margin-bottom: 5px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--teal) 11%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--teal) 32%, var(--line));
+  font-size: 11.5px;
+  font-weight: 750;
+  color: var(--ink);
+}
+.v4-tbl-cell-gift-chip img {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.v4-tbl-cell-gift-chip span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v4-tbl-cell-gift-chip button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 3px;
+  font-weight: 800;
+}
+.v4-tbl-cell-gift-chip button:hover {
+  color: #dc2626;
+}
+.script-table-gift {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.script-table-gift-head {
+  font-weight: 800;
+  font-size: 0.92em;
+  color: var(--teal);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.script-table-gift-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.script-table-gift-photo img {
+  width: 76px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: zoom-in;
+  display: block;
+}
+.script-table-gift-text {
+  flex: 1;
+  min-width: 140px;
+  line-height: 1.45;
+}
+.script-table-gift-extra {
+  font-size: 0.92em;
+  opacity: 0.9;
+}
 .script-image-block {
   padding: 12px 14px;
   border-radius: 12px;
@@ -3485,7 +3563,8 @@ function createDefaultTableJson(rowsCount=3,colsCount=3){
     hasHeader:true,
     rows,
     tableStyle:{fontSize:14,borderWidth:'1',borderStyle:'solid',borderColor:'',outerBorder:true,cellAlign:'left'},
-    cellStyles:{}
+    cellStyles:{},
+    cellGifts:{}
   });
 }
 function sanitizeTableColor(val){
@@ -3529,7 +3608,17 @@ function parseScriptTableData(rawStr){
           if(Object.keys(cs).length)cellStyles[k]=cs;
         }
       }
-      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows,tableStyle,cellStyles};
+      const cellGifts={};
+      if(obj.cellGifts&&typeof obj.cellGifts==='object'){
+        for(const [k,v] of Object.entries(obj.cellGifts)){
+          if(!/^\d+,\d+$/.test(k))continue;
+          const [ri,ci]=k.split(',').map(Number);
+          if(ri>=rows.length||ci>=cols)continue;
+          const gId=String(v||'').trim();
+          if(gId)cellGifts[k]=gId;
+        }
+      }
+      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows,tableStyle,cellStyles,cellGifts};
     }
   }catch{}
   return JSON.parse(createDefaultTableJson(3,3));
@@ -3557,12 +3646,26 @@ function getScriptTableStyles(tbl){
   };
   return {tableCss,getCellCss,ts};
 }
-function renderScriptTableBlock(rawStr,bCss=''){
+function renderScriptTableCellContent(cellText,rIdx,cIdx,tbl,gifts=data.gifts,readonly=false){
+  const gId=tbl.cellGifts&&tbl.cellGifts[`${rIdx},${cIdx}`];
+  const textHtml=cellText.trim()?fillPlanHtml(fillVenueHtml(escapeHTML(cellText))):'';
+  if(!gId)return textHtml;
+  const gift=(gifts||[]).find(g=>g.id===gId);
+  if(!gift){
+    return `<div class="script-table-gift"><div class="script-table-gift-head">🎁 Подарок не найден</div>${textHtml?`<div class="script-table-gift-extra">${textHtml}</div>`:''}</div>`;
+  }
+  const label=gift.condition?.trim()?`${gift.title} · ${gift.condition}`:(gift.title||'Подарок');
+  const photo=cleanPhoto(gift.photo);
+  const photoHtml=photo?`<div class="script-table-gift-photo"><img src="${photo}" alt="${escapeHTML(gift.title||'Подарок')}" ${readonly?'':`data-view-gift="${escapeHTML(gift.id)}" tabindex="0" role="button" aria-label="Увеличить фото: ${escapeHTML(gift.title||'Подарок')}"`}></div>`:'';
+  const descHtml=(gift.script||'').trim()?`<div class="script-table-gift-text">${LayoutModel.renderText(gift.script,gift.scriptFormat)}</div>`:'';
+  return `<div class="script-table-gift"><div class="script-table-gift-head">🎁 ${escapeHTML(label)}</div>${(photoHtml||descHtml)?`<div class="script-table-gift-body">${photoHtml}${descHtml}</div>`:''}${textHtml?`<div class="script-table-gift-extra">${textHtml}</div>`:''}</div>`;
+}
+function renderScriptTableBlock(rawStr,bCss='',gifts=data.gifts,readonly=false){
   const tbl=parseScriptTableData(rawStr);
   const {tableCss,getCellCss}=getScriptTableStyles(tbl);
   const headRow=tbl.hasHeader?tbl.rows[0]:null;
   const bodyRows=tbl.hasHeader?tbl.rows.slice(1):tbl.rows;
-  return `<div class="line script-table-block"${bCss?` style="${bCss}"`:''}>${tbl.title.trim()?`<div class="script-table-title">📊 ${escapeHTML(tbl.title)}</div>`:''}<div class="script-table-scroll"><table class="script-inline-table" style="${tableCss}">${headRow?`<thead><tr>${headRow.map((cell,cIdx)=>`<th style="${getCellCss(0,cIdx,true)}">${fillPlanHtml(fillVenueHtml(escapeHTML(cell)))}</th>`).join('')}</tr></thead>`:''}<tbody>${bodyRows.map((row,bIdx)=>{const rIdx=tbl.hasHeader?bIdx+1:bIdx;return `<tr>${row.map((cell,cIdx)=>`<td style="${getCellCss(rIdx,cIdx,false)}">${fillPlanHtml(fillVenueHtml(escapeHTML(cell)))}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div></div>`;
+  return `<div class="line script-table-block"${bCss?` style="${bCss}"`:''}>${tbl.title.trim()?`<div class="script-table-title">📊 ${escapeHTML(tbl.title)}</div>`:''}<div class="script-table-scroll"><table class="script-inline-table" style="${tableCss}">${headRow?`<thead><tr>${headRow.map((cell,cIdx)=>`<th style="${getCellCss(0,cIdx,true)}">${renderScriptTableCellContent(cell,0,cIdx,tbl,gifts,readonly)}</th>`).join('')}</tr></thead>`:''}<tbody>${bodyRows.map((row,bIdx)=>{const rIdx=tbl.hasHeader?bIdx+1:bIdx;return `<tr>${row.map((cell,cIdx)=>`<td style="${getCellCss(rIdx,cIdx,false)}">${renderScriptTableCellContent(cell,rIdx,cIdx,tbl,gifts,readonly)}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div></div>`;
 }
 function parseScriptImageData(rawStr){
   try{
@@ -3604,7 +3707,7 @@ function renderStageLines(stage,readonly=false,gifts=data.gifts){
     const bCss=LayoutModel.blockCSS(stage.lineFormats?.[n]);
     if(kind==='schedule'){html+=presentationScheduleMarkup(stage,bCss);return;}
     if(kind==='address'){html+=addressLineHtml(line,stage.lineFormats?.[n],bCss);return;}
-    if(kind==='table'){html+=renderScriptTableBlock(line,bCss);return;}
+    if(kind==='table'){html+=renderScriptTableBlock(line,bCss,gifts,readonly);return;}
     if(kind==='image'){html+=renderScriptImageBlock(line,bCss);return;}
     if(kind==='trainer-line'||kind==='trainer-tip'){
       const tMeta=stage.lineTrainerMeta?.[n]||null;
@@ -6252,6 +6355,7 @@ function lineBlock(s,i){
     const cellAlign=cs.align||ts.cellAlign||'left';
     const cellTextColor=cs.color||'#0f172a';
     const cellBgColor=cs.bg||'#ffffff';
+    const cellGiftId=(tbl.cellGifts&&tbl.cellGifts[`${selR},${selC}`])||'';
     const tblBorderColor=ts.borderColor||'#cbd5e1';
     const textColors=['#0f172a','#008578','#dc2626','#2563eb','#d97706','#7c3aed'];
     const bgColors=['#fef3c7','#dcfce7','#dbeafe','#fce7f3','#ede9fe','#f1f5f9'];
@@ -6309,6 +6413,10 @@ function lineBlock(s,i){
           ${bgColors.map(c=>`<button type="button" class="v4-tbl-color-dot" style="background:${c}" data-v4="tbl-cell-bg" data-i="${i}" data-c="${c}" title="Заливка ячейки ${c}"></button>`).join('')}
           <input type="color" class="v4-tbl-color-pick" data-v4-tbl-cstyle="${i},bg" value="${E(cellBgColor)}" title="Своя заливка ячейки">
           <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-bg" data-i="${i}" data-c="" title="Убрать заливку">✕</button>
+          <select class="v4-tbl-mini-select" data-v4-tbl-cell-gift="${i}" title="Вставить подарок из базы в выбранную ячейку" style="max-width:210px">
+            <option value="">🎁 Вставить подарок…</option>
+            ${(editorDraft.gifts||[]).map(g=>`<option value="${E(g.id)}" ${cellGiftId===g.id?'selected':''}>🎁 ${E(g.title||'Без названия')}${g.condition?' · '+E(g.condition):''}</option>`).join('')}
+          </select>
           <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-apply-row" data-i="${i}" title="Применить стиль этой ячейки ко всей строке">На всю строку</button>
           <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-reset" data-i="${i}" title="Сбросить оформление ячейки">Сброс</button>
         </div>
@@ -6324,6 +6432,8 @@ function lineBlock(s,i){
                 return `<tr>${row.map((cell,cIdx)=>{
                   const cCss=getCellCss(rIdx,cIdx,isHdr);
                   const cObj=(tbl.cellStyles&&tbl.cellStyles[`${rIdx},${cIdx}`])||{};
+                  const gId=(tbl.cellGifts&&tbl.cellGifts[`${rIdx},${cIdx}`])||'';
+                  const cellGift=gId?(editorDraft.gifts||[]).find(g=>g.id===gId):null;
                   const isAct=(rIdx===selR&&cIdx===selC);
                   const inpCss=[
                     cObj.fontSize?`font-size:${cObj.fontSize}px`:`font-size:${ts.fontSize}px`,
@@ -6332,7 +6442,8 @@ function lineBlock(s,i){
                     cObj.color?`color:${cObj.color}`:'',
                     `text-align:${cObj.align||ts.cellAlign||'left'}`
                   ].filter(Boolean).join(';');
-                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}"><input type="text" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" value="${E(cell)}" placeholder="${isHdr?'Заголовок '+(cIdx+1):'Ячейка'}"></${tag}>`;
+                  const giftChipHtml=gId?`<div class="v4-tbl-cell-gift-chip">${cellGift?.photo?`<img src="${cellGift.photo}" alt="">`:'🎁'}<span>${E(cellGift?(cellGift.title||'Подарок'):'Подарок не найден')}</span><button type="button" data-v4="tbl-cell-gift-clear" data-i="${i}" data-r="${rIdx}" data-c="${cIdx}" title="Убрать подарок из ячейки">✕</button></div>`:'';
+                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}">${giftChipHtml}<input type="text" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" value="${E(cell)}" placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}"></${tag}>`;
                 }).join('')}</tr>`;
               }).join('')}
             </tbody>
@@ -6503,6 +6614,8 @@ lv.addEventListener('focusin',e=>{
         if(cPick)cPick.value=cs.color||'#0f172a';
         const bPick=lineEl.querySelector(`[data-v4-tbl-cstyle="${li},bg"]`);
         if(bPick)bPick.value=cs.bg||'#ffffff';
+        const gSel=lineEl.querySelector(`[data-v4-tbl-cell-gift="${li}"]`);
+        if(gSel)gSel.value=(tbl.cellGifts&&tbl.cellGifts[`${ri},${ci}`])||'';
       }
     }
   }
@@ -6662,6 +6775,23 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
       s.lines[idx]=JSON.stringify(tbl);
     });
   }
+  else if(f.matches('[data-v4-tbl-cell-gift]')){
+    const idx=+f.dataset.v4TblCellGift;
+    const pos=tblSelCell[idx]||{r:0,c:0};
+    const key=`${pos.r},${pos.c}`;
+    mutateDraft(()=>{
+      const tbl=parseScriptTableData(s.lines[idx]);
+      tbl.cellGifts=tbl.cellGifts||{};
+      if(f.value){
+        tbl.cellGifts[key]=f.value;
+        const curVal=(tbl.rows[pos.r]?.[pos.c]||'').trim();
+        if(/^Ячейка \d+\.\d+$/.test(curVal))tbl.rows[pos.r][pos.c]='';
+      }else{
+        delete tbl.cellGifts[key];
+      }
+      s.lines[idx]=JSON.stringify(tbl);
+    });
+  }
   else if(f.matches('[data-v4-imgfile]')){
     const idx=+f.dataset.v4Imgfile;
     const files=[...f.files];f.value='';
@@ -6746,6 +6876,7 @@ lv.addEventListener('click',async e=>{
     case 'tbl-cell-bg':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,bg=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(bg)cur.bg=bg;else delete cur.bg;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
     case 'tbl-apply-row':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const src=tbl.cellStyles[key]?{...tbl.cellStyles[key]}:null;const cols=tbl.rows[0]?.length||0;for(let c=0;c<cols;c++){if(src)tbl.cellStyles[`${pos.r},${c}`]={...src};else delete tbl.cellStyles[`${pos.r},${c}`];}s.lines[i]=JSON.stringify(tbl);});return;}
     case 'tbl-cell-reset':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.cellStyles)delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-gift-clear':{const r=Number(b.dataset.r),c=Number(b.dataset.c),key=`${r},${c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.cellGifts)delete tbl.cellGifts[key];s.lines[i]=JSON.stringify(tbl);});return;}
     case 'img-size':M(()=>{const img=parseScriptImageData(s.lines[i]);img.size=b.dataset.size||'medium';img.widthPct=Number(b.dataset.pct)||50;s.lines[i]=JSON.stringify(img);});return;
     case 'lmove':moveLayout(id,b.dataset.d);return;
     case 'addline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'Новая реплика');s.lineKinds.splice(j,0,'speech');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
