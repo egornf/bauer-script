@@ -483,53 +483,54 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 #whole-close{background:var(--custom-accent, var(--teal, #008578)) !important;color:var(--custom-accent-fg, #ffffff) !important;border:1px solid var(--custom-accent, var(--teal, #008578)) !important;border-radius:8px !important;padding:8px 18px !important;font-size:13px !important;font-weight:750 !important;cursor:pointer !important;transition:all .16s ease !important;box-shadow:0 4px 12px color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, transparent) !important}
 #whole-close:hover{opacity:0.92;transform:translateY(-1px)}
 
-.whole-body-layout{display:flex;flex:1;min-height:0;width:100%;overflow:hidden;position:relative}
-.whole-sidebar{width:290px;flex-shrink:0;display:flex;flex-direction:column;background:var(--custom-card-bg, var(--surface, #ffffff));border-right:1.5px solid var(--line);overflow-y:auto;padding:14px 10px;gap:8px;scrollbar-gutter:stable;transition:all .2s ease;z-index:2}
-.whole-sidebar-section{display:flex;flex-direction:column;gap:6px}
-.whole-sidebar-header{display:flex;align-items:center;justify-content:space-between;padding:2px 6px 8px;margin-bottom:4px;border-bottom:1.5px solid var(--line);gap:6px}
+.whole-body-layout{display:flex;flex-direction:column;flex:1;min-height:0;width:100%;overflow:hidden;position:relative}
+.whole-sidebar{width:100%;flex-shrink:0;display:flex;flex-direction:row;align-items:center;background:var(--custom-card-bg, var(--surface, #ffffff));border-bottom:1.5px solid var(--line);padding:10px 24px;gap:12px;transition:all .2s ease;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,0.04)}
+.whole-sidebar-section{display:flex;flex-direction:row;align-items:center;gap:12px;width:100%;min-width:0}
+.whole-sidebar-header{display:flex;align-items:center;gap:8px;padding:0 12px 0 0;margin:0;border-bottom:0;border-right:1.5px solid var(--line);flex-shrink:0}
 .whole-sidebar-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);white-space:nowrap}
-.whole-sidebar-count{font-size:11px;font-weight:700;color:var(--muted);background:var(--surface-alt, rgba(0,0,0,0.06));padding:2px 7px;border-radius:10px}
-.whole-nav-list{display:flex;flex-direction:column;gap:5px;max-height:36vh;overflow-y:auto;scrollbar-gutter:stable;padding-right:2px}
-.whole-nav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1.5px solid var(--custom-step-border, var(--line, rgba(0,0,0,0.1)));background:var(--custom-step-bg, var(--surface, #ffffff));color:var(--custom-step-fg, var(--ink));font:inherit;font-size:12.5px;font-weight:650;text-align:left;cursor:pointer;transition:all .16s ease;box-shadow:0 1px 3px rgba(0,0,0,0.04);width:100%;user-select:none}
-.whole-nav-item:hover{border-color:var(--custom-accent, var(--teal, #008578));background:var(--custom-step-hover, #ffffff);transform:translateX(2px)}
-.whole-nav-item.active{background:var(--custom-step-active-bg, var(--custom-accent, var(--teal, #008578))) !important;color:var(--custom-step-active-fg, var(--custom-accent-fg, #ffffff)) !important;border-color:var(--custom-step-active-bg, var(--custom-accent, var(--teal, #008578))) !important;box-shadow:0 4px 14px color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, transparent) !important;font-weight:750}
+.whole-sidebar-count{font-size:11px;font-weight:700;color:var(--muted);background:var(--surface-alt, rgba(0,0,0,0.06));padding:2px 7px;border-radius:10px;white-space:nowrap}
+.whole-nav-list{display:flex;flex-direction:row;align-items:center;gap:8px;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;padding:2px 2px}
+.whole-nav-item{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:11px;border:1.5px solid var(--custom-step-border, var(--line, rgba(0,0,0,0.1)));background:var(--custom-step-bg, var(--surface, #ffffff));color:var(--custom-step-fg, var(--ink));font:inherit;font-size:13px;font-weight:700;text-align:left;cursor:pointer;transition:all .16s ease;box-shadow:0 1px 3px rgba(0,0,0,0.04);width:auto;flex-shrink:0;user-select:none;white-space:nowrap}
+.whole-nav-item:hover{border-color:var(--custom-accent, var(--teal, #008578));background:var(--custom-step-hover, #ffffff);transform:translateY(-1px)}
+.whole-nav-item.active{background:var(--custom-step-active-bg, var(--custom-accent, var(--teal, #008578))) !important;color:var(--custom-step-active-fg, var(--custom-accent-fg, #ffffff)) !important;border-color:var(--custom-step-active-bg, var(--custom-accent, var(--teal, #008578))) !important;box-shadow:0 4px 14px color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, transparent) !important;font-weight:800}
 .whole-nav-num{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--custom-step-num-bg, rgba(0,0,0,0.06));color:var(--custom-step-fg, var(--ink));font-size:11px;font-weight:800;flex-shrink:0;border:1px solid var(--custom-step-border, rgba(0,0,0,0.1));transition:all .16s ease}
 .whole-nav-item.active .whole-nav-num{background:rgba(0,0,0,0.22) !important;color:var(--custom-step-active-fg, var(--custom-accent-fg, #ffffff)) !important;border-color:rgba(255,255,255,0.35) !important}
-.whole-nav-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.whole-nav-sms-item{background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 8%, var(--surface, #ffffff));border-color:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, var(--line))}
+.whole-nav-text{white-space:nowrap}
+.whole-nav-sms-item{margin-left:auto;background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 8%, var(--surface, #ffffff));border-color:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, var(--line))}
 .whole-nav-sms-item .whole-nav-num{font-size:12px;background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 18%, transparent)}
 
-/* Objections Section in Left Sidebar */
-.whole-sidebar-ob-section{margin-top:4px;padding-top:10px;border-top:1.5px solid var(--line);flex:1;display:flex;flex-direction:column;min-height:0}
-.whole-ob-stage-name{font-size:11px;font-weight:800;color:var(--custom-accent, var(--teal, #008578));max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.whole-ob-list{display:flex;flex-direction:column;gap:5px;overflow-y:auto;max-height:34vh;scrollbar-gutter:stable;padding-right:2px}
-.whole-ob-empty{font-size:12px;color:var(--muted);font-style:italic;padding:10px 12px;background:var(--surface-alt, rgba(0,0,0,0.03));border-radius:10px;border:1px dashed var(--line);text-align:center}
-.whole-ob-btn{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface, #ffffff);color:var(--ink);font:inherit;font-size:12px;font-weight:650;text-align:left;cursor:pointer;transition:all .15s ease;width:100%;user-select:none}
-.whole-ob-btn:hover{border-color:var(--custom-accent, var(--teal, #008578));background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 8%, var(--surface, #ffffff));color:var(--custom-accent, var(--teal, #008578))}
+/* Objections Section Under Each Stage Block */
+.whole-sidebar-ob-section{margin-top:20px;padding-top:16px;border-top:1.5px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.whole-stage-ob-header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.whole-ob-stage-name{font-size:11px;font-weight:800;color:var(--custom-accent, var(--teal, #008578));padding:3px 10px;border-radius:999px;background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 12%, transparent)}
+.whole-ob-list{display:flex;flex-direction:row;flex-wrap:wrap;gap:8px}
+.whole-ob-empty{font-size:12.5px;color:var(--muted);font-style:italic;padding:8px 12px;background:var(--surface-alt, rgba(0,0,0,0.03));border-radius:10px;border:1px dashed var(--line)}
+.whole-ob-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1.5px solid color-mix(in srgb, var(--purple, #bf4126) 38%, var(--line));background:var(--surface, #ffffff);color:var(--ink);font:inherit;font-size:13.5px;font-weight:650;text-align:left;cursor:pointer;transition:all .15s ease;width:auto;user-select:none}
+.whole-ob-btn:hover{border-color:var(--custom-accent, var(--teal, #008578));background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 8%, var(--surface, #ffffff));color:var(--custom-accent, var(--teal, #008578));transform:translateY(-1px)}
 .whole-ob-btn.active{border-color:var(--custom-accent, var(--teal, #008578)) !important;background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 16%, var(--surface, #ffffff)) !important;color:var(--custom-accent, var(--teal, #008578)) !important;font-weight:750;box-shadow:0 2px 8px color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 20%, transparent)}
-.whole-ob-btn-icon{font-size:11px;opacity:0.85;flex-shrink:0}
-.whole-ob-btn-title{flex:1;min-width:0;line-height:1.35}
-.whole-ob-btn-arrow{font-size:13px;color:var(--muted);font-weight:700;flex-shrink:0}
+.whole-ob-btn-icon{font-size:12px;opacity:0.9;flex-shrink:0}
+.whole-ob-btn-title{line-height:1.35}
+.whole-ob-btn-arrow{font-size:14px;color:var(--muted);font-weight:700;flex-shrink:0}
 
-/* Objection Answer Card */
-.whole-ob-answer-box{margin-top:10px;padding:12px 14px;border-radius:12px;background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 6%, var(--surface, #ffffff));border:1.5px solid color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, var(--line));box-shadow:0 4px 14px rgba(0,0,0,0.06);animation:wholeFadeIn .18s ease;overflow-y:auto;max-height:42vh}
+/* Objection Answer Card Inside Stage Block */
+.whole-ob-answer-box{margin-top:6px;padding:16px 20px;border-radius:14px;background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 6%, var(--surface, #ffffff));border:1.5px solid color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, var(--line));box-shadow:0 4px 14px rgba(0,0,0,0.06);animation:wholeFadeIn .18s ease}
 @keyframes wholeFadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .whole-ob-answer-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.whole-ob-badge{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--custom-accent, var(--teal, #008578))}
-.whole-ob-close-btn{background:transparent;border:none;font-size:13px;color:var(--muted);cursor:pointer;padding:2px 6px;border-radius:6px}
+.whole-ob-badge{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--custom-accent, var(--teal, #008578))}
+.whole-ob-close-btn{background:transparent;border:none;font-size:14px;color:var(--muted);cursor:pointer;padding:4px 8px;border-radius:6px}
 .whole-ob-close-btn:hover{background:var(--surface-alt);color:var(--ink)}
-.whole-ob-title{margin:0 0 8px;font-size:13px;font-weight:800;color:var(--ink);line-height:1.35}
-.whole-ob-speech-box{padding:10px 12px;border-radius:8px;background:var(--surface, #ffffff);border:1px solid var(--line);margin-bottom:10px}
-.whole-ob-speech-label{font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
-.whole-ob-text{font-size:13px;line-height:1.6;color:var(--ink)}
-.whole-ob-actions{display:flex;flex-direction:column;gap:6px}
-.whole-ob-copy-btn{background:var(--surface-alt, #f8fafc);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;color:var(--ink);cursor:pointer;width:100%;transition:all .15s ease}
+.whole-ob-title{margin:0 0 10px;font-size:15px;font-weight:800;color:var(--ink);line-height:1.35}
+.whole-ob-speech-box{padding:14px 16px;border-radius:10px;background:var(--surface, #ffffff);border:1px solid var(--line);margin-bottom:12px}
+.whole-ob-speech-label{font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+.whole-ob-text{font-size:var(--script-font-size,18px);line-height:1.65;color:var(--ink)}
+.whole-ob-actions{display:flex;flex-direction:row;flex-wrap:wrap;gap:10px}
+.whole-ob-copy-btn{background:var(--surface-alt, #f8fafc);border:1px solid var(--line);border-radius:9px;padding:8px 16px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;width:auto;transition:all .15s ease}
 .whole-ob-copy-btn:hover{border-color:var(--custom-accent, var(--teal));color:var(--custom-accent, var(--teal))}
-.whole-ob-jump-btn{background:var(--custom-accent, var(--teal, #008578));color:var(--custom-accent-fg, #ffffff);border:none;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:750;cursor:pointer;width:100%;transition:all .15s ease}
+.whole-ob-jump-btn{background:var(--custom-accent, var(--teal, #008578));color:var(--custom-accent-fg, #ffffff);border:none;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:750;cursor:pointer;width:auto;transition:all .15s ease}
 .whole-ob-jump-btn:hover{opacity:0.92}
 
-.whole-content{overflow-y:auto;flex:1;min-height:0;padding:20px 28px 60px;scrollbar-gutter:stable;scroll-behavior:smooth}
-.whole-stage{width:100%;max-width:1600px;margin:0 auto 22px !important;background:var(--custom-card-bg, var(--surface, #ffffff)) !important;color:var(--custom-block-fg, var(--ink)) !important;border:1.5px solid var(--line) !important;border-radius:20px !important;padding:26px 30px !important;box-shadow:0 8px 24px rgba(0,0,0,0.06) !important;transition:all .18s ease;scroll-margin-top:20px}
+.whole-content{overflow-y:auto;flex:1;min-height:0;width:100%;padding:20px 24px 60px;scrollbar-gutter:stable;scroll-behavior:smooth}
+.whole-stage{width:100%;max-width:100%;margin:0 auto 22px !important;background:var(--custom-card-bg, var(--surface, #ffffff)) !important;color:var(--custom-block-fg, var(--ink)) !important;border:1.5px solid var(--line) !important;border-radius:20px !important;padding:26px 32px !important;box-shadow:0 8px 24px rgba(0,0,0,0.06) !important;transition:all .18s ease;scroll-margin-top:20px}
 .whole-stage-head-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:2px solid color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 25%, transparent);padding-bottom:12px;margin-bottom:20px}
 .whole-stage-head-row h2{margin:0 !important;border-bottom:none !important;padding-bottom:0 !important;font-size:24px !important;font-weight:850 !important;color:var(--custom-accent, var(--teal, #008578)) !important}
 .whole-stage-badge{font-size:12px;font-weight:700;color:var(--muted);background:var(--surface-alt, rgba(0,0,0,0.05));padding:4px 10px;border-radius:20px;white-space:nowrap}
@@ -537,7 +538,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .whole-stage .tip{margin-top:14px !important;padding:12px 16px !important;border-radius:10px !important;background:var(--ui-soft, rgba(0,133,120,0.1)) !important;border-left:4px solid var(--custom-accent, var(--teal, #008578)) !important;color:var(--custom-block-fg, var(--ink)) !important;font-size:13px !important}
 
 /* SMS Constructor at the End of Whole Script */
-.whole-sms-card{width:100%;max-width:1600px;margin:28px auto 40px !important;background:var(--custom-card-bg, var(--surface, #ffffff)) !important;color:var(--custom-block-fg, var(--ink)) !important;border:2px solid color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, var(--line)) !important;border-radius:20px !important;box-shadow:0 10px 30px rgba(0,0,0,0.08) !important;overflow:hidden;transition:all .2s ease;scroll-margin-top:20px}
+.whole-sms-card{width:100%;max-width:100%;margin:28px auto 40px !important;background:var(--custom-card-bg, var(--surface, #ffffff)) !important;color:var(--custom-block-fg, var(--ink)) !important;border:2px solid color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, var(--line)) !important;border-radius:20px !important;box-shadow:0 10px 30px rgba(0,0,0,0.08) !important;overflow:hidden;transition:all .2s ease;scroll-margin-top:20px}
 .whole-sms-banner{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:22px 28px;background:color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 8%, var(--custom-card-bg, var(--surface, #ffffff)));border-bottom:1.5px solid var(--line);flex-wrap:wrap}
 .whole-sms-kicker{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--custom-accent, var(--teal, #008578));margin-bottom:4px}
 .whole-sms-title{margin:0 0 4px;font-size:22px;font-weight:850;color:var(--ink)}
@@ -5531,6 +5532,34 @@ $('#whole-script').addEventListener('click',()=>{
   };
   window.wSmsValues = wSmsValues;
 
+  function renderObjectionsForStage(stg,idx){
+    if(typeof stg==='number'){idx=stg;stg=stages[idx];}
+    if(!stg)return '';
+    const ids=(stg.objectionIds||[]).filter(id=>data.objections&&data.objections[id]);
+    return `
+      <div class="whole-sidebar-section whole-sidebar-ob-section" data-stage-ob-section="${idx}">
+        <div class="whole-stage-ob-header">
+          <span class="whole-sidebar-title">Возражения этапа</span>
+          <span class="whole-ob-stage-name">${escapeHTML(stg.title||'')}</span>
+        </div>
+        <div class="whole-ob-list" id="whole-ob-list-${idx}">
+          ${ids.length?ids.map(id=>{
+            const ob=data.objections[id];
+            return `
+              <button type="button" class="whole-ob-btn" data-whole-ob-id="${id}" data-stage-index="${idx}" title="${escapeHTML(ob.title)}">
+                <span class="whole-ob-btn-icon">⚡</span>
+                <span class="whole-ob-btn-title">${escapeHTML(ob.title)}</span>
+                <span class="whole-ob-btn-arrow">›</span>
+              </button>
+            `;
+          }).join(''):'<div class="whole-ob-empty">Для этого этапа нет частых возражений</div>'}
+        </div>
+        <div class="whole-ob-answer-box" id="whole-ob-answer-box-${idx}" hidden></div>
+      </div>
+    `;
+  }
+  window.renderObjectionsForStage=renderObjectionsForStage;
+
   view.innerHTML=`
     <header class="whole-head">
       <strong>Весь скрипт</strong>
@@ -5540,8 +5569,7 @@ $('#whole-script').addEventListener('click',()=>{
       </div>
     </header>
     <div class="whole-body-layout">
-      <nav class="whole-sidebar" aria-label="Быстрый переход и возражения">
-        <!-- 1. Stages Navigation -->
+      <nav class="whole-sidebar" aria-label="Быстрый переход по этапам скрипта">
         <div class="whole-sidebar-section whole-sidebar-nav-section">
           <div class="whole-sidebar-header">
             <span class="whole-sidebar-title">Этапы скрипта</span>
@@ -5560,16 +5588,6 @@ $('#whole-script').addEventListener('click',()=>{
             </button>
           </div>
         </div>
-
-        <!-- 2. Objections for Active Stage -->
-        <div class="whole-sidebar-section whole-sidebar-ob-section">
-          <div class="whole-sidebar-header">
-            <span class="whole-sidebar-title">Возражения этапа</span>
-            <span class="whole-ob-stage-name" id="whole-ob-stage-name">${escapeHTML(stages[0]?.title||'')}</span>
-          </div>
-          <div class="whole-ob-list" id="whole-ob-list"></div>
-          <div class="whole-ob-answer-box" id="whole-ob-answer-box" hidden></div>
-        </div>
       </nav>
 
       <main class="whole-content">
@@ -5581,6 +5599,7 @@ $('#whole-script').addEventListener('click',()=>{
             </div>
             ${renderStageLines(s,true,data.gifts)}
             ${operatorTipMarkup(s)}
+            ${renderObjectionsForStage(s,i)}
           </article>
         `).join('')}
 
@@ -5684,57 +5703,21 @@ $('#whole-script').addEventListener('click',()=>{
   const smsToggleBtn=view.querySelector('#whole-sms-toggle-btn');
   const smsBody=view.querySelector('#whole-sms-body');
 
-  const obStageName=view.querySelector('#whole-ob-stage-name');
-  const obListEl=view.querySelector('#whole-ob-list');
-  const obAnswerBox=view.querySelector('#whole-ob-answer-box');
-
   let activeStageIdx=0;
-  let activeObId=null;
+  const activeObByStage={};
 
-  // Render Objections for a given stage
-  function renderObjectionsForStage(idx){
-    const stg=stages[idx];
-    if(!stg)return;
-    obStageName.textContent=stg.title;
-    const ids=(stg.objectionIds||[]).filter(id=>data.objections&&data.objections[id]);
-    if(!ids.length){
-      obListEl.innerHTML='<div class="whole-ob-empty">Для этого этапа нет частых возражений</div>';
-      obAnswerBox.hidden=true;
-      obAnswerBox.innerHTML='';
-      activeObId=null;
-      return;
-    }
-    obListEl.innerHTML=ids.map(id=>{
-      const ob=data.objections[id];
-      const isAct=(id===activeObId);
-      return `
-        <button type="button" class="whole-ob-btn ${isAct?'active':''}" data-whole-ob-id="${id}" title="${escapeHTML(ob.title)}">
-          <span class="whole-ob-btn-icon">⚡</span>
-          <span class="whole-ob-btn-title">${escapeHTML(ob.title)}</span>
-          <span class="whole-ob-btn-arrow">›</span>
-        </button>
-      `;
-    }).join('');
-
-    // If an objection is already active for this stage, render its answer
-    if(activeObId!==null&&ids.includes(activeObId)){
-      renderObjectionAnswer(activeObId);
-    }else if(activeObId!==null&&!ids.includes(activeObId)){
-      activeObId=null;
-      obAnswerBox.hidden=true;
-      obAnswerBox.innerHTML='';
-    }
-  }
-
-  function renderObjectionAnswer(id){
+  function renderObjectionAnswer(sIdx,id){
     const ob=data.objections[id];
+    const obListEl=view.querySelector(`#whole-ob-list-${sIdx}`);
+    const obAnswerBox=view.querySelector(`#whole-ob-answer-box-${sIdx}`);
+    if(!obAnswerBox)return;
     if(!ob){
       obAnswerBox.hidden=true;
       obAnswerBox.innerHTML='';
       return;
     }
-    activeObId=id;
-    obListEl.querySelectorAll('.whole-ob-btn').forEach(btn=>{
+    activeObByStage[sIdx]=id;
+    obListEl?.querySelectorAll('.whole-ob-btn').forEach(btn=>{
       btn.classList.toggle('active',Number(btn.dataset.wholeObId)===id);
     });
     const targetStage=data.stages.find(s=>s.id===ob.nextStageId&&!s.hidden);
@@ -5743,7 +5726,7 @@ $('#whole-script').addEventListener('click',()=>{
     obAnswerBox.innerHTML=`
       <div class="whole-ob-answer-header">
         <span class="whole-ob-badge">Отработка возражения</span>
-        <button type="button" class="whole-ob-close-btn" id="whole-ob-close" title="Закрыть отработку">✕</button>
+        <button type="button" class="whole-ob-close-btn" data-whole-ob-close="${sIdx}" title="Закрыть отработку">✕</button>
       </div>
       <h4 class="whole-ob-title">${escapeHTML(ob.title)}</h4>
       <div class="whole-ob-speech-box">
@@ -5751,7 +5734,7 @@ $('#whole-script').addEventListener('click',()=>{
         <div class="whole-ob-text">${LayoutModel.renderText(ob.text,ob.textFormat)}</div>
       </div>
       <div class="whole-ob-actions">
-        <button type="button" class="whole-ob-copy-btn" id="whole-ob-copy" data-ob-id="${id}">📋 Скопировать ответ</button>
+        <button type="button" class="whole-ob-copy-btn" data-whole-ob-copy="${id}">📋 Скопировать ответ</button>
         ${targetIdx>=0?`<button type="button" class="whole-ob-jump-btn" data-jump-stage="${targetIdx}">Перейти: ${escapeHTML(targetStage.title)} →</button>`:''}
       </div>
     `;
@@ -5759,10 +5742,7 @@ $('#whole-script').addEventListener('click',()=>{
     obAnswerBox.scrollIntoView({block:'nearest',behavior:'smooth'});
   }
 
-  // Initial render of objections for stage 0
-  renderObjectionsForStage(0);
-
-  // Sidebar stage clicking
+  // Top horizontal navigation bar clicking
   sidebarEl.addEventListener('click',e=>{
     const stageBtn=e.target.closest('.whole-nav-item:not(.whole-nav-sms-item)');
     if(stageBtn){
@@ -5772,10 +5752,7 @@ $('#whole-script').addEventListener('click',()=>{
         target.scrollIntoView({behavior:'smooth',block:'start'});
         navItems.forEach((item,i)=>item.classList.toggle('active',i===idx));
         smsNavBtn?.classList.remove('active');
-        if(activeStageIdx!==idx){
-          activeStageIdx=idx;
-          renderObjectionsForStage(idx);
-        }
+        activeStageIdx=idx;
       }
       return;
     }
@@ -5791,32 +5768,43 @@ $('#whole-script').addEventListener('click',()=>{
       smsNavBtn?.classList.add('active');
       return;
     }
+  });
 
+  // Per-stage objections clicking inside contentEl
+  contentEl.addEventListener('click',e=>{
     const obBtn=e.target.closest('.whole-ob-btn');
     if(obBtn){
       const id=Number(obBtn.dataset.wholeObId);
-      if(activeObId===id&&!obAnswerBox.hidden){
+      const sIdx=Number(obBtn.dataset.stageIndex||0);
+      const obAnswerBox=view.querySelector(`#whole-ob-answer-box-${sIdx}`);
+      if(activeObByStage[sIdx]===id&&obAnswerBox&&!obAnswerBox.hidden){
         obAnswerBox.hidden=true;
         obAnswerBox.innerHTML='';
-        activeObId=null;
+        delete activeObByStage[sIdx];
         obBtn.classList.remove('active');
       }else{
-        renderObjectionAnswer(id);
+        renderObjectionAnswer(sIdx,id);
       }
       return;
     }
 
-    if(e.target.closest('#whole-ob-close')){
-      obAnswerBox.hidden=true;
-      obAnswerBox.innerHTML='';
-      activeObId=null;
-      obListEl.querySelectorAll('.whole-ob-btn').forEach(btn=>btn.classList.remove('active'));
+    const closeBtn=e.target.closest('[data-whole-ob-close]');
+    if(closeBtn){
+      const sIdx=Number(closeBtn.dataset.wholeObClose);
+      const obAnswerBox=view.querySelector(`#whole-ob-answer-box-${sIdx}`);
+      const obListEl=view.querySelector(`#whole-ob-list-${sIdx}`);
+      if(obAnswerBox){
+        obAnswerBox.hidden=true;
+        obAnswerBox.innerHTML='';
+      }
+      delete activeObByStage[sIdx];
+      obListEl?.querySelectorAll('.whole-ob-btn').forEach(btn=>btn.classList.remove('active'));
       return;
     }
 
-    const copyBtn=e.target.closest('#whole-ob-copy');
+    const copyBtn=e.target.closest('[data-whole-ob-copy]');
     if(copyBtn){
-      const obId=Number(copyBtn.dataset.obId);
+      const obId=Number(copyBtn.dataset.wholeObCopy);
       const ob=data.objections[obId];
       if(ob){
         navigator.clipboard.writeText(ob.text).then(()=>{
@@ -5838,23 +5826,19 @@ $('#whole-script').addEventListener('click',()=>{
         target.scrollIntoView({behavior:'smooth',block:'start'});
         navItems.forEach((item,i)=>item.classList.toggle('active',i===jIdx));
         smsNavBtn?.classList.remove('active');
-        if(activeStageIdx!==jIdx){
-          activeStageIdx=jIdx;
-          renderObjectionsForStage(jIdx);
-        }
+        activeStageIdx=jIdx;
       }
       return;
     }
   });
 
-  // Scroll tracking: dynamically update active stage and objections list as manager scrolls!
+  // Scroll tracking: dynamically update active stage button in top horizontal bar as manager scrolls
   let scrollTicking=false;
   function updateActiveStage(){
     if(!contentEl)return;
     const contentRect=contentEl.getBoundingClientRect();
     const smsRect=smsCard.getBoundingClientRect();
 
-    // Check if SMS card is in prominent view
     if(smsRect.top-contentRect.top<=180){
       navItems.forEach(btn=>btn.classList.remove('active'));
       smsNavBtn?.classList.add('active');
@@ -5877,11 +5861,7 @@ $('#whole-script').addEventListener('click',()=>{
         btn.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});
       }
     });
-
-    if(activeStageIdx!==currentActive){
-      activeStageIdx=currentActive;
-      renderObjectionsForStage(currentActive);
-    }
+    activeStageIdx=currentActive;
     scrollTicking=false;
   }
 
@@ -11823,7 +11803,9 @@ function refreshScheduleViewsWithoutScroll() {
       if (!stg) return;
       const headRow = art.querySelector('.whole-stage-head-row');
       const headHtml = headRow ? headRow.outerHTML : '';
-      art.innerHTML = `${headHtml}${renderStageLines(stg, true, data.gifts)}${operatorTipMarkup(stg)}`;
+      const obSec = art.querySelector('.whole-sidebar-ob-section');
+      const obHtml = obSec ? obSec.outerHTML : (typeof window.renderObjectionsForStage === 'function' ? window.renderObjectionsForStage(stg, idx) : '');
+      art.innerHTML = `${headHtml}${renderStageLines(stg, true, data.gifts)}${operatorTipMarkup(stg)}${obHtml}`;
     });
     if (wc) wc.scrollTop = prevScroll;
   }
