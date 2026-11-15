@@ -2673,7 +2673,7 @@ function currentSelectedCityName(){
   return 'Москва';
 }
 
-const BAUER_WEEK_DAYS = ['Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс', 'Пн'];
+const BAUER_WEEK_DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const BAUER_CALENDAR_YEAR = 2026;
 
 // Встроенный календарь недель 2026 года (46-я текущая неделя 2026 = 09.11.2026 – 15.11.2026)
@@ -11580,12 +11580,12 @@ function renderPlanView() {
       <div class="plan-step-card">
         <div class="plan-step-title-row">
           <div>
-            <h2>Этап 3: Дни работы и времена презентаций (${activeWeekNum}-я неделя ${BAUER_CALENDAR_YEAR} · Вт–Пн)</h2>
-            <p>Отмечайте рабочие дни зала (Вт, Ср, Чт, Пт, Сб, Вс, Пн) и <strong>сразу в карточке каждого дня</strong> ставьте времена презентаций. Все времена презентаций по Москве уже перенесены в дни работы.</p>
+            <h2>Этап 3: Дни работы и времена презентаций (${activeWeekNum}-я неделя ${BAUER_CALENDAR_YEAR} · Пн–Вс)</h2>
+            <p>Отмечайте рабочие дни зала (Пн, Вт, Ср, Чт, Пт, Сб, Вс) и <strong>сразу в карточке каждого дня</strong> ставьте времена презентаций. Все времена презентаций по Москве уже перенесены в дни работы.</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button type="button" class="plan-week-btn" id="plan-btn-apply-tue-sun-days">Всем залам: Вт–Вс (6 дн.)</button>
-            <button type="button" class="plan-week-btn" id="plan-btn-apply-all-days">Всем залам: Все 7 дней (Вт–Пн)</button>
+            <button type="button" class="plan-week-btn" id="plan-btn-apply-all-days">Всем залам: Все 7 дней (Пн–Вс)</button>
             <button type="button" class="plan-week-btn" id="plan-btn-apply-standard-times">Всем залам и дням: 10:00, 14:00, 18:00</button>
           </div>
         </div>
@@ -11613,7 +11613,7 @@ function renderPlanView() {
                         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                           <span style="font-size:11.5px;color:var(--muted);font-weight:700">Дни:</span>
                           <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},tue_sun" style="padding:3px 8px;font-size:11px">Вт–Вс</button>
-                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},all" style="padding:3px 8px;font-size:11px">Все 7 (Вт–Пн)</button>
+                          <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},all" style="padding:3px 8px;font-size:11px">Все 7 (Пн–Вс)</button>
                           <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},work" style="padding:3px 8px;font-size:11px">Будни</button>
                           <button type="button" class="plan-week-btn" data-plan-preset-days="${cIdx},${hIdx},weekend" style="padding:3px 8px;font-size:11px">Сб–Вс</button>
                           <span style="font-size:11.5px;color:var(--muted);font-weight:700;margin-left:6px">Время на все дни зала:</span>
