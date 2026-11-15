@@ -10018,6 +10018,14 @@ function renderUsersSection(){
       </div>
     `}
 
+    <div class="emp-search-row" style="display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap">
+      <div style="position:relative;flex:1 1 320px;max-width:460px">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none">🔍</span>
+        <input type="search" id="emp-search-input" value="${E(window.empSearchQuery||'')}" placeholder="Поиск сотрудника: ФИО, логин, роль, руководитель…" autocomplete="off" style="width:100%;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;padding:0 12px 0 36px;box-sizing:border-box">
+      </div>
+      <span id="emp-search-count" style="font-size:12px;color:var(--muted);font-weight:700"></span>
+    </div>
+
     <div class="emp-table-wrap">
       <table class="emp-table">
         <thead>
@@ -10057,7 +10065,10 @@ function renderUsersSection(){
               deptLabel='Редактор гипер-скрипта';
             }
 
-            return `<tr>
+            const searchHay=[u.displayName,u.login,ROLE_NAMES[u.role]||u.role,assignedHead?.displayName,assignedHead?.login].filter(Boolean).join(' ').toLowerCase().replace(/ё/g,'е');
+            const searchQ=(window.empSearchQuery||'').trim().toLowerCase().replace(/ё/g,'е');
+            const searchHidden=searchQ&&!searchQ.split(/\s+/).every(t=>searchHay.includes(t));
+            return `<tr data-emp-search="${E(searchHay)}" ${searchHidden?'hidden':''}>
               <td>
                 <div class="emp-user-cell">
                   <span class="emp-user-name">${E(u.displayName||u.login)}</span>
@@ -10884,6 +10895,7 @@ function renderOwnerView(){
     ${navItems.map(([id,lbl])=>`<button type="button" role="tab" class="${ownerTab===id?'on':''}" data-owner-tab="${id}">${lbl}</button>`).join('')}
   </nav>
   ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='trainer'?renderTrainerWorkspaceSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():ownerTab==='design'?renderDesignSection():renderSecuritySection()}`;
+  if(ownerTab==='users'&&typeof applyEmpSearchFilter==='function')applyEmpSearchFilter();
 }
 
 
@@ -11618,6 +11630,32 @@ document.addEventListener('click',async e=>{
     return;
   }
 });
+
+document.addEventListener('input',e=>{
+  const inp=e.target.closest('#emp-search-input');
+  if(!inp)return;
+  window.empSearchQuery=inp.value;
+  applyEmpSearchFilter();
+});
+
+function applyEmpSearchFilter(){
+  const inp=document.getElementById('emp-search-input');
+  if(!inp)return;
+  const q=(inp.value||'').trim().toLowerCase().replace(/ё/g,'е');
+  const tokens=q?q.split(/\s+/):[];
+  const table=inp.closest('.owner-card')?.querySelector('.emp-table tbody');
+  if(!table)return;
+  let shown=0,total=0;
+  table.querySelectorAll('tr[data-emp-search]').forEach(tr=>{
+    total++;
+    const hay=tr.dataset.empSearch||'';
+    const ok=!tokens.length||tokens.every(t=>hay.includes(t));
+    tr.hidden=!ok;
+    if(ok)shown++;
+  });
+  const cnt=document.getElementById('emp-search-count');
+  if(cnt)cnt.textContent=tokens.length?(shown?`Найдено: ${shown} из ${total}`:'Никого не найдено'):'';
+}
 
 document.addEventListener('click',async e=>{
   const dlBtn=e.target.closest('#owner-backup-download');
