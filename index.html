@@ -3169,11 +3169,23 @@ function getHallTimesForDay(hall, dayName) {
   return Array.isArray(hall.times) ? hall.times : [];
 }
 
+function getPlannedCitiesForPlan(plan = activePresentationPlan) {
+  const fromPlan = [...new Set((plan?.cities || [])
+    .map(c => String(c?.cityName || '').trim())
+    .filter(c => Boolean(c) && Boolean(getCityPlanForCity(c, plan))))]
+    .sort((a, b) => a.localeCompare(b, 'ru'));
+  if (fromPlan.length) return fromPlan;
+  return [...new Set((plan?.cities || [])
+    .map(c => String(c?.cityName || '').trim())
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'ru'));
+}
+
 function presentationScheduleMarkup(stage, customStyle = '') {
   const viewingWeek = getScheduleViewingWeek();
   const plan = getActivePlanForViewingWeek(viewingWeek);
   const currentCity = currentSelectedCityName();
-  const availableCities = getAllAvailableCities();
+  const plannedCities = getPlannedCitiesForPlan(plan);
   const boxStyleAttr = customStyle ? ` style="${customStyle}"` : '';
 
   const cityPlan = plan?.cities?.find(c => c.cityName?.trim().toLowerCase() === currentCity?.trim().toLowerCase());
@@ -3197,20 +3209,29 @@ function presentationScheduleMarkup(stage, customStyle = '') {
   const activeHallIdx = cityPlan?.halls?.length ? Math.min(cityScheduleActiveHall || 0, cityPlan.halls.length - 1) : 0;
   const activeHall = cityPlan?.halls?.[activeHallIdx] || null;
 
-  // Тулбар управления графиком: выбор города, выбор зала и перелистывание недель прямо в карточке
+  // Тулбар управления графиком: ручной ввод/поиск города + фильтр только по городам с планом презентаций, выбор зала и перелистывание недель
   const toolbarHtml = `
     <div class="psb-toolbar">
       <div class="psb-toolbar-left">
-        <div class="psb-tool-field">
+        <div class="psb-tool-field psb-city-combo-wrap">
           <label class="psb-tool-label">📍 Город:</label>
-          <select class="psb-select psb-city-select" data-plan-schedule-city aria-label="Выбор города для графика презентаций">
-            <option value="">Выберите город…</option>
-            ${availableCities.map(c => `
-              <option value="${escapeHTML(c)}" ${c.trim().toLowerCase() === currentCity.trim().toLowerCase() ? 'selected' : ''}>
-                ${escapeHTML(c)}${getCityPlanForCity(c, plan) ? '' : ' (нет плана)'}
-              </option>
-            `).join('')}
-          </select>
+          <div class="psb-city-combo">
+            <input type="text"
+              class="psb-select psb-city-select psb-city-input"
+              data-plan-schedule-city
+              value="${escapeHTML(currentCity)}"
+              placeholder="Введите или выберите город…"
+              autocomplete="off"
+              aria-label="Выбор города для графика презентаций">
+            <button type="button" class="psb-city-dropdown-toggle" data-psb-city-toggle title="Выбрать город из списка с планом презентаций" aria-label="Показать список городов">▾</button>
+            <div class="psb-city-dropdown" hidden>
+              ${plannedCities.length ? plannedCities.map(c => `
+                <button type="button" class="psb-city-option ${c.trim().toLowerCase() === currentCity.trim().toLowerCase() ? 'active' : ''}" data-psb-city-option="${escapeHTML(c)}">
+                  <span>📍 ${escapeHTML(c)}</span>
+                </button>
+              `).join('') : '<div class="psb-city-empty">Нет городов с планом презентаций</div>'}
+            </div>
+          </div>
         </div>
 
         ${cityPlan?.halls?.length ? `
@@ -6537,8 +6558,8 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .plan-save-btn{background:var(--teal) !important;color:#fff !important;border:none !important;padding:12px 24px !important;border-radius:10px !important;font-weight:800 !important;font-size:14px !important;cursor:pointer !important;box-shadow:0 4px 14px color-mix(in srgb, var(--teal) 35%, transparent) !important}
 .plan-save-btn:hover{opacity:0.92;transform:translateY(-1px)}
 /* Interactive Schedule Table for Call Operators (Only on stage «Выбор времени») */
-.presentation-schedule-box{margin-top:22px;margin-bottom:20px;border:2px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 35%, var(--line));border-radius:18px;background:var(--custom-card-bg, var(--surface, #ffffff));box-shadow:0 6px 20px rgba(0,0,0,0.06);overflow:hidden;transition:all .2s ease}
-.psb-header{display:flex;justify-content:space-between;align-items:center;padding:14px 22px;background:color-mix(in srgb, var(--custom-accent, var(--teal)) 8%, var(--surface-alt, #f8fafc));border-bottom:1.5px solid var(--line);gap:12px;flex-wrap:wrap}
+.presentation-schedule-box{margin-top:22px;margin-bottom:20px;border:2px solid color-mix(in srgb, var(--custom-accent, var(--teal)) 35%, var(--line));border-radius:18px;background:var(--custom-card-bg, var(--surface, #ffffff));box-shadow:0 6px 20px rgba(0,0,0,0.06);overflow:visible;transition:all .2s ease}
+.psb-header{display:flex;justify-content:space-between;align-items:center;padding:14px 22px;background:color-mix(in srgb, var(--custom-accent, var(--teal)) 8%, var(--surface-alt, #f8fafc));border-bottom:1.5px solid var(--line);border-radius:16px 16px 0 0;gap:12px;flex-wrap:wrap}
 .psb-title{font-size:14px;font-weight:850;color:var(--ink);display:flex;align-items:center;gap:8px}
 .psb-toolbar{display:flex;justify-content:space-between;align-items:center;padding:12px 22px;background:color-mix(in srgb, var(--custom-accent, var(--teal)) 4%, var(--surface-alt, #f8fafc));border-bottom:1.5px solid var(--line);gap:14px;flex-wrap:wrap}
 .psb-toolbar-left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -6547,6 +6568,16 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .psb-tool-label{font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
 .psb-select{height:36px;padding:0 28px 0 10px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface, #fff);font-size:12.5px;font-weight:750;color:var(--ink);cursor:pointer;outline:none;transition:border-color .15s ease}
 .psb-select:focus,.psb-select:hover{border-color:var(--teal)}
+.psb-city-combo{position:relative;display:inline-flex;align-items:center;min-width:190px}
+.psb-city-input{width:100%;padding:0 32px 0 11px;cursor:text}
+.psb-city-dropdown-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:26px;height:28px;border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:800;cursor:pointer;display:inline-grid;place-items:center;border-radius:6px;transition:all .15s ease}
+.psb-city-dropdown-toggle:hover{background:color-mix(in srgb, var(--teal) 12%, transparent);color:var(--teal)}
+.psb-city-dropdown{position:absolute;top:calc(100% + 5px);left:0;right:0;min-width:220px;max-height:260px;overflow-y:auto;background:var(--surface, #fff);border:1.5px solid color-mix(in srgb, var(--teal) 40%, var(--line));border-radius:12px;box-shadow:0 12px 28px rgba(0,0,0,0.14);padding:5px;z-index:120;display:flex;flex-direction:column;gap:2px}
+.psb-city-dropdown[hidden]{display:none !important}
+.psb-city-option{width:100%;text-align:left;padding:8px 10px;border:none;border-radius:8px;background:transparent;color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s ease,color .12s ease}
+.psb-city-option:hover,.psb-city-option.matched{background:color-mix(in srgb, var(--teal) 12%, var(--surface, #fff));color:var(--teal)}
+.psb-city-option.active{background:var(--teal);color:#fff}
+.psb-city-empty{padding:10px 12px;font-size:12px;color:var(--muted);font-weight:600;text-align:center}
 .psb-week-nav-wrap{display:inline-flex;align-items:center;gap:2px;background:var(--surface, #fff);border:1.5px solid var(--line);border-radius:10px;padding:2px 4px}
 .psb-nav-arrow{width:28px;height:28px;display:inline-grid;place-items:center;border:none;background:transparent;border-radius:6px;cursor:pointer;font-size:11px;font-weight:800;color:var(--ink);transition:all .15s ease}
 .psb-nav-arrow:hover:not(:disabled){background:color-mix(in srgb, var(--teal) 15%, var(--surface));color:var(--teal)}
@@ -6573,6 +6604,10 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .psb-time-btn.active{background:var(--teal) !important;color:#fff !important;border-color:var(--teal) !important;box-shadow:0 3px 10px color-mix(in srgb, var(--teal) 40%, transparent) !important}
 /* Dark & Neon Theme Overrides for Schedule Component */
 :root[data-theme="dark"] .psb-select, :root[data-page-dark="1"] .psb-select, :root[data-card-style="neon"] .psb-select{background:rgba(12,20,32,0.85);color:#fff}
+:root[data-theme="dark"] .psb-city-dropdown, :root[data-page-dark="1"] .psb-city-dropdown, :root[data-card-style="neon"] .psb-city-dropdown{background:#0f172a;border-color:rgba(20,184,166,0.45)}
+:root[data-theme="dark"] .psb-city-option, :root[data-page-dark="1"] .psb-city-option, :root[data-card-style="neon"] .psb-city-option{color:#e2e8f0}
+:root[data-theme="dark"] .psb-city-option:hover, :root[data-theme="dark"] .psb-city-option.matched, :root[data-page-dark="1"] .psb-city-option:hover, :root[data-page-dark="1"] .psb-city-option.matched, :root[data-card-style="neon"] .psb-city-option:hover, :root[data-card-style="neon"] .psb-city-option.matched{background:rgba(20,184,166,0.2);color:#5eead4}
+:root[data-theme="dark"] .psb-city-option.active, :root[data-page-dark="1"] .psb-city-option.active, :root[data-card-style="neon"] .psb-city-option.active{background:var(--teal);color:#fff}
 :root[data-theme="dark"] .psb-week-nav-wrap, :root[data-page-dark="1"] .psb-week-nav-wrap, :root[data-card-style="neon"] .psb-week-nav-wrap{background:rgba(12,20,32,0.85)}
 :root[data-theme="dark"] .psb-nav-arrow, :root[data-page-dark="1"] .psb-nav-arrow, :root[data-card-style="neon"] .psb-nav-arrow{color:#fff}
 :root[data-theme="dark"] .psb-hall-tab, :root[data-page-dark="1"] .psb-hall-tab, :root[data-card-style="neon"] .psb-hall-tab{background:rgba(12,20,32,0.85);color:#fff}
@@ -12285,30 +12320,154 @@ document.addEventListener('click', e => {
     refreshScheduleViewsWithoutScroll();
     return;
   }
+
+  const cityToggleBtn = e.target.closest('[data-psb-city-toggle]');
+  if (cityToggleBtn) {
+    e.preventDefault();
+    const combo = cityToggleBtn.closest('.psb-city-combo');
+    const dropdown = combo?.querySelector('.psb-city-dropdown');
+    const input = combo?.querySelector('[data-plan-schedule-city]');
+    if (dropdown) {
+      const wasHidden = dropdown.hidden;
+      closeAllScheduleCityDropdowns(combo);
+      if (wasHidden) {
+        openScheduleCityDropdown(combo, '', true);
+        if (input) input.focus();
+      } else {
+        dropdown.hidden = true;
+      }
+    }
+    return;
+  }
+
+  const cityOptionBtn = e.target.closest('[data-psb-city-option]');
+  if (cityOptionBtn) {
+    e.preventDefault();
+    const chosenCity = cityOptionBtn.dataset.psbCityOption || '';
+    const combo = cityOptionBtn.closest('.psb-city-combo');
+    const input = combo?.querySelector('[data-plan-schedule-city]');
+    if (input) input.value = chosenCity;
+    closeAllScheduleCityDropdowns();
+    applyScheduleCitySelection(chosenCity);
+    return;
+  }
+
+  const cityInput = e.target.closest('[data-plan-schedule-city]');
+  if (cityInput) {
+    const combo = cityInput.closest('.psb-city-combo');
+    if (combo) {
+      closeAllScheduleCityDropdowns(combo);
+      openScheduleCityDropdown(combo, '', true);
+    }
+    return;
+  }
+
+  if (!e.target.closest('.psb-city-combo')) {
+    closeAllScheduleCityDropdowns();
+  }
+});
+
+function closeAllScheduleCityDropdowns(exceptCombo = null) {
+  document.querySelectorAll('.psb-city-combo').forEach(combo => {
+    if (exceptCombo && combo === exceptCombo) return;
+    const dd = combo.querySelector('.psb-city-dropdown');
+    if (dd) dd.hidden = true;
+  });
+}
+
+function findBestMatchingScheduleCity(combo, rawText) {
+  const q = String(rawText || '').trim().toLowerCase();
+  if (!q || !combo) return '';
+  const options = [...combo.querySelectorAll('[data-psb-city-option]')]
+    .map(btn => btn.dataset.psbCityOption || '')
+    .filter(Boolean);
+  const exact = options.find(c => c.toLowerCase() === q);
+  if (exact) return exact;
+  const starts = options.find(c => c.toLowerCase().startsWith(q));
+  if (starts) return starts;
+  const includes = options.find(c => c.toLowerCase().includes(q));
+  return includes || '';
+}
+
+function openScheduleCityDropdown(combo, filterText = '', showAll = false) {
+  const dropdown = combo?.querySelector('.psb-city-dropdown');
+  if (!dropdown) return;
+  const q = showAll ? '' : String(filterText || '').trim().toLowerCase();
+  const options = [...dropdown.querySelectorAll('[data-psb-city-option]')];
+  let visibleCount = 0;
+  let firstMatch = null;
+  options.forEach(btn => {
+    const name = (btn.dataset.psbCityOption || '').toLowerCase();
+    const matches = !q || name.includes(q);
+    btn.hidden = !matches;
+    btn.classList.remove('matched');
+    if (matches) {
+      visibleCount++;
+      if (!firstMatch && q) firstMatch = btn;
+    }
+  });
+  if (firstMatch) firstMatch.classList.add('matched');
+  let emptyEl = dropdown.querySelector('.psb-city-empty-filter');
+  if (visibleCount === 0 && options.length > 0) {
+    if (!emptyEl) {
+      emptyEl = document.createElement('div');
+      emptyEl.className = 'psb-city-empty psb-city-empty-filter';
+      emptyEl.textContent = 'Город с планом не найден';
+      dropdown.appendChild(emptyEl);
+    }
+    emptyEl.hidden = false;
+  } else if (emptyEl) {
+    emptyEl.hidden = true;
+  }
+  dropdown.hidden = false;
+}
+
+function applyScheduleCitySelection(rawCity) {
+  const newCity = String(rawCity || '').trim();
+  const vCity = document.getElementById('venue-city');
+  if (vCity) {
+    vCity.value = newCity;
+    vCity.dispatchEvent(new Event('change', { bubbles: true }));
+  } else {
+    try {
+      const sv = JSON.parse(localStorage.getItem('bauer-venue') || '{}');
+      sv.city = newCity;
+      sv.hall = '';
+      localStorage.setItem('bauer-venue', JSON.stringify(sv));
+    } catch {}
+  }
+  cityScheduleActiveHall = 0;
+  if (selectedPlanSlot && selectedPlanSlot.city && selectedPlanSlot.city.trim().toLowerCase() !== newCity.toLowerCase()) {
+    selectedPlanSlot = null;
+    try { localStorage.removeItem('bauer-selected-plan-slot'); } catch {}
+  }
+  refreshScheduleViewsWithoutScroll();
+}
+
+document.addEventListener('mousedown', e => {
+  if (e.target.closest('[data-psb-city-option]') || e.target.closest('[data-psb-city-toggle]')) {
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('focusin', e => {
+  if (e.target.matches('[data-plan-schedule-city]')) {
+    const combo = e.target.closest('.psb-city-combo');
+    if (combo) {
+      closeAllScheduleCityDropdowns(combo);
+      openScheduleCityDropdown(combo, '', true);
+    }
+  }
 });
 
 // Input and Change Listeners for Plan Draft & Schedule Toolbar
 document.addEventListener('change', e => {
   if (e.target.matches('[data-plan-schedule-city]')) {
-    const newCity = e.target.value.trim();
-    const vCity = document.getElementById('venue-city');
-    if (vCity) {
-      vCity.value = newCity;
-      vCity.dispatchEvent(new Event('change', { bubbles: true }));
-    } else {
-      try {
-        const sv = JSON.parse(localStorage.getItem('bauer-venue') || '{}');
-        sv.city = newCity;
-        sv.hall = '';
-        localStorage.setItem('bauer-venue', JSON.stringify(sv));
-      } catch {}
-    }
-    cityScheduleActiveHall = 0;
-    if (selectedPlanSlot && selectedPlanSlot.city && selectedPlanSlot.city.trim().toLowerCase() !== newCity.toLowerCase()) {
-      selectedPlanSlot = null;
-      try { localStorage.removeItem('bauer-selected-plan-slot'); } catch {}
-    }
-    refreshScheduleViewsWithoutScroll();
+    const combo = e.target.closest('.psb-city-combo');
+    const raw = e.target.value.trim();
+    const matched = findBestMatchingScheduleCity(combo, raw) || raw;
+    closeAllScheduleCityDropdowns();
+    applyScheduleCitySelection(matched);
     return;
   }
 
@@ -12377,6 +12536,11 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('input', e => {
+  if (e.target.matches('[data-plan-schedule-city]')) {
+    const combo = e.target.closest('.psb-city-combo');
+    if (combo) openScheduleCityDropdown(combo, e.target.value, false);
+    return;
+  }
   if (e.target.matches('[data-plan-hall-name]') && planDraft) {
     const [cIdx, hIdx] = e.target.dataset.planHallName.split(',').map(Number);
     const hall = planDraft.cities[cIdx]?.halls[hIdx];
@@ -12389,6 +12553,20 @@ document.addEventListener('input', e => {
 });
 
 document.addEventListener('keydown', e => {
+  if (e.target.matches && e.target.matches('[data-plan-schedule-city]')) {
+    const combo = e.target.closest('.psb-city-combo');
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const matched = findBestMatchingScheduleCity(combo, e.target.value) || e.target.value.trim();
+      closeAllScheduleCityDropdowns();
+      applyScheduleCitySelection(matched);
+      return;
+    }
+    if (e.key === 'Escape') {
+      closeAllScheduleCityDropdowns();
+      return;
+    }
+  }
   if (e.key === 'Enter' && e.target.id && e.target.id.startsWith('plan-add-day-time-')) {
     e.preventDefault();
     const btn = e.target.parentElement?.querySelector('[data-plan-add-day-time]');
