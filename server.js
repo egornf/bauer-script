@@ -278,6 +278,7 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       layouts: seed.layouts || [],
       addresses: seed.addresses || { revision: 0, venues: [] },
       giftbase: { gifts: seed.gifts || [], deleted: [], updatedAt: Date.now() },
+      directionbase: { directions: [], updatedAt: Date.now() },
       trainerBlocks: []
     };
     writeJsonAtomic(files.appData, appData);
@@ -1097,7 +1098,7 @@ function createAppServer(options = {}) {
         return;
       }
 
-      const needAppData = ['/api/content', '/api/scripts', '/api/department/scripts', '/api/giftbase', '/api/addresses', '/api/layouts', '/api/layouts-order', '/api/presentation-plan', '/api/users', '/api/trainer'].some(
+      const needAppData = ['/api/content', '/api/scripts', '/api/department/scripts', '/api/giftbase', '/api/directionbase', '/api/addresses', '/api/layouts', '/api/layouts-order', '/api/presentation-plan', '/api/users', '/api/trainer'].some(
         p => pathname === p || pathname.startsWith(p + '/')
       );
       await store.syncFromBlob({ needAppData });
@@ -1779,6 +1780,31 @@ function createAppServer(options = {}) {
             details: { giftsCount: gifts.length }
           });
           return sendJson(res, 200, appData.giftbase);
+        }
+      }
+
+      if (pathname === '/api/directionbase') {
+        if (method === 'GET') {
+          return sendJson(res, 200, appData.directionbase || { directions: [], updatedAt: 0 });
+        }
+        if (method === 'PUT') {
+          if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+          if (!hasPermission(auth.user, 'gifts.manage') && !hasPermission(auth.user, 'layouts.manage')) {
+            store.logEvent({ action: 'directions.update.denied', actor: auth.user, ip, userAgent, status: 'denied' });
+            return sendJson(res, 403, { error: 'Недостаточно прав для изменения базы направлений.' });
+          }
+          const body = await readBody(req);
+          const directions = Array.isArray(body.directions) ? body.directions : [];
+          appData.directionbase = { directions, updatedAt: Date.now() };
+          store.saveAppData();
+          store.logEvent({
+            action: 'directions.update',
+            actor: auth.user,
+            ip,
+            userAgent,
+            details: { directionsCount: directions.length }
+          });
+          return sendJson(res, 200, appData.directionbase);
         }
       }
 

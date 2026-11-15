@@ -2802,6 +2802,8 @@ const clone=LayoutModel.copy;
 function valid(value){return !!value&&Array.isArray(value.stages)&&value.stages.length>0&&value.stages.length<=40&&value.stages.some(s=>!s.hidden)&&value.stages.every(s=>typeof s.title==='string'&&typeof s.tip==='string'&&Array.isArray(s.lines)&&s.lines.every(t=>typeof t==='string'))&&Array.isArray(value.objections)&&value.objections.length<=200&&value.objections.every(o=>typeof o.title==='string'&&typeof o.text==='string');}
 /* ---- Общая база подарков: один список для всех макетов ---- */
 const giftBase=[],giftDeleted=new Set();let giftReady=false,giftSaveT=null;
+const directionBase=[];let directionReady=false,directionSaveT=null;
+function saveDirectionBase(){clearTimeout(directionSaveT);directionSaveT=setTimeout(()=>{try{LDB.set('directionbase',{directions:clone(directionBase),updatedAt:Date.now()});}catch{}},300);}
 const giftSig=l=>(l||[]).map(g=>[g.id,g.title,g.condition,g.script,JSON.stringify(g.scriptFormat||''),(g.photo||'').length,(g.photo||'').slice(-24)].join('|')).join('§');
 function mergeGifts(list){let ch=false;for(const g of list||[]){if(!g||typeof g.id!=='string'||giftDeleted.has(g.id))continue;const b=giftBase.find(x=>x.id===g.id);
   if(!b){giftBase.push(clone(g));ch=true;}else{if(!b.photo&&g.photo){b.photo=g.photo;ch=true;}if(!(b.script||'').trim()&&(g.script||'').trim()){b.script=g.script;b.scriptFormat=clone(g.scriptFormat||LayoutModel.cleanFormat(null,0));ch=true;}}}return ch;}
@@ -3692,11 +3694,30 @@ function renderScriptImageBlock(rawStr,bCss=''){
   }
   return `<figure class="line script-image-block"${bCss?` style="${bCss}"`:''}><img src="${escapeHTML(img.src)}" alt="${escapeHTML(img.caption||'Изображение')}" style="width:${img.widthPct}%;max-width:100%">${img.caption.trim()?`<figcaption class="script-image-caption">${escapeHTML(img.caption)}</figcaption>`:''}</figure>`;
 }
+function renderScriptDirectionBlock(stage,n,bCss=''){
+  const dirId=stage.lineGifts?.[n]||'';
+  const dir=directionBase.find(d=>d.id===dirId);
+  if(!dir){
+    return `<section class="script-gift script-direction"${bCss?` style="${bCss}"`:''} aria-label="Направление"><div class="script-gift-label">🧭 Направление не выбрано</div><div class="script-gift-text"><p class="line"><span class="v4-empty">Выберите направление из базы в редакторе макета</span></p></div></section>`;
+  }
+  const label=dir.variant?.trim()?`${dir.title||'Направление'} · ${dir.variant}`:(dir.title||'Направление');
+  const html=fillPlanHtml(fillVenueHtml(LayoutModel.renderText(dir.script||'',dir.scriptFormat)));
+  return `<section class="script-gift script-direction"${bCss?` style="${bCss}"`:''} aria-label="${escapeHTML(dir.title||'Направление')}"><div class="script-gift-label">🧭 ${escapeHTML(label)}</div><div class="script-gift-text"><p class="line">${html||'<span class="v4-empty">Текст направления пуст</span>'}</p></div></section>`;
+}
 function renderStageLines(stage,readonly=false,gifts=data.gifts){
   let html='';
   stage.lines.forEach((line,n)=>{
     const kind=stage.lineKinds?.[n],isGift=['gift','gift-plus-one','gift-plus-two'].includes(kind);
-    if(isGift){
+    if(kind==='direction'){
+    const curDirId=s.lineGifts?.[i]||'';
+    const dir=directionBase.find(d=>d.id===curDirId);
+    const isOpen=dirPickerOpen===i||!dir;
+    const label=dir?(dir.variant?.trim()?`${dir.title} · ${dir.variant}`:(dir.title||'Направление')):'Направление не выбрано';
+    const effFmt=lineFmt?.style?.blockBg?lineFmt:(dir?.scriptFormat||lineFmt);
+    const bStyle=LayoutModel.blockCSS(effFmt);
+    return `<div class="v4-line is-gift is-direction"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><button type="button" class="v4-gpick-btn ${isOpen?'open':''}" data-v4="toggle-dir-picker" data-i="${i}" title="Выбрать направление из базы">${dir?`🧭 <span>${E(dir.title||'Без названия')}</span>${dir.variant?`<small>· ${E(dir.variant)}</small>`:''}`:'<span>🔍 Выбрать направление…</span>'}<b aria-hidden="true">▾</b></button>${dir?`<button type="button" class="v4-gpick-link" data-v4="goto-direction" data-id="${E(dir.id)}" title="Редактировать в Базе направлений">✎ В базе направлений</button>`:''}${blockBar(i,effFmt?.style?.blockBg)}<span class="v4-s"></span>${lineActionBtns(i,'Удалить направление')}</div>${isOpen?`<div class="v4-gpick-panel"><div class="v4-gpick-top"><input type="search" class="v4-gpick-search" data-v4-dirpicksearch="${i}" placeholder="🔍 Фильтр по направлениям: Посуда, Сок, Массаж, ВТ, вариант…" value="${E(dirPickerQuery)}" autocomplete="off"><button type="button" data-v4="new-dir-for-line" data-i="${i}">+ Создать направление в базе</button></div><div class="v4-gpick-list" data-v4-dirpicklist="${i}">${renderDirPickerOptions(i,curDirId,dirPickerQuery)}</div></div>`:''}${dir?`<section class="script-gift script-direction"${bStyle?` style="${bStyle}"`:''} aria-label="${E(dir.title||'Направление')}"><div class="script-gift-label">🧭 ${E(label)}</div><div class="script-direction-text"><p class="line">${(dir.script||'').trim()?LayoutModel.renderText(dir.script,dir.scriptFormat):'<span class="v4-empty">Текст направления пуст. Нажмите «✎ В базе направлений», чтобы заполнить текст.</span>'}</p></div></section>`:''}</div>`;
+  }
+  if(isGift){
       const gid=stage.lineGifts?.[n]||lineGiftId(kind)||(kind==='gift'?'surprise':null);
       const gift=gifts.find(g=>g.id===gid);
       if(!gift){
@@ -3712,6 +3733,7 @@ function renderStageLines(stage,readonly=false,gifts=data.gifts){
     }
     const bCss=LayoutModel.blockCSS(stage.lineFormats?.[n]);
     if(kind==='schedule'){html+=presentationScheduleMarkup(stage,bCss);return;}
+    if(kind==='direction'){html+=renderScriptDirectionBlock(stage,n,bCss);return;}
     if(kind==='address'){html+=addressLineHtml(line,stage.lineFormats?.[n],bCss);return;}
     if(kind==='table'){html+=renderScriptTableBlock(line,bCss,gifts,readonly);return;}
     if(kind==='image'){html+=renderScriptImageBlock(line,bCss);return;}
@@ -4068,8 +4090,8 @@ const VaultCrypto={
 };
 
 const LDB={
-  async get(k){if(k==='giftbase'){try{return await api('/api/giftbase');}catch{return null;}}return null;},
-  async set(k,v){if(k==='giftbase'){if(!adminUnlocked)return;try{await api('/api/giftbase',{method:'PUT',body:JSON.stringify(v)});}catch(e){toast(e.message);}}}
+  async get(k){if(k==='giftbase'){try{return await api('/api/giftbase');}catch{return null;}}if(k==='directionbase'){try{return await api('/api/directionbase');}catch{return null;}}return null;},
+  async set(k,v){if(k==='giftbase'){if(!adminUnlocked)return;try{await api('/api/giftbase',{method:'PUT',body:JSON.stringify(v)});}catch(e){toast(e.message);}}if(k==='directionbase'){if(!adminUnlocked)return;try{await api('/api/directionbase',{method:'PUT',body:JSON.stringify(v)});}catch(e){toast(e.message);}}}
 };
 async function getLocalLayouts(){
   try{return ((await api('/api/scripts')).layouts)||[];}catch{return [];}
@@ -5017,6 +5039,21 @@ async function api_local_vault(rawPath,options={}){
       await saveUsers();
       await logEvent({action:'department.scripts.update',actor:authUser,target:targetHead.login,details:{scriptIds:targetHead.departmentScripts}});
       return {ok:true,headId:targetHead.id,scriptIds:targetHead.departmentScripts};
+    }
+  }
+
+  if(pathname==='/api/directionbase'){
+    if(method==='GET'){
+      const db=await VaultDB.get('directionbase',null);
+      return db||{directions:[],updatedAt:0};
+    }
+    if(method==='PUT'){
+      if(!authUser)throw fail('Требуется авторизация.',401);
+      if(!hasPerm(authUser,'gifts.manage')&&!hasPerm(authUser,'layouts.manage'))throw fail('Недостаточно прав для изменения базы направлений.',403);
+      const rec={directions:Array.isArray(body.directions)?body.directions:[],updatedAt:Date.now()};
+      await VaultDB.set('directionbase',rec);
+      await logEvent({action:'directions.update',actor:authUser,details:{count:rec.directions.length}});
+      return rec;
     }
   }
 
@@ -6369,14 +6406,17 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 const lv=document.getElementById('layouts-view'),E=escapeHTML,q=(s)=>lv.querySelector(s);
 let tab='stage',edit=null,obSel=null,sel={s:1e9,e:1e9},start=null,timer=null,del=null;
 let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false,tblSelCell={};
-const KINDS={speech:'Речь',gift:'🎁 Подарок',address:'📍 Адрес',schedule:'📅 График времени',table:'📊 Таблица',image:'🖼 Картинка'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
+let dirPickerOpen=null,dirPickerQuery='',dirDbQuery='',highlightDirId=null;
+const DIR_PRESETS=['Посуда','Сок','Массаж','ВТ'];
+const KINDS={speech:'Речь',gift:'🎁 Подарок',direction:'🧭 Направление',address:'📍 Адрес',schedule:'📅 График времени',table:'📊 Таблица',image:'🖼 Картинка'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
 const TXT=['auto','#0b7a6e','#c0392b','#d68910','#1f5fbf','#7d3c98'],BG=['#fff3b0','#d5f5e3','#fadbd8','#d6eaf8','#e8daef','none'];
 const BLOCK_BG=[['#e2f3ef','Мятный'],['#daf5e4','Зелёный'],['#fff6de','Жёлтый'],['#fdeee8','Персиковый'],['#e6f0fa','Голубой'],['#f1edff','Лавандовый'],['#ffffff','Белый'],['none','Стандартный']];
-const st=()=>selectedEditorStage(),gid=()=>'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const st=()=>selectedEditorStage(),gid=()=>'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),did=()=>'d'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const later=()=>{clearTimeout(timer);timer=setTimeout(rememberDraft,700)};
 const giftNow=()=>editorDraft?.gifts.find(g=>g.id===edit?.id);
-const fmtNow=()=>{if(edit?.t==='gift')return giftNow()?.scriptFormat||LayoutModel.cleanFormat(null,0);const s=st();return edit.t==='tip'?s.tipFormat:s.lineFormats[edit.i]};
-const txtNow=()=>{if(edit?.t==='gift')return giftNow()?.script||'';const s=st();return edit.t==='tip'?s.tip:s.lines[edit.i]};
+const dirNow=()=>directionBase.find(d=>d.id===edit?.id);
+const fmtNow=()=>{if(edit?.t==='gift')return giftNow()?.scriptFormat||LayoutModel.cleanFormat(null,0);if(edit?.t==='direction')return dirNow()?.scriptFormat||LayoutModel.cleanFormat(null,0);const s=st();return edit.t==='tip'?s.tipFormat:s.lineFormats[edit.i]};
+const txtNow=()=>{if(edit?.t==='gift')return giftNow()?.script||'';if(edit?.t==='direction')return dirNow()?.script||'';const s=st();return edit.t==='tip'?s.tip:s.lines[edit.i]};
 function blockBar(i,curBg){
   const norm=curBg||'';
   const hex=/^#[0-9a-f]{6}$/i.test(norm)?norm:'#e2f3ef';
@@ -6419,10 +6459,16 @@ function lineActionBtns(i,delTitle='Удалить'){
   const pasteBtn=clip?`<button data-v4="pasteline" data-i="${i}" title="Вставить скопированный элемент (${E(KINDS[clip.kind]||'элемент')}) ниже">📥</button>`:'';
   return `<button data-v4="copyline" data-i="${i}" title="Копировать элемент (можно вставить в другой макет)">📋</button>${pasteBtn}<button data-v4="up" data-i="${i}" title="Переместить выше">↑</button><button data-v4="down" data-i="${i}" title="Переместить ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="${E(delTitle)}">✕</button>`):''}`;
 }
+function renderDirPickerOptions(i,curDirId,queryStr){
+  const qNorm=(queryStr||'').trim().toLocaleLowerCase('ru');
+  const items=directionBase.filter(d=>!qNorm||[d.title,d.variant,d.script].join(' ').toLocaleLowerCase('ru').includes(qNorm));
+  if(!items.length)return '<div class="v4-gpick-empty">По вашему запросу направления не найдены. Создайте направление во вкладке «🧭 База направлений» или кнопкой «+ Создать направление».</div>';
+  return items.map(d=>`<button type="button" class="v4-gpick-item ${d.id===curDirId?'active':''}" data-v4="pick-line-direction" data-i="${i}" data-id="${E(d.id)}"><span class="v4-gpick-thumb">🧭</span><span class="v4-gpick-info"><strong>${E(d.title||'Без названия')}${d.variant?` <small>· ${E(d.variant)}</small>`:''}</strong>${d.script?`<small>${E(d.script.slice(0,95))}${d.script.length>95?'…':''}</small>`:'<small>Текст не заполнен</small>'}</span>${d.id===curDirId?'<span class="v4-gpick-check">✓</span>':''}</button>`).join('');
+}
 function lineBlock(s,i){
-  const rawKind=s.lineKinds[i]||'speech',isGift=['gift','gift-plus-one','gift-plus-two'].includes(rawKind),kind=isGift?'gift':(['address','schedule','table','image'].includes(rawKind)?rawKind:'speech');
+  const rawKind=s.lineKinds[i]||'speech',isGift=['gift','gift-plus-one','gift-plus-two'].includes(rawKind),kind=isGift?'gift':(['address','schedule','table','image','direction'].includes(rawKind)?rawKind:'speech');
   const isOp=currentUser&&currentUser.role==='OPERATOR';
-  const on=!isGift&&!['schedule','table','image'].includes(kind)&&!isOp&&edit&&edit.t==='line'&&edit.i===i;
+  const on=!isGift&&!['schedule','table','image','direction'].includes(kind)&&!isOp&&edit&&edit.t==='line'&&edit.i===i;
   const lineFmt=s.lineFormats?.[i]||LayoutModel.cleanFormat(null,0);
   if(kind==='schedule'){
     const curBg=lineFmt?.style?.blockBg||'';
@@ -6561,6 +6607,15 @@ function lineBlock(s,i){
       ${renderScriptImageBlock(s.lines[i],bStyle)}
     </div>`;
   }
+  if(kind==='direction'){
+    const curDirId=s.lineGifts?.[i]||'';
+    const dir=directionBase.find(d=>d.id===curDirId);
+    const isOpen=dirPickerOpen===i||!dir;
+    const label=dir?(dir.variant?.trim()?`${dir.title} · ${dir.variant}`:(dir.title||'Направление')):'Направление не выбрано';
+    const effFmt=lineFmt?.style?.blockBg?lineFmt:(dir?.scriptFormat||lineFmt);
+    const bStyle=LayoutModel.blockCSS(effFmt);
+    return `<div class="v4-line is-gift is-direction"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><button type="button" class="v4-gpick-btn ${isOpen?'open':''}" data-v4="toggle-dir-picker" data-i="${i}" title="Выбрать направление из базы">${dir?`🧭 <span>${E(dir.title||'Без названия')}</span>${dir.variant?`<small>· ${E(dir.variant)}</small>`:''}`:'<span>🔍 Выбрать направление…</span>'}<b aria-hidden="true">▾</b></button>${dir?`<button type="button" class="v4-gpick-link" data-v4="goto-direction" data-id="${E(dir.id)}" title="Редактировать в Базе направлений">✎ В базе направлений</button>`:''}${blockBar(i,effFmt?.style?.blockBg)}<span class="v4-s"></span>${lineActionBtns(i,'Удалить направление')}</div>${isOpen?`<div class="v4-gpick-panel"><div class="v4-gpick-top"><input type="search" class="v4-gpick-search" data-v4-dirpicksearch="${i}" placeholder="🔍 Фильтр по направлениям: Посуда, Сок, Массаж, ВТ, вариант…" value="${E(dirPickerQuery)}" autocomplete="off"><button type="button" data-v4="new-dir-for-line" data-i="${i}">+ Создать направление в базе</button></div><div class="v4-gpick-list" data-v4-dirpicklist="${i}">${renderDirPickerOptions(i,curDirId,dirPickerQuery)}</div></div>`:''}${dir?`<section class="script-gift script-direction"${bStyle?` style="${bStyle}"`:''} aria-label="${E(dir.title||'Направление')}"><div class="script-gift-label">🧭 ${E(label)}</div><div class="script-direction-text"><p class="line">${(dir.script||'').trim()?LayoutModel.renderText(dir.script,dir.scriptFormat):'<span class="v4-empty">Текст направления пуст. Нажмите «✎ В базе направлений», чтобы заполнить текст.</span>'}</p></div></section>`:''}</div>`;
+  }
   if(isGift){
     const curGiftId=s.lineGifts?.[i]||lineGiftId(rawKind)||(rawKind==='gift'?'surprise':'');
     const gift=editorDraft.gifts.find(g=>g.id===curGiftId);
@@ -6596,7 +6651,7 @@ function stageTab(s){
   const others=d.objections.map((o,i)=>[o,i]).filter(([,i])=>!s.objectionIds.includes(i));
   return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">ЭТАП ${String(ix+1).padStart(2,'0')} · РЕДАКТИРОВАНИЕ</div><input class="v4-title" data-v4-title maxlength="190" value="${E(s.title)}" aria-label="Название этапа"></div><div class="v4-stage-tools"><button data-v4="mvl" ${ix===0?'disabled':''} title="Сдвинуть влево">←</button><button data-v4="mvr" ${ix===d.stages.length-1?'disabled':''} title="Сдвинуть вправо">→</button><button data-v4="dup">Дублировать</button><button data-v4="hide">${s.hidden?'Показать на сайте':'Скрыть с сайта'}</button>${canDeleteContent()?'<button data-v4="rm">Удалить блок</button>':''}</div></div>
 ${isOperator?'<div class="v4-operator-banner">🎨 <b>Режим оформления для Менеджера обзвона:</b> вы можете настраивать размер шрифта, тему и цветовую заливку блоков. Текст реплик защищён от изменений.</div>':''}
-<div class="v4-body"><div class="v4-script"><div class="pane-label">Реплики оператора</div>${s.lines.map((_,i)=>lineBlock(s,i)).join('')}<div class="v4-add-row"><button data-v4="addline" data-i="${s.lines.length-1}">+ Добавить реплику</button><button class="v4-add-gift-btn" data-v4="addgiftline" data-i="${s.lines.length-1}">+ 🎁 Добавить подарок из базы</button><button class="v4-add-gift-btn" data-v4="addaddrline" data-i="${s.lines.length-1}">+ 📍 Добавить адрес</button><button class="v4-add-gift-btn" data-v4="addschedline" data-i="${s.lines.length-1}">+ 📅 Добавить график времени</button><button class="v4-add-gift-btn" data-v4="addtableline" data-i="${s.lines.length-1}">+ 📊 Добавить таблицу</button><button class="v4-add-gift-btn" data-v4="addimageline" data-i="${s.lines.length-1}">+ 🖼 Добавить картинку</button>${(()=>{const c=getLineClipboard();return c?`<button class="v4-add-gift-btn" data-v4="pasteline" data-i="${s.lines.length-1}" style="border-color:var(--teal);color:var(--teal);font-weight:750">📥 Вставить (${E(KINDS[c.kind]||'элемент')})</button>`:'';})()}</div>
+<div class="v4-body"><div class="v4-script"><div class="pane-label">Реплики оператора</div>${s.lines.map((_,i)=>lineBlock(s,i)).join('')}<div class="v4-add-row"><button data-v4="addline" data-i="${s.lines.length-1}">+ Добавить реплику</button><button class="v4-add-gift-btn" data-v4="addgiftline" data-i="${s.lines.length-1}">+ 🎁 Добавить подарок из базы</button><button class="v4-add-gift-btn" data-v4="adddirectionline" data-i="${s.lines.length-1}">+ 🧭 Добавить направление из базы</button><button class="v4-add-gift-btn" data-v4="addaddrline" data-i="${s.lines.length-1}">+ 📍 Добавить адрес</button><button class="v4-add-gift-btn" data-v4="addschedline" data-i="${s.lines.length-1}">+ 📅 Добавить график времени</button><button class="v4-add-gift-btn" data-v4="addtableline" data-i="${s.lines.length-1}">+ 📊 Добавить таблицу</button><button class="v4-add-gift-btn" data-v4="addimageline" data-i="${s.lines.length-1}">+ 🖼 Добавить картинку</button>${(()=>{const c=getLineClipboard();return c?`<button class="v4-add-gift-btn" data-v4="pasteline" data-i="${s.lines.length-1}" style="border-color:var(--teal);color:var(--teal);font-weight:750">📥 Вставить (${E(KINDS[c.kind]||'элемент')})</button>`:'';})()}</div>
 <div class="v4-tipbox"><label class="v4-switch"><input type="checkbox" data-v4-tipshow ${s.showTip?'checked':''}> Показывать подсказку оператору</label><div class="tip"><strong>ПОДСКАЗКА ОПЕРАТОРУ</strong>${edit&&edit.t==='tip'?editBox(s.tip,s.tipFormat):view('tip',0,s.tip,s.tipFormat)}</div></div></div>
 <aside class="objections-pane v4-obj"><h3>Частые возражения</h3><p class="sub">Нажмите на возражение, чтобы изменить ответ</p><div class="objection-list">${s.objectionIds.map(id=>d.objections[id]?`<button class="objection-button ${obSel===id?'on':''}" data-v4="obsel" data-id="${id}"><span>${E(d.objections[id].title)}</span><span aria-hidden="true">✎</span></button>`:'').join('')||'<p class="empty">Пока нет возражений.</p>'}</div>
 ${ob?`<div class="v4-oed"><label>Возражение клиента</label><input data-v4-ob="title" maxlength="290" value="${E(ob.title)}"><label>Ответ оператора</label><textarea data-v4-ob="text" rows="7">${E(ob.text)}</textarea><label>После ответа вернуть к этапу</label><select data-v4-ob="next"><option value="">Остаться на этом этапе</option>${d.stages.map(x=>`<option value="${x.id}" ${x.id===ob.nextStageId?'selected':''}>${E(x.title)}</option>`).join('')}</select><button data-v4="obunlink">Убрать из этого блока</button></div>`:''}
@@ -6611,6 +6666,38 @@ function renderGiftDbCards(){
     const u=used(g.id),isEditing=edit&&edit.t==='gift'&&edit.id===g.id,sc=g.script||'',bs=LayoutModel.blockCSS(g.scriptFormat);
     return `<article class="v4-gift ${highlightGiftId===g.id?'highlight':''}" id="v4-gift-${E(g.id)}"><div class="v4-gift-top"><div><label class="v4-gphoto" for="gf-${g.id}">${g.photo?`<img src="${g.photo}" alt="">`:'<span>+ Загрузить фото</span>'}</label><input type="file" id="gf-${g.id}" data-v4-file="${g.id}" accept="image/jpeg,image/png,image/webp" hidden></div><div><label class="v4-gfield-lbl">Название подарка (для списка и фильтра)</label><input class="v4-gin" data-v4-gift="title" data-id="${g.id}" maxlength="190" placeholder="Например: Термос BAUER" value="${E(g.title)}"><label class="v4-gfield-lbl">Условие / подпись в плашке</label><input class="v4-gin" data-v4-gift="condition" data-id="${g.id}" maxlength="300" placeholder="Например: Подарок Я+1 · За 1 гостя старше 35 лет" value="${E(g.condition)}"></div></div><div class="v4-gscript-box"><div class="v4-gscript-head"><span class="pane-label">Скрипт и описание подарка (читает оператор)</span>${!isEditing?`<button type="button" data-v4="edit-gift-script" data-id="${g.id}">✎ Изменить и оформить текст</button>`:''}</div>${isEditing?editBox(sc,g.scriptFormat):`<div class="line v4-click" data-v4="edit-gift-script" data-id="${g.id}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы редактировать скрипт и описание подарка">${sc.trim()?LayoutModel.renderText(sc,g.scriptFormat):'<span class="v4-empty">Нажмите сюда, чтобы написать скрипт и описание подарка…</span>'}</div>`}</div><div class="v4-gmeta"><small>${u.length?'Используется в блоках: <b>'+E(u.join(', '))+'</b>':'Не выбран ни в одном блоке'}</small><span>${g.photo?`<button data-v4="giftphotodel" data-id="${g.id}">Убрать фото</button>`:''}<button data-v4="giftdup" data-id="${g.id}">Дублировать</button>${canDeleteContent()?(`<button data-v4="giftdel" data-id="${g.id}" class="danger-text">${del===g.id?'Точно удалить?':'Удалить'}</button>`):''}</span></div></article>`;
   }).join('');
+}
+function renderDirectionDbCards(){
+  const d=editorDraft,qNorm=(dirDbQuery||'').trim().toLocaleLowerCase('ru');
+  const used=id=>d.stages.filter(s=>s.lineKinds?.some((k,idx)=>k==='direction'&&(s.lineGifts?.[idx]||'')===id)).map(s=>s.title);
+  const filtered=directionBase.filter(dir=>!qNorm||[dir.title,dir.variant,dir.script].join(' ').toLocaleLowerCase('ru').includes(qNorm));
+  if(!filtered.length)return `<p class="v4-empty" style="grid-column:1/-1">${directionBase.length?'По вашему фильтру направления не найдены.':'Направлений пока нет. Нажмите «+ Направление» или выберите готовый шаблон (Посуда, Сок, Массаж, ВТ).'}</p>`;
+  const usedTitles=[...new Set([...DIR_PRESETS,...directionBase.map(x=>String(x.title||'').trim()).filter(Boolean)])];
+  return `<datalist id="v4-dir-title-presets">${usedTitles.map(t=>`<option value="${E(t)}">`).join('')}</datalist>`+filtered.map(dir=>{
+    const u=used(dir.id),isEditing=edit&&edit.t==='direction'&&edit.id===dir.id,sc=dir.script||'',bs=LayoutModel.blockCSS(dir.scriptFormat);
+    return `<article class="v4-gift ${highlightDirId===dir.id?'highlight':''}" id="v4-dir-${E(dir.id)}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label class="v4-gfield-lbl">Направление / переменная</label>
+          <input class="v4-gin" list="v4-dir-title-presets" data-v4-dir="title" data-id="${E(dir.id)}" maxlength="120" placeholder="Например: Посуда, Сок, Массаж, ВТ" value="${E(dir.title||'')}">
+        </div>
+        <div>
+          <label class="v4-gfield-lbl">Вариант (подпись)</label>
+          <input class="v4-gin" data-v4-dir="variant" data-id="${E(dir.id)}" maxlength="180" placeholder="Например: Вариант 1 · КШ / Короткий" value="${E(dir.variant||'')}">
+        </div>
+      </div>
+      <div class="v4-gscript-box">
+        <div class="v4-gscript-head"><span class="pane-label">Текст направления (подставляется в макеты)</span>${!isEditing?`<button type="button" data-v4="edit-dir-script" data-id="${E(dir.id)}">✎ Изменить и оформить текст</button>`:''}</div>
+        ${isEditing?editBox(sc,dir.scriptFormat):`<div class="line v4-click" data-v4="edit-dir-script" data-id="${E(dir.id)}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы редактировать и оформить текст направления">${sc.trim()?LayoutModel.renderText(sc,dir.scriptFormat):'<span class="v4-empty">Нажмите сюда, чтобы написать текст для этого направления…</span>'}</div>`}
+      </div>
+      <div class="v4-gmeta"><small>${u.length?'Используется в блоках этого макета: <b>'+E(u.join(', '))+'</b>':'Пока не добавлено в блоки этого макета'}</small><span><button data-v4="dirdup" data-id="${E(dir.id)}" title="Создать ещё один вариант этого направления">+ Вариант (копия)</button>${canDeleteContent()?(`<button data-v4="dirdel" data-id="${E(dir.id)}" class="danger-text">${del===dir.id?'Точно удалить?':'Удалить'}</button>`):''}</span></div>
+    </article>`;
+  }).join('');
+}
+function directionsTab(){
+  const s=st(),qNorm=(dirDbQuery||'').trim().toLocaleLowerCase('ru');
+  const count=directionBase.filter(dir=>!qNorm||[dir.title,dir.variant,dir.script].join(' ').toLocaleLowerCase('ru').includes(qNorm)).length;
+  return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">БАЗА НАПРАВЛЕНИЙ</div><h2>Переменные и варианты направлений</h2><p class="v4-sub">Создавайте направления (Посуда, Сок, Массаж, ВТ и любые свои) и разные варианты текста для них, а затем добавляйте в любые макеты.</p><p class="v4-hint" id="dir-saved">Изменения сохраняются автоматически и сразу доступны во всех макетах.</p></div><div class="v4-stage-tools">${fromStageFlag&&s?`<button data-v4="back-to-stage">← Вернуться к блоку «${E(s.title)}»</button>`:''}${DIR_PRESETS.map(p=>`<button type="button" data-v4="diradd" data-preset="${E(p)}">+ ${E(p)}</button>`).join('')}<button class="primary" data-v4="diradd">+ Новое направление</button></div></div><div class="v4-db-bar"><input type="search" data-v4-dirsearch placeholder="🔍 Фильтр по базе направлений (название, вариант, текст)…" value="${E(dirDbQuery)}" autocomplete="off"><span id="v4-dir-count">Показано: ${count} из ${directionBase.length}</span></div><div class="v4-gift-grid" id="v4-dir-grid">${renderDirectionDbCards()}</div></section>`;
 }
 function giftsTab(){
   const d=editorDraft,s=st(),qNorm=(dbQuery||'').trim().toLocaleLowerCase('ru');
@@ -6672,17 +6759,19 @@ renderLayouts=function(){
   const tabs=d.stages.map((x,i)=>{const cur=tab==='stage'&&x.id===s.id;return `<button class="step ${x.hidden?'v4-hid':''}" data-v4="stage" data-id="${x.id}" ${cur?'aria-current="step"':''} title="${x.hidden?'Скрыт на сайте':''}"><span class="step-number">${String(i+1).padStart(2,'0')}</span><span class="step-title">${E(x.title)}</span></button>`}).join('');
   lv.innerHTML=`<div class="layouts-intro"><div><div class="kicker">КОНСТРУКТОР</div><h1>Редактор скрипта</h1><p class="sub">Выберите вкладку и правьте прямо в том виде, как увидит оператор.</p></div><div class="secured"><span>Под паролем</span><button data-action="back-to-script">К скрипту</button><button data-action="lock">Закрыть</button></div></div>
 <div class="v4-top"><div class="v4-name"><input id="editor-layout-name" maxlength="100" aria-label="Название макета" placeholder="Название макета" value="${E(editorLayoutName)}"><span class="draft-state" id="draft-state"></span></div><div class="v4-acts"><button id="editor-undo" data-action="undo" title="Отменить">↶</button><button id="editor-redo" data-action="redo" title="Повторить">↷</button><button data-action="quick-save">Сохранить макет</button><button class="primary" data-v4="apply">Применить на сайт →</button></div></div>
-<div class="v4-sections" role="tablist">${[['stage','✎ Блоки скрипта'],['gifts','🎁 База подарков ('+d.gifts.length+')'],['saved','📂 Макеты'],['settings','⚙ Оформление']].map(([k,l])=>`<button class="v4-sec ${tab===k?'on':''}" role="tab" aria-selected="${tab===k}" data-v4="tab" data-id="${k}">${l}</button>`).join('')}</div>
+<div class="v4-sections" role="tablist">${[['stage','✎ Блоки скрипта'],['gifts','🎁 База подарков ('+d.gifts.length+')'],['directions','🧭 База направлений ('+directionBase.length+')'],['saved','📂 Макеты'],['settings','⚙ Оформление']].map(([k,l])=>`<button class="v4-sec ${tab===k?'on':''}" role="tab" aria-selected="${tab===k}" data-v4="tab" data-id="${k}">${l}</button>`).join('')}</div>
 ${tab==='stage'?`<nav class="stepper v4-tabs" aria-label="Этапы скрипта">${tabs}<button class="step v4-add" data-v4="addstage" ${d.stages.length>=40?'disabled':''}><span class="step-title">+ Блок</span></button></nav>`:''}
-${tab==='gifts'?giftsTab():tab==='saved'?savedTab():tab==='settings'?`<section class="v4-card v4-pad" id="editor-inspector">${settingsInspector()}</section>`:stageTab(s)}`;
-  lv.classList.toggle('v4-giftmode',tab==='gifts');
+${tab==='gifts'?giftsTab():tab==='directions'?directionsTab():tab==='saved'?savedTab():tab==='settings'?`<section class="v4-card v4-pad" id="editor-inspector">${settingsInspector()}</section>`:stageTab(s)}`;
+  lv.classList.toggle('v4-giftmode',tab==='gifts'||tab==='directions');
   if(tab==='gifts'){const h=q('.layouts-intro h1');if(h)h.textContent='База подарков';const p=q('.layouts-intro .sub');if(p)p.textContent='Общий инструмент для всех скриптов. Подарок, добавленный или изменённый здесь, сразу появляется во всех макетах.';}
+  if(tab==='directions'){const h=q('.layouts-intro h1');if(h)h.textContent='База направлений';const p=q('.layouts-intro .sub');if(p)p.textContent='Переменные направлений (Посуда, Сок, Массаж, ВТ и др.) и их варианты. Добавляйте в любые макеты.';}
   lv.scrollTop=keep;updateEditorIndicators();
-  if(edit&&(tab==='stage'||tab==='gifts')){const ta=q('[data-v4-ta]');if(ta){ta.focus({preventScroll:true});ta.setSelectionRange(Math.min(sel.s,ta.value.length),Math.min(sel.e,ta.value.length))}}
+  if(edit&&(tab==='stage'||tab==='gifts'||tab==='directions')){const ta=q('[data-v4-ta]');if(ta){ta.focus({preventScroll:true});ta.setSelectionRange(Math.min(sel.s,ta.value.length),Math.min(sel.e,ta.value.length))}}
   else if(pickerOpen!=null&&tab==='stage'){const ps=q(`[data-v4-picksearch="${pickerOpen}"]`);if(ps)ps.focus({preventScroll:true});}
+  else if(dirPickerOpen!=null&&tab==='stage'){const ds=q(`[data-v4-dirpicksearch="${dirPickerOpen}"]`);if(ds)ds.focus({preventScroll:true});}
 };
 function fmt(patch,reset){const ta=q('[data-v4-ta]');if(!ta||!edit)return;const s=st(),a=ta.selectionStart,b=ta.selectionEnd;sel={s:a,e:b};
-  mutateDraft(()=>{if(edit.t==='gift'){const g=giftNow();if(!g)return;g.script=g.script||'';g.scriptFormat=LayoutModel.applyFormat(g.scriptFormat,g.script.length,a,b,patch,reset);}else if(edit.t==='tip')s.tipFormat=LayoutModel.applyFormat(s.tipFormat,s.tip.length,a,b,patch,reset);else s.lineFormats[edit.i]=LayoutModel.applyFormat(s.lineFormats[edit.i],s.lines[edit.i].length,a,b,patch,reset);});}
+  mutateDraft(()=>{if(edit.t==='gift'){const g=giftNow();if(!g)return;g.script=g.script||'';g.scriptFormat=LayoutModel.applyFormat(g.scriptFormat,g.script.length,a,b,patch,reset);}else if(edit.t==='direction'){const dir=dirNow();if(!dir)return;dir.script=dir.script||'';dir.scriptFormat=LayoutModel.applyFormat(dir.scriptFormat,dir.script.length,a,b,patch,reset);saveDirectionBase();}else if(edit.t==='tip')s.tipFormat=LayoutModel.applyFormat(s.tipFormat,s.tip.length,a,b,patch,reset);else s.lineFormats[edit.i]=LayoutModel.applyFormat(s.lineFormats[edit.i],s.lines[edit.i].length,a,b,patch,reset);});}
 function curStyle(key){const ta=q('[data-v4-ta]'),f=fmtNow(),a=ta.selectionStart,b=ta.selectionEnd;const r=[...f.ranges].reverse().find(r=>r.start<=a&&r.end>=b&&r.style[key]);return r?r.style[key]:f.style[key]}
 async function shrink(file){
   if(!/^image\/(jpeg|png|webp)$/.test(file.type))throw new Error('Нужен файл JPG, PNG или WebP: '+file.name);
@@ -6808,11 +6897,30 @@ lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
     }
     return;
   }
-  if(f.matches('[data-v4-ta]')&&edit){if(edit.t==='gift'){const g=giftNow();if(!g)return;g.scriptFormat=LayoutModel.editTextFormat(g.scriptFormat,g.script||'',f.value);g.script=f.value}else if(edit.t==='tip'){s.tipFormat=LayoutModel.editTextFormat(s.tipFormat,s.tip,f.value);s.tip=f.value}else{s.lineFormats[edit.i]=LayoutModel.editTextFormat(s.lineFormats[edit.i],s.lines[edit.i],f.value);s.lines[edit.i]=f.value}
+  if(f.matches('[data-v4-dirpicksearch]')){
+    dirPickerQuery=f.value;
+    const idx=+f.dataset.v4Dirpicksearch,curDirId=s.lineGifts?.[idx]||'';
+    const listEl=q(`[data-v4-dirpicklist="${idx}"]`);
+    if(listEl)listEl.innerHTML=renderDirPickerOptions(idx,curDirId,dirPickerQuery);
+    return;
+  }
+  if(f.matches('[data-v4-dirsearch]')){
+    dirDbQuery=f.value;
+    const grid=q('#v4-dir-grid'),cnt=q('#v4-dir-count');
+    if(grid)grid.innerHTML=renderDirectionDbCards();
+    if(cnt){
+      const qNorm=(dirDbQuery||'').trim().toLocaleLowerCase('ru');
+      const c=directionBase.filter(dir=>!qNorm||[dir.title,dir.variant,dir.script].join(' ').toLocaleLowerCase('ru').includes(qNorm)).length;
+      cnt.textContent=`Показано: ${c} из ${directionBase.length}`;
+    }
+    return;
+  }
+  if(f.matches('[data-v4-ta]')&&edit){if(edit.t==='gift'){const g=giftNow();if(!g)return;g.scriptFormat=LayoutModel.editTextFormat(g.scriptFormat,g.script||'',f.value);g.script=f.value}else if(edit.t==='direction'){const dir=dirNow();if(!dir)return;dir.scriptFormat=LayoutModel.editTextFormat(dir.scriptFormat,dir.script||'',f.value);dir.script=f.value;saveDirectionBase();}else if(edit.t==='tip'){s.tipFormat=LayoutModel.editTextFormat(s.tipFormat,s.tip,f.value);s.tip=f.value}else{s.lineFormats[edit.i]=LayoutModel.editTextFormat(s.lineFormats[edit.i],s.lines[edit.i],f.value);s.lines[edit.i]=f.value}
     const p=q('#v4-live');if(p){const h=LayoutModel.renderText(txtNow(),fmtNow());p.innerHTML=edit.t==='line'&&st().lineKinds[edit.i]==='address'?fillVenueHtml(h):h}later()}
   else if(f.matches('[data-v4-title]')){s.title=f.value;const t=q('.step[aria-current=step] .step-title');if(t)t.textContent=f.value;later()}
   else if(f.matches('[data-v4-ob]')&&obSel!=null){const o=editorDraft.objections[obSel];if(f.dataset.v4Ob==='title')o.title=f.value;else if(f.dataset.v4Ob==='text'){o.textFormat=LayoutModel.editTextFormat(o.textFormat,o.text,f.value);o.text=f.value}later()}
   else if(f.matches('[data-v4-gift]')){const g=editorDraft.gifts.find(x=>x.id===f.dataset.id);if(g){g[f.dataset.v4Gift]=f.value;later()}}
+  else if(f.matches('[data-v4-dir]')){const dir=directionBase.find(x=>x.id===f.dataset.id);if(dir){dir[f.dataset.v4Dir]=f.value;saveDirectionBase();const n=document.getElementById('dir-saved');if(n)n.textContent='✓ Сохранено автоматически. Изменения сразу действуют во всех скриптах.';}}
 });
 lv.addEventListener('change',async e=>{const f=e.target,s=st();
   if(f.matches('[data-v4-kind]')){
@@ -6822,7 +6930,11 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
       if(val==='gift'){
         s.lineKinds[idx]='gift';
         if(!s.lineGifts[idx]||!editorDraft.gifts.some(g=>g.id===s.lineGifts[idx]))s.lineGifts[idx]=editorDraft.gifts[0]?.id||'';
-        edit=null;pickerOpen=idx;pickerQuery='';
+        edit=null;pickerOpen=idx;pickerQuery='';dirPickerOpen=null;
+      }else if(val==='direction'){
+        s.lineKinds[idx]='direction';
+        if(!s.lineGifts[idx]||!directionBase.some(d=>d.id===s.lineGifts[idx]))s.lineGifts[idx]=directionBase[0]?.id||'';
+        edit=null;dirPickerOpen=idx;dirPickerQuery='';pickerOpen=null;
       }else if(val==='schedule'){
         s.lineKinds[idx]='schedule';
         s.lines[idx]='';
@@ -6962,6 +7074,7 @@ lv.addEventListener('click',async e=>{
     case 'addstage':tab='stage';edit=null;pickerOpen=null;M(()=>{editorStageId=LayoutModel.addStage(editorDraft,s?.id).id});return;
     case 'edit':edit={t:b.dataset.t,i};sel={s:1e9,e:1e9};renderLayouts();return;
     case 'edit-gift-script':edit={t:'gift',id};sel={s:1e9,e:1e9};highlightGiftId=id;renderLayouts();return;
+    case 'edit-dir-script':edit={t:'direction',id};sel={s:1e9,e:1e9};highlightDirId=id;renderLayouts();return;
     case 'done':edit=null;renderLayouts();return;
     case 'bold':fmt({weight:(curStyle('weight')||400)>=700?400:700});return;
     case 'size':fmt({size:Math.max(12,Math.min(36,(curStyle('size')||data.settings.fontSize||18)+Number(b.dataset.d)))});return;
@@ -7016,6 +7129,11 @@ lv.addEventListener('click',async e=>{
     case 'img-size':M(()=>{const img=parseScriptImageData(s.lines[i]);img.size=b.dataset.size||'medium';img.widthPct=Number(b.dataset.pct)||50;s.lines[i]=JSON.stringify(img);});return;
     case 'lmove':moveLayout(id,b.dataset.d);return;
     case 'addline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'Новая реплика');s.lineKinds.splice(j,0,'speech');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
+    case 'toggle-dir-picker':dirPickerOpen=dirPickerOpen===i?null:i;dirPickerQuery='';renderLayouts();return;
+    case 'pick-line-direction':M(()=>{ensureLineGifts();s.lineKinds[i]='direction';s.lineGifts[i]=id;dirPickerOpen=null;dirPickerQuery=''});return;
+    case 'goto-direction':tab='directions';dirPickerOpen=null;dirDbQuery='';highlightDirId=id;fromStageFlag=true;edit={t:'direction',id};sel={s:1e9,e:1e9};renderLayouts();setTimeout(()=>{document.getElementById('v4-dir-'+id)?.scrollIntoView({behavior:'smooth',block:'center'});},30);return;
+    case 'new-dir-for-line':{if(directionBase.length>=120){toast('В базе направлений уже 120 записей.');return;}const nid=did();directionBase.unshift({id:nid,title:'Новое направление',variant:'Основной',script:'Введите текст направления.',scriptFormat:LayoutModel.cleanFormat(null,0)});saveDirectionBase();M(()=>{ensureLineGifts();s.lineKinds[i]='direction';s.lineGifts[i]=nid;dirPickerOpen=null;tab='directions';dirDbQuery='';highlightDirId=nid;fromStageFlag=true;edit={t:'direction',id:nid};sel={s:0,e:1e9}});return;}
+    case 'adddirectionline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'');s.lineKinds.splice(j,0,'direction');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,directionBase[0]?.id||'');edit=null;dirPickerOpen=j;dirPickerQuery=''});return;
     case 'addgiftline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'');s.lineKinds.splice(j,0,'gift');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,editorDraft.gifts[0]?.id||'');edit=null;pickerOpen=j;pickerQuery=''});return;
     case 'delline':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление.');return;}lineOp(()=>{const wasSched=s.lineKinds[i]==='schedule';['lines','lineKinds','lineFormats','lineGifts'].forEach(k=>s[k].splice(i,1));if(wasSched&&!s.lineKinds.includes('schedule'))s.scheduleRemoved=true;});return;
     case 'mvl':case 'mvr':M(()=>{const k=editorDraft.stages.findIndex(x=>x.id===s.id);LayoutModel.moveStage(editorDraft,s.id,k+(a==='mvl'?-1:1))});return;
@@ -7031,9 +7149,12 @@ lv.addEventListener('click',async e=>{
     case 'giftdup':{if(editorDraft.gifts.length>=60){toast('В базе уже 60 подарков.');return;}const orig=editorDraft.gifts.find(g=>g.id===id);if(!orig)return;const copyGift=clone(orig);copyGift.id=gid();copyGift.title=(copyGift.title||'Подарок').slice(0,180)+' · копия';M(()=>{const idx=editorDraft.gifts.findIndex(g=>g.id===id);editorDraft.gifts.splice(idx+1,0,copyGift);highlightGiftId=copyGift.id});return;}
     case 'giftdel':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление подарков.');return;}if(del!==id){del=id;renderLayouts();return}del=null;M(()=>{editorDraft.gifts=editorDraft.gifts.filter(g=>g.id!==id);editorDraft.stages.forEach(x=>{x.giftIds=(x.giftIds||[]).filter(g=>g!==id);if(x.lineGifts)x.lineGifts=x.lineGifts.map(gid=>gid===id?(editorDraft.gifts[0]?.id||''):gid);})});return;
     case 'giftphotodel':M(()=>{editorDraft.gifts.find(g=>g.id===id).photo=''});return;
+    case 'diradd':{if(directionBase.length>=120){toast('В базе направлений уже 120 записей.');return;}const nid=did();const preset=b.dataset.preset||'Новое направление';const sameCount=directionBase.filter(x=>(x.title||'').trim().toLowerCase()===preset.toLowerCase()).length;dirDbQuery='';directionBase.unshift({id:nid,title:preset,variant:sameCount?`Вариант ${sameCount+1}`:'Основной',script:'',scriptFormat:LayoutModel.cleanFormat(null,0)});saveDirectionBase();highlightDirId=nid;edit={t:'direction',id:nid};sel={s:0,e:1e9};renderLayouts();return;}
+    case 'dirdup':{if(directionBase.length>=120){toast('В базе направлений уже 120 записей.');return;}const orig=directionBase.find(x=>x.id===id);if(!orig)return;const copyDir=clone(orig);copyDir.id=did();copyDir.variant=(copyDir.variant?copyDir.variant+' · ':'')+'новый вариант';const idx=directionBase.findIndex(x=>x.id===id);directionBase.splice(idx+1,0,copyDir);saveDirectionBase();highlightDirId=copyDir.id;edit={t:'direction',id:copyDir.id};sel={s:0,e:1e9};renderLayouts();return;}
+    case 'dirdel':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление направлений.');return;}if(del!==id){del=id;renderLayouts();return}del=null;{const idx=directionBase.findIndex(x=>x.id===id);if(idx>=0)directionBase.splice(idx,1);saveDirectionBase();if(edit?.t==='direction'&&edit.id===id)edit=null;renderLayouts();return;}
   }
 });
-lv.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-v4="edit"],[data-v4="edit-gift-script"]')){e.preventDefault();e.target.click()}if(e.key==='Escape'&&(edit||pickerOpen!=null)){edit=null;pickerOpen=null;renderLayouts()}});
+lv.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-v4="edit"],[data-v4="edit-gift-script"],[data-v4="edit-dir-script"]')){e.preventDefault();e.target.click()}if(e.key==='Escape'&&(edit||pickerOpen!=null||dirPickerOpen!=null)){edit=null;pickerOpen=null;dirPickerOpen=null;renderLayouts()}});
 })();
 </script>
 <script id="gift-base">
@@ -7042,6 +7163,11 @@ lv.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('[data-v4
   try{
     const rec=await LDB.get('giftbase');
     if(rec&&Array.isArray(rec.gifts)){giftDeleted.clear();(rec.deleted||[]).forEach(x=>giftDeleted.add(x));giftBase.splice(0,giftBase.length,...rec.gifts);}
+    try{
+      const drec=await LDB.get('directionbase');
+      if(drec&&Array.isArray(drec.directions)){directionBase.splice(0,directionBase.length,...drec.directions);}
+      directionReady=true;
+    }catch{}
     let layouts=[];try{layouts=(await api('/api/scripts')).layouts||[];}catch{}
     let ch=!rec;ch=mergeGifts(data.gifts)||ch;
     for(const l of layouts)ch=mergeGifts(l&&l.data&&l.data.gifts)||ch;
