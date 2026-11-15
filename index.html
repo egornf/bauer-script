@@ -6558,17 +6558,17 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 .psb-clear-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;padding:0 4px;font-size:13px;font-weight:800}
 .psb-clear-btn:hover{color:var(--purple)}
 .psb-hint{font-size:12px;color:var(--muted);font-weight:600}
-.psb-body{padding:18px 22px}
-.psb-halls-tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
-.psb-hall-tab{padding:8px 16px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface, #fff);font-size:12.5px;font-weight:750;color:var(--ink);cursor:pointer;transition:all .15s ease}
+.psb-body{padding:16px 18px}
+.psb-halls-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:nowrap;width:100%;overflow-x:auto}
+.psb-hall-tab{flex:1 1 0;min-width:0;padding:8px 10px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface, #fff);font-size:clamp(11px, 1.05vw, 12.5px);font-weight:750;color:var(--ink);cursor:pointer;transition:all .15s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
 .psb-hall-tab:hover{border-color:var(--teal);color:var(--teal)}
 .psb-hall-tab.active{background:var(--teal) !important;color:#fff !important;border-color:var(--teal) !important;box-shadow:0 2px 8px color-mix(in srgb, var(--teal) 25%, transparent)}
-.psb-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:10px}
-.psb-col{background:var(--surface-alt, #f8fafc);border:1px solid var(--line);border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;text-align:center}
-.psb-day-title{font-size:12px;font-weight:800;color:var(--ink);margin-bottom:8px;border-bottom:1px solid var(--line);padding-bottom:6px;width:100%}
-.psb-day-title small{display:block;font-size:10.5px;color:var(--muted);font-weight:600}
-.psb-times{display:flex;flex-direction:column;gap:6px;width:100%}
-.psb-time-btn{width:100%;padding:8px 6px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface, #ffffff);font-size:13px;font-weight:750;color:var(--ink);cursor:pointer;transition:all .15s ease}
+.psb-grid{display:flex;flex-wrap:nowrap;gap:6px;width:100%;align-items:stretch}
+.psb-col{flex:1 1 0;min-width:0;background:var(--surface-alt, #f8fafc);border:1px solid var(--line);border-radius:12px;padding:8px 5px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.psb-day-title{font-size:clamp(11px, 1.05vw, 12.5px);font-weight:800;color:var(--ink);margin-bottom:6px;border-bottom:1px solid var(--line);padding-bottom:5px;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psb-day-title small{display:block;font-size:clamp(9.5px, 0.9vw, 10.5px);color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.psb-times{display:flex;flex-direction:column;gap:5px;width:100%}
+.psb-time-btn{width:100%;padding:7px 4px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface, #ffffff);font-size:clamp(11px, 1.1vw, 13px);font-weight:750;color:var(--ink);cursor:pointer;transition:all .15s ease;white-space:nowrap}
 .psb-time-btn:hover{border-color:var(--teal);background:color-mix(in srgb, var(--teal) 8%, var(--surface));color:var(--teal);transform:translateY(-1px)}
 .psb-time-btn.active{background:var(--teal) !important;color:#fff !important;border-color:var(--teal) !important;box-shadow:0 3px 10px color-mix(in srgb, var(--teal) 40%, transparent) !important}
 /* Dark & Neon Theme Overrides for Schedule Component */
