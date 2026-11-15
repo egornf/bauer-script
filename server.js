@@ -333,9 +333,9 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
         u.permissionsMigratedV3 = true;
         migrated = true;
       }
-      if (u.role === 'HEAD' && !u.permissionsMigratedV4) {
-        u.permissions = [...new Set([...(u.permissions || []), 'content.edit', 'layouts.manage', 'scripts.trainer-blocks'])];
-        u.permissionsMigratedV4 = true;
+      if (u.role === 'HEAD' && !u.permissionsMigratedV5) {
+        u.permissions = [...new Set([...(u.permissions || []), 'content.edit', 'layouts.manage', 'users.view', 'users.manage', 'sessions.manage', 'scripts.trainer-blocks'])];
+        u.permissionsMigratedV5 = true;
         migrated = true;
       } else if (u.role === 'TRAINER' && !u.permissionsMigratedV4) {
         u.permissions = [...new Set([...(u.permissions || []), 'content.edit', 'layouts.manage', 'scripts.trainer-blocks', 'users.view', 'settings.manage'])];
@@ -1949,7 +1949,7 @@ function createAppServer(options = {}) {
           return sendJson(res, 403, { error: 'Недостаточно прав для сохранения или удаления макетов.' });
         }
         if (method === 'DELETE') {
-          if (auth.user.role === 'HEAD' || auth.user.role === 'TRAINER' || !hasPermission(auth.user, 'layouts.delete')) {
+          if (!hasPermission(auth.user, 'layouts.delete')) {
             store.logEvent({ action: 'layouts.delete.denied', actor: auth.user, target: id, ip, userAgent, status: 'denied' });
             return sendJson(res, 403, { error: 'У вашей роли нет прав на удаление макетов.' });
           }

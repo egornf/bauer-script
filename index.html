@@ -3613,7 +3613,7 @@ const VAULT_ROLE_DEFAULTS={
   OWNER:[...VAULT_PERMISSIONS,'admins.manage','owner.full'],
   ADMIN:[...VAULT_PERMISSIONS],
   EDITOR:['content.edit','layouts.manage','layouts.delete','gifts.manage','addresses.manage','settings.manage'],
-  HEAD:['content.edit','layouts.manage','users.view','audit.view','scripts.trainer-blocks'],
+  HEAD:['content.edit','layouts.manage','users.view','users.manage','sessions.manage','audit.view','scripts.trainer-blocks'],
   TRAINER:['content.edit','layouts.manage','users.view','scripts.trainer-blocks','settings.manage'],
   OPERATOR:['settings.manage']
 };
@@ -3695,7 +3695,6 @@ function isScriptTextUnchanged(originalData, nextData) {
 function canDeleteContent(){
   if(!currentUser)return true;
   if(currentUser.role==='OWNER')return true;
-  if(currentUser.role==='HEAD'||currentUser.role==='TRAINER')return false;
   return (currentUser.permissions||[]).includes('layouts.delete');
 }
 
@@ -3886,9 +3885,9 @@ async function api_local_vault(rawPath,options={}){
     owners[0].permissions=[...VAULT_ROLE_DEFAULTS.OWNER];
   }
   users.forEach(u=>{
-    if(u.role==='HEAD'&&!u.permissionsMigratedV4){
-      u.permissions=[...new Set([...(u.permissions||[]),'content.edit','layouts.manage','scripts.trainer-blocks'])];
-      u.permissionsMigratedV4=true;
+    if(u.role==='HEAD'&&!u.permissionsMigratedV5){
+      u.permissions=[...new Set([...(u.permissions||[]),'content.edit','layouts.manage','users.view','users.manage','sessions.manage','scripts.trainer-blocks'])];
+      u.permissionsMigratedV5=true;
       usersChanged=true;
     }else if(u.role==='TRAINER'&&!u.permissionsMigratedV4){
       u.permissions=[...new Set([...(u.permissions||[]),'content.edit','layouts.manage','scripts.trainer-blocks','users.view','settings.manage'])];
@@ -4353,8 +4352,6 @@ async function api_local_vault(rawPath,options={}){
           managerId=authUser.id;
         }
       }
-      if(role==='HEAD')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
-      if(role==='TRAINER')perms=perms.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
       const nu={
         id:'usr_'+VaultCrypto.randomHex(8),
         login,
@@ -4428,9 +4425,7 @@ async function api_local_vault(rawPath,options={}){
         changes.scriptAccess=tu.scriptAccess;
       }
       if(body.permissions!==undefined&&tu.role!=='OWNER'){
-        let np=[...new Set((body.permissions||[]).filter(p=>VAULT_PERMISSIONS.includes(p)))];
-        if(tu.role==='HEAD')np=np.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
-        if(tu.role==='TRAINER')np=np.filter(p=>p!=='layouts.delete'&&p!=='users.manage');
+        const np=[...new Set((body.permissions||[]).filter(p=>VAULT_PERMISSIONS.includes(p)))];
         tu.permissions=np;
         changes.permissions=tu.permissions;
       }
@@ -4829,7 +4824,7 @@ async function api_local_vault(rawPath,options={}){
     if(!hasPerm(authUser,'layouts.manage'))throw fail('Недостаточно прав для сохранения или удаления макетов (layouts.manage).',403);
     let list=await getStoredLayouts();
     if(method==='DELETE'){
-      if(authUser.role==='HEAD'||authUser.role==='TRAINER'||!hasPerm(authUser,'layouts.delete'))throw fail('Руководитель отдела и Бизнес-тренер не могут удалять скрипты и макеты.',403);
+      if(!hasPerm(authUser,'layouts.delete'))throw fail('Недостаточно прав для удаления макетов (layouts.delete).',403);
       list=list.filter(l=>l.id!==id);
       await VaultDB.set('layouts',list);
       await logEvent({action:'layouts.delete',actor:authUser,target:id});
@@ -10199,15 +10194,7 @@ function openUserModal(editUser=null){
     const r=roleSelect.value;
     if(mgrWrap)mgrWrap.hidden=r!=='OPERATOR';
     dlg.querySelectorAll('input[name="perm"]').forEach(cb=>{
-      if(r==='HEAD'&&(cb.value==='layouts.delete'||cb.value==='users.manage')){
-        cb.checked=false;
-        cb.disabled=true;
-      }else if(r==='TRAINER'&&(cb.value==='layouts.delete'||cb.value==='users.manage')){
-        cb.checked=false;
-        cb.disabled=true;
-      }else{
-        cb.disabled=false;
-      }
+      cb.disabled=false;
     });
   };
   roleSelect?.addEventListener('change',()=>{
