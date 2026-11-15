@@ -2175,6 +2175,98 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   outline: 2px solid var(--teal);
   border-color: var(--teal);
 }
+.v4-table-style-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--teal) 5%, var(--surface-alt));
+  border: 1px solid color-mix(in srgb, var(--teal) 24%, var(--line));
+  border-radius: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.v4-tbl-style-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.v4-tbl-style-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--line);
+}
+.v4-tbl-style-label {
+  font-weight: 800;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.v4-tbl-mini-btn {
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .12s ease;
+}
+.v4-tbl-mini-btn:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+.v4-tbl-mini-btn.active {
+  background: var(--teal) !important;
+  color: #fff !important;
+  border-color: var(--teal) !important;
+}
+.v4-tbl-mini-select {
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.v4-tbl-color-pick {
+  width: 28px;
+  height: 28px;
+  padding: 1px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  cursor: pointer;
+}
+.v4-tbl-color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(15, 23, 42, 0.22);
+  cursor: pointer;
+  padding: 0;
+  transition: transform .12s ease;
+}
+.v4-tbl-color-dot:hover {
+  transform: scale(1.15);
+}
+.v4-tbl-cell-active {
+  box-shadow: inset 0 0 0 2px var(--teal) !important;
+}
+.v4-tbl-cell-input.is-styled {
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.4);
+}
 .script-image-block {
   padding: 12px 14px;
   border-radius: 12px;
@@ -3388,7 +3480,19 @@ function createDefaultTableJson(rowsCount=3,colsCount=3){
     }
     rows.push(row);
   }
-  return JSON.stringify({title:'',hasHeader:true,rows});
+  return JSON.stringify({
+    title:'',
+    hasHeader:true,
+    rows,
+    tableStyle:{fontSize:14,borderWidth:'1',borderStyle:'solid',borderColor:'',outerBorder:true,cellAlign:'left'},
+    cellStyles:{}
+  });
+}
+function sanitizeTableColor(val){
+  const s=String(val||'').trim();
+  if(!s)return '';
+  if(/^#[0-9a-fA-F]{3,8}$/.test(s)||/^rgba?\([^)]+\)$/.test(s))return s;
+  return '';
 }
 function parseScriptTableData(rawStr){
   try{
@@ -3400,16 +3504,65 @@ function parseScriptTableData(rawStr){
         while(arr.length<cols)arr.push('');
         return arr.slice(0,cols);
       });
-      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows};
+      const ts=obj.tableStyle&&typeof obj.tableStyle==='object'?obj.tableStyle:{};
+      const tableStyle={
+        fontSize:Math.max(11,Math.min(28,Number(ts.fontSize)||14)),
+        borderWidth:['0','1','2','3'].includes(String(ts.borderWidth))?String(ts.borderWidth):'1',
+        borderStyle:['solid','dashed','dotted'].includes(ts.borderStyle)?ts.borderStyle:'solid',
+        borderColor:sanitizeTableColor(ts.borderColor),
+        outerBorder:ts.outerBorder!==false,
+        cellAlign:['left','center','right'].includes(ts.cellAlign)?ts.cellAlign:'left'
+      };
+      const cellStyles={};
+      if(obj.cellStyles&&typeof obj.cellStyles==='object'){
+        for(const [k,v] of Object.entries(obj.cellStyles)){
+          if(!/^\d+,\d+$/.test(k)||!v||typeof v!=='object')continue;
+          const [ri,ci]=k.split(',').map(Number);
+          if(ri>=rows.length||ci>=cols)continue;
+          const cs={};
+          if(v.fontSize!=null&&Number(v.fontSize)>=11&&Number(v.fontSize)<=28)cs.fontSize=Number(v.fontSize);
+          if(typeof v.bold==='boolean')cs.bold=v.bold;
+          if(typeof v.italic==='boolean')cs.italic=v.italic;
+          const clr=sanitizeTableColor(v.color);if(clr)cs.color=clr;
+          const bg=sanitizeTableColor(v.bg);if(bg)cs.bg=bg;
+          if(['left','center','right'].includes(v.align))cs.align=v.align;
+          if(Object.keys(cs).length)cellStyles[k]=cs;
+        }
+      }
+      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows,tableStyle,cellStyles};
     }
   }catch{}
   return JSON.parse(createDefaultTableJson(3,3));
 }
+function getScriptTableStyles(tbl){
+  const ts=tbl.tableStyle||{fontSize:14,borderWidth:'1',borderStyle:'solid',borderColor:'',outerBorder:true,cellAlign:'left'};
+  const bw=Number(ts.borderWidth??1);
+  const bc=ts.borderColor||'var(--line)';
+  const bs=ts.borderStyle||'solid';
+  const cellBorderCss=bw<=0?'border:none;':`border:${bw}px ${bs} ${bc};`;
+  const tableBorderCss=bw<=0||ts.outerBorder===false?'border:none;':`border:${bw}px ${bs} ${bc};`;
+  const tableCss=`font-size:${ts.fontSize||14}px;${tableBorderCss}`;
+  const getCellCss=(rIdx,cIdx,isHeader=false)=>{
+    const cs=(tbl.cellStyles&&tbl.cellStyles[`${rIdx},${cIdx}`])||{};
+    let css=cellBorderCss;
+    const align=cs.align||ts.cellAlign||'left';
+    css+=`text-align:${align};`;
+    if(cs.fontSize)css+=`font-size:${cs.fontSize}px;`;
+    if(typeof cs.bold==='boolean')css+=`font-weight:${cs.bold?700:400};`;
+    else if(isHeader)css+=`font-weight:800;`;
+    if(cs.italic)css+=`font-style:italic;`;
+    if(cs.color)css+=`color:${cs.color};`;
+    if(cs.bg)css+=`background-color:${cs.bg};`;
+    return css;
+  };
+  return {tableCss,getCellCss,ts};
+}
 function renderScriptTableBlock(rawStr,bCss=''){
   const tbl=parseScriptTableData(rawStr);
+  const {tableCss,getCellCss}=getScriptTableStyles(tbl);
   const headRow=tbl.hasHeader?tbl.rows[0]:null;
   const bodyRows=tbl.hasHeader?tbl.rows.slice(1):tbl.rows;
-  return `<div class="line script-table-block"${bCss?` style="${bCss}"`:''}>${tbl.title.trim()?`<div class="script-table-title">📊 ${escapeHTML(tbl.title)}</div>`:''}<div class="script-table-scroll"><table class="script-inline-table">${headRow?`<thead><tr>${headRow.map(cell=>`<th>${fillPlanHtml(fillVenueHtml(escapeHTML(cell)))}</th>`).join('')}</tr></thead>`:''}<tbody>${bodyRows.map(row=>`<tr>${row.map(cell=>`<td>${fillPlanHtml(fillVenueHtml(escapeHTML(cell)))}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+  return `<div class="line script-table-block"${bCss?` style="${bCss}"`:''}>${tbl.title.trim()?`<div class="script-table-title">📊 ${escapeHTML(tbl.title)}</div>`:''}<div class="script-table-scroll"><table class="script-inline-table" style="${tableCss}">${headRow?`<thead><tr>${headRow.map((cell,cIdx)=>`<th style="${getCellCss(0,cIdx,true)}">${fillPlanHtml(fillVenueHtml(escapeHTML(cell)))}</th>`).join('')}</tr></thead>`:''}<tbody>${bodyRows.map((row,bIdx)=>{const rIdx=tbl.hasHeader?bIdx+1:bIdx;return `<tr>${row.map((cell,cIdx)=>`<td style="${getCellCss(rIdx,cIdx,false)}">${fillPlanHtml(fillVenueHtml(escapeHTML(cell)))}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div></div>`;
 }
 function parseScriptImageData(rawStr){
   try{
@@ -6046,7 +6199,7 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 (()=>{
 const lv=document.getElementById('layouts-view'),E=escapeHTML,q=(s)=>lv.querySelector(s);
 let tab='stage',edit=null,obSel=null,sel={s:1e9,e:1e9},start=null,timer=null,del=null;
-let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false;
+let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false,tblSelCell={};
 const KINDS={speech:'Речь',gift:'🎁 Подарок',address:'📍 Адрес',schedule:'📅 График времени',table:'📊 Таблица',image:'🖼 Картинка'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
 const TXT=['auto','#0b7a6e','#c0392b','#d68910','#1f5fbf','#7d3c98'],BG=['#fff3b0','#d5f5e3','#fadbd8','#d6eaf8','#e8daef','none'];
 const BLOCK_BG=[['#e2f3ef','Мятный'],['#daf5e4','Зелёный'],['#fff6de','Жёлтый'],['#fdeee8','Персиковый'],['#e6f0fa','Голубой'],['#f1edff','Лавандовый'],['#ffffff','Белый'],['none','Стандартный']];
@@ -6087,7 +6240,23 @@ function lineBlock(s,i){
     const tbl=parseScriptTableData(s.lines[i]);
     const rCount=tbl.rows.length;
     const cCount=tbl.rows[0]?.length||3;
-    return `<div class="v4-line is-table"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-tlbl" style="font-weight:700;color:var(--teal)">📊 Генератор таблиц (${rCount}×${cCount})</span>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Переместить выше">↑</button><button data-v4="down" data-i="${i}" title="Переместить ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить таблицу">✕</button>`):''}</div>
+    const {tableCss,getCellCss,ts}=getScriptTableStyles(tbl);
+    const activeCell=tblSelCell[i]||{r:0,c:0};
+    const selR=Math.max(0,Math.min(rCount-1,activeCell.r||0));
+    const selC=Math.max(0,Math.min(cCount-1,activeCell.c||0));
+    tblSelCell[i]={r:selR,c:selC};
+    const cs=(tbl.cellStyles&&tbl.cellStyles[`${selR},${selC}`])||{};
+    const isCellBold=typeof cs.bold==='boolean'?cs.bold:(tbl.hasHeader&&selR===0);
+    const isCellItalic=Boolean(cs.italic);
+    const cellFontSize=cs.fontSize||'';
+    const cellAlign=cs.align||ts.cellAlign||'left';
+    const cellTextColor=cs.color||'#0f172a';
+    const cellBgColor=cs.bg||'#ffffff';
+    const tblBorderColor=ts.borderColor||'#cbd5e1';
+    const textColors=['#0f172a','#008578','#dc2626','#2563eb','#d97706','#7c3aed'];
+    const bgColors=['#fef3c7','#dcfce7','#dbeafe','#fce7f3','#ede9fe','#f1f5f9'];
+    const fontSizes=[11,12,13,14,15,16,18,20,22,24,28];
+    return `<div class="v4-line is-table" data-v4-tbl-line="${i}"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-tlbl" style="font-weight:700;color:var(--teal)">📊 Генератор таблиц (${rCount}×${cCount})</span>${blockBar(i,curBg)}<span class="v4-s"></span><button data-v4="up" data-i="${i}" title="Переместить выше">↑</button><button data-v4="down" data-i="${i}" title="Переместить ниже">↓</button><button data-v4="addline" data-i="${i}" title="Добавить реплику ниже">+</button>${canDeleteContent()?(`<button data-v4="delline" data-i="${i}" title="Удалить таблицу">✕</button>`):''}</div>
       <div class="v4-table-gen-bar">
         <label style="display:inline-flex;align-items:center;gap:4px;font-weight:700">Строк: <input type="number" min="1" max="30" value="${rCount}" id="v4-tbl-rows-${i}" style="width:58px;height:30px;padding:0 6px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)"></label>
         <label style="display:inline-flex;align-items:center;gap:4px;font-weight:700">Столбцов: <input type="number" min="1" max="12" value="${cCount}" id="v4-tbl-cols-${i}" style="width:58px;height:30px;padding:0 6px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)"></label>
@@ -6099,15 +6268,72 @@ function lineBlock(s,i){
         <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:700"><input type="checkbox" data-v4-tbl-header="${i}" ${tbl.hasHeader?'checked':''}> Выделить 1-ю строку как шапку</label>
         <input type="text" data-v4-tbl-title="${i}" placeholder="Заголовок таблицы (необязательно)" value="${E(tbl.title)}" style="flex:1;min-width:190px;height:30px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)">
       </div>
+      <div class="v4-table-style-bar">
+        <div class="v4-tbl-style-group">
+          <span class="v4-tbl-style-label">Таблица:</span>
+          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},fontSize" title="Размер шрифта всей таблицы">
+            ${fontSizes.map(sz=>`<option value="${sz}" ${ts.fontSize===sz?'selected':''}>Шрифт ${sz}px</option>`).join('')}
+          </select>
+          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},borderWidth" title="Толщина границ таблицы и ячеек">
+            <option value="0" ${ts.borderWidth==='0'?'selected':''}>Без границ</option>
+            <option value="1" ${ts.borderWidth==='1'?'selected':''}>Граница 1px</option>
+            <option value="2" ${ts.borderWidth==='2'?'selected':''}>Граница 2px</option>
+            <option value="3" ${ts.borderWidth==='3'?'selected':''}>Граница 3px</option>
+          </select>
+          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},borderStyle" title="Стиль границ">
+            <option value="solid" ${ts.borderStyle==='solid'?'selected':''}>Сплошная</option>
+            <option value="dashed" ${ts.borderStyle==='dashed'?'selected':''}>Пунктир</option>
+            <option value="dotted" ${ts.borderStyle==='dotted'?'selected':''}>Точки</option>
+          </select>
+          <input type="color" class="v4-tbl-color-pick" data-v4-tbl-tstyle="${i},borderColor" value="${E(tblBorderColor)}" title="Цвет границ таблицы и ячеек">
+          ${ts.borderColor?`<button type="button" class="v4-tbl-mini-btn" data-v4="tbl-tstyle-reset" data-i="${i}" data-prop="borderColor" title="Сбросить цвет границ">✕</button>`:''}
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:600;margin-left:2px"><input type="checkbox" data-v4-tbl-outer="${i}" ${ts.outerBorder!==false?'checked':''}> Внешняя рамка</label>
+        </div>
+        <span class="v4-tbl-style-sep"></span>
+        <div class="v4-tbl-style-group">
+          <span class="v4-tbl-style-label" data-v4-tbl-active-lbl="${i}">Ячейка ${selR+1}:${selC+1}:</span>
+          <select class="v4-tbl-mini-select" data-v4-tbl-cstyle="${i},fontSize" title="Размер шрифта выбранной ячейки">
+            <option value="" ${!cellFontSize?'selected':''}>Шрифт: авто</option>
+            ${fontSizes.map(sz=>`<option value="${sz}" ${Number(cellFontSize)===sz?'selected':''}>${sz}px</option>`).join('')}
+          </select>
+          <button type="button" class="v4-tbl-mini-btn ${isCellBold?'active':''}" data-v4="tbl-cell-bold" data-i="${i}" title="Жирный текст в ячейке"><b>Ж</b></button>
+          <button type="button" class="v4-tbl-mini-btn ${isCellItalic?'active':''}" data-v4="tbl-cell-italic" data-i="${i}" title="Курсив в ячейке"><i>К</i></button>
+          <button type="button" class="v4-tbl-mini-btn ${cellAlign==='left'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="left" title="Выровнять по левому краю">⬅</button>
+          <button type="button" class="v4-tbl-mini-btn ${cellAlign==='center'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="center" title="По центру">⬌</button>
+          <button type="button" class="v4-tbl-mini-btn ${cellAlign==='right'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="right" title="По правому краю">➡</button>
+          <span class="v4-tbl-style-label" style="margin-left:3px">Текст:</span>
+          ${textColors.map(c=>`<button type="button" class="v4-tbl-color-dot" style="background:${c}" data-v4="tbl-cell-color" data-i="${i}" data-c="${c}" title="Цвет текста ${c}"></button>`).join('')}
+          <input type="color" class="v4-tbl-color-pick" data-v4-tbl-cstyle="${i},color" value="${E(cellTextColor)}" title="Свой цвет текста">
+          <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-color" data-i="${i}" data-c="" title="Сбросить цвет текста">✕</button>
+          <span class="v4-tbl-style-label" style="margin-left:3px">Заливка:</span>
+          ${bgColors.map(c=>`<button type="button" class="v4-tbl-color-dot" style="background:${c}" data-v4="tbl-cell-bg" data-i="${i}" data-c="${c}" title="Заливка ячейки ${c}"></button>`).join('')}
+          <input type="color" class="v4-tbl-color-pick" data-v4-tbl-cstyle="${i},bg" value="${E(cellBgColor)}" title="Своя заливка ячейки">
+          <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-bg" data-i="${i}" data-c="" title="Убрать заливку">✕</button>
+          <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-apply-row" data-i="${i}" title="Применить стиль этой ячейки ко всей строке">На всю строку</button>
+          <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-reset" data-i="${i}" title="Сбросить оформление ячейки">Сброс</button>
+        </div>
+      </div>
       <div class="script-table-block"${bStyle?` style="${bStyle}"`:''}>
         ${tbl.title.trim()?`<div class="script-table-title">📊 ${E(tbl.title)}</div>`:''}
         <div class="script-table-scroll">
-          <table class="script-inline-table">
+          <table class="script-inline-table" style="${tableCss}">
             <tbody>
               ${tbl.rows.map((row,rIdx)=>{
                 const isHdr=tbl.hasHeader&&rIdx===0;
                 const tag=isHdr?'th':'td';
-                return `<tr>${row.map((cell,cIdx)=>`<${tag}><input type="text" class="v4-tbl-cell-input" data-v4-tbl-cell="${i},${rIdx},${cIdx}" value="${E(cell)}" placeholder="${isHdr?'Заголовок '+(cIdx+1):'Ячейка'}"></${tag}>`).join('')}</tr>`;
+                return `<tr>${row.map((cell,cIdx)=>{
+                  const cCss=getCellCss(rIdx,cIdx,isHdr);
+                  const cObj=(tbl.cellStyles&&tbl.cellStyles[`${rIdx},${cIdx}`])||{};
+                  const isAct=(rIdx===selR&&cIdx===selC);
+                  const inpCss=[
+                    cObj.fontSize?`font-size:${cObj.fontSize}px`:`font-size:${ts.fontSize}px`,
+                    typeof cObj.bold==='boolean'?`font-weight:${cObj.bold?700:400}`:(isHdr?'font-weight:800':''),
+                    cObj.italic?'font-style:italic':'',
+                    cObj.color?`color:${cObj.color}`:'',
+                    `text-align:${cObj.align||ts.cellAlign||'left'}`
+                  ].filter(Boolean).join(';');
+                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}"><input type="text" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" value="${E(cell)}" placeholder="${isHdr?'Заголовок '+(cIdx+1):'Ячейка'}"></${tag}>`;
+                }).join('')}</tr>`;
               }).join('')}
             </tbody>
           </table>
@@ -6248,7 +6474,39 @@ async function applyNow(){
   }catch(e){toast(e.message)}
 }
 lv.addEventListener('mousedown',e=>{if(e.target.closest('.v4-tools button,.v4-ins button'))e.preventDefault()});
-lv.addEventListener('focusin',e=>{if(!start&&e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))start=historyState()});
+lv.addEventListener('focusin',e=>{
+  if(!start&&e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))start=historyState();
+  if(e.target.matches('[data-v4-tbl-cell]')){
+    const [li,ri,ci]=e.target.dataset.v4TblCell.split(',').map(Number);
+    tblSelCell[li]={r:ri,c:ci};
+    const lineEl=e.target.closest('.v4-line.is-table');
+    if(lineEl){
+      lineEl.querySelectorAll('.v4-tbl-cell-active').forEach(el=>el.classList.remove('v4-tbl-cell-active'));
+      e.target.closest('th,td')?.classList.add('v4-tbl-cell-active');
+      const lbl=lineEl.querySelector('[data-v4-tbl-active-lbl]');
+      if(lbl)lbl.textContent=`Ячейка ${ri+1}:${ci+1}:`;
+      const s=st();
+      if(s){
+        const tbl=parseScriptTableData(s.lines[li]);
+        const cs=(tbl.cellStyles&&tbl.cellStyles[`${ri},${ci}`])||{};
+        const ts=tbl.tableStyle||{};
+        const isBold=typeof cs.bold==='boolean'?cs.bold:(tbl.hasHeader&&ri===0);
+        const boldBtn=lineEl.querySelector('[data-v4="tbl-cell-bold"]');
+        if(boldBtn)boldBtn.classList.toggle('active',isBold);
+        const italBtn=lineEl.querySelector('[data-v4="tbl-cell-italic"]');
+        if(italBtn)italBtn.classList.toggle('active',Boolean(cs.italic));
+        const curAlign=cs.align||ts.cellAlign||'left';
+        lineEl.querySelectorAll('[data-v4="tbl-cell-align"]').forEach(b=>b.classList.toggle('active',b.dataset.val===curAlign));
+        const fSel=lineEl.querySelector(`[data-v4-tbl-cstyle="${li},fontSize"]`);
+        if(fSel)fSel.value=cs.fontSize?String(cs.fontSize):'';
+        const cPick=lineEl.querySelector(`[data-v4-tbl-cstyle="${li},color"]`);
+        if(cPick)cPick.value=cs.color||'#0f172a';
+        const bPick=lineEl.querySelector(`[data-v4-tbl-cstyle="${li},bg"]`);
+        if(bPick)bPick.value=cs.bg||'#ffffff';
+      }
+    }
+  }
+});
 lv.addEventListener('focusout',e=>{if(!start||!e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))return;const p=start;start=null;if(JSON.stringify(p.data)!==JSON.stringify(editorDraft)){pushUndo(p);rememberDraft()}});
 lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
   if(f.matches('[data-v4-tbl-cell]')){
@@ -6361,6 +6619,49 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
       s.lines[idx]=JSON.stringify(tbl);
     });
   }
+  else if(f.matches('[data-v4-tbl-tstyle]')){
+    const [idxStr,prop]=f.dataset.v4TblTstyle.split(',');
+    const idx=+idxStr;
+    mutateDraft(()=>{
+      const tbl=parseScriptTableData(s.lines[idx]);
+      if(prop==='fontSize')tbl.tableStyle.fontSize=Math.max(11,Math.min(28,Number(f.value)||14));
+      else if(prop==='borderWidth')tbl.tableStyle.borderWidth=['0','1','2','3'].includes(f.value)?f.value:'1';
+      else if(prop==='borderStyle')tbl.tableStyle.borderStyle=['solid','dashed','dotted'].includes(f.value)?f.value:'solid';
+      else if(prop==='borderColor')tbl.tableStyle.borderColor=sanitizeTableColor(f.value);
+      s.lines[idx]=JSON.stringify(tbl);
+    });
+  }
+  else if(f.matches('[data-v4-tbl-outer]')){
+    const idx=+f.dataset.v4TblOuter;
+    mutateDraft(()=>{
+      const tbl=parseScriptTableData(s.lines[idx]);
+      tbl.tableStyle.outerBorder=f.checked;
+      s.lines[idx]=JSON.stringify(tbl);
+    });
+  }
+  else if(f.matches('[data-v4-tbl-cstyle]')){
+    const [idxStr,prop]=f.dataset.v4TblCstyle.split(',');
+    const idx=+idxStr;
+    const pos=tblSelCell[idx]||{r:0,c:0};
+    const key=`${pos.r},${pos.c}`;
+    mutateDraft(()=>{
+      const tbl=parseScriptTableData(s.lines[idx]);
+      tbl.cellStyles=tbl.cellStyles||{};
+      tbl.cellStyles[key]=tbl.cellStyles[key]||{};
+      if(prop==='fontSize'){
+        if(f.value)tbl.cellStyles[key].fontSize=Math.max(11,Math.min(28,Number(f.value)||14));
+        else delete tbl.cellStyles[key].fontSize;
+      }else if(prop==='color'){
+        const clr=sanitizeTableColor(f.value);
+        if(clr)tbl.cellStyles[key].color=clr;else delete tbl.cellStyles[key].color;
+      }else if(prop==='bg'){
+        const bg=sanitizeTableColor(f.value);
+        if(bg)tbl.cellStyles[key].bg=bg;else delete tbl.cellStyles[key].bg;
+      }
+      if(!Object.keys(tbl.cellStyles[key]).length)delete tbl.cellStyles[key];
+      s.lines[idx]=JSON.stringify(tbl);
+    });
+  }
   else if(f.matches('[data-v4-imgfile]')){
     const idx=+f.dataset.v4Imgfile;
     const files=[...f.files];f.value='';
@@ -6437,6 +6738,14 @@ lv.addEventListener('click',async e=>{
     case 'tbl-del-row':M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.rows.length>1){tbl.rows.pop();s.lines[i]=JSON.stringify(tbl);}});return;
     case 'tbl-add-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols<12){tbl.rows.forEach((r,ri)=>r.push(ri===0?`Столбец ${cols+1}`:''));s.lines[i]=JSON.stringify(tbl);}});return;
     case 'tbl-del-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols>1){tbl.rows.forEach(r=>r.pop());s.lines[i]=JSON.stringify(tbl);}});return;
+    case 'tbl-tstyle-reset':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const prop=b.dataset.prop;if(prop==='borderColor')tbl.tableStyle.borderColor='';s.lines[i]=JSON.stringify(tbl);});return;
+    case 'tbl-cell-bold':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};const nowBold=typeof cur.bold==='boolean'?cur.bold:(tbl.hasHeader&&pos.r===0);cur.bold=!nowBold;tbl.cellStyles[key]=cur;s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-italic':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(cur.italic)delete cur.italic;else cur.italic=true;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-align':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,val=b.dataset.val||'left';M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};cur.align=val;tbl.cellStyles[key]=cur;s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-color':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,clr=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(clr)cur.color=clr;else delete cur.color;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-bg':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,bg=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(bg)cur.bg=bg;else delete cur.bg;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-apply-row':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const src=tbl.cellStyles[key]?{...tbl.cellStyles[key]}:null;const cols=tbl.rows[0]?.length||0;for(let c=0;c<cols;c++){if(src)tbl.cellStyles[`${pos.r},${c}`]={...src};else delete tbl.cellStyles[`${pos.r},${c}`];}s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-reset':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.cellStyles)delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
     case 'img-size':M(()=>{const img=parseScriptImageData(s.lines[i]);img.size=b.dataset.size||'medium';img.widthPct=Number(b.dataset.pct)||50;s.lines[i]=JSON.stringify(img);});return;
     case 'lmove':moveLayout(id,b.dataset.d);return;
     case 'addline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'Новая реплика');s.lineKinds.splice(j,0,'speech');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
