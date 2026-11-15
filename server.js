@@ -19,7 +19,7 @@ const DEFAULT_DATA_DIR = process.env.BAUER_DATA_DIR || (process.env.VERCEL ? pat
 const SESSION_COOKIE = 'bauer_sid';
 const CSRF_COOKIE = 'bauer_csrf';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const MAX_BODY_BYTES = 12 * 1024 * 1024; // 12 MB (for base64 gift photos in layouts/content)
+const MAX_BODY_BYTES = 25 * 1024 * 1024; // 25 MB (for base64 gift photos and full system backups)
 
 const ALL_PERMISSIONS = [
   'content.edit',
@@ -1098,7 +1098,7 @@ function createAppServer(options = {}) {
         return;
       }
 
-      const needAppData = ['/api/content', '/api/scripts', '/api/department/scripts', '/api/giftbase', '/api/directionbase', '/api/addresses', '/api/layouts', '/api/layouts-order', '/api/presentation-plan', '/api/users', '/api/trainer'].some(
+      const needAppData = ['/api/content', '/api/scripts', '/api/department/scripts', '/api/giftbase', '/api/directionbase', '/api/addresses', '/api/layouts', '/api/layouts-order', '/api/presentation-plan', '/api/users', '/api/trainer', '/api/backup'].some(
         p => pathname === p || pathname.startsWith(p + '/')
       );
       await store.syncFromBlob({ needAppData });
@@ -1806,6 +1806,98 @@ function createAppServer(options = {}) {
           });
           return sendJson(res, 200, appData.directionbase);
         }
+      }
+
+      if (pathname === '/api/backup' && method === 'GET') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        if (auth.user.role !== 'OWNER') {
+          store.logEvent({ action: 'backup.export.denied', actor: auth.user, ip, userAgent, status: 'denied' });
+          return sendJson(res, 403, { error: 'Резервное копирование доступно только Владельцу.' });
+        }
+        const payload = {
+          backupVersion: 1,
+          exportedAt: Date.now(),
+          exportedBy: auth.user.login,
+          stats: {
+            layouts: Array.isArray(appData.layouts) ? appData.layouts.length : 0,
+            gifts: Array.isArray(appData.giftbase?.gifts) ? appData.giftbase.gifts.length : 0,
+            directions: Array.isArray(appData.directionbase?.directions) ? appData.directionbase.directions.length : 0,
+            venues: Array.isArray(appData.addresses?.venues) ? appData.addresses.venues.length : 0,
+            trainerBlocks: Array.isArray(appData.trainerBlocks) ? appData.trainerBlocks.length : 0
+          },
+          data: {
+            content: appData.content || null,
+            layouts: Array.isArray(appData.layouts) ? appData.layouts : [],
+            giftbase: appData.giftbase || { gifts: [], deleted: [], updatedAt: 0 },
+            directionbase: appData.directionbase || { directions: [], updatedAt: 0 },
+            addresses: appData.addresses || { venues: [], revision: 0, updatedAt: 0 },
+            presentationPlan: appData.presentationPlan || null,
+            sharedThemes: Array.isArray(appData.sharedThemes) ? appData.sharedThemes : [],
+            trainerBlocks: Array.isArray(appData.trainerBlocks) ? appData.trainerBlocks : []
+          }
+        };
+        store.logEvent({ action: 'backup.export', actor: auth.user, ip, userAgent, details: payload.stats });
+        return sendJson(res, 200, payload);
+      }
+
+      if (pathname === '/api/backup/restore' && method === 'POST') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        if (auth.user.role !== 'OWNER') {
+          store.logEvent({ action: 'backup.restore.denied', actor: auth.user, ip, userAgent, status: 'denied' });
+          return sendJson(res, 403, { error: 'Восстановление из резервной копии доступно только Владельцу.' });
+        }
+        const body = await readBody(req);
+        if (!body || body.backupVersion !== 1 || !body.data || typeof body.data !== 'object') {
+          return sendJson(res, 400, { error: 'Неверный формат файла резервной копии.' });
+        }
+        const d = body.data;
+        const restored = {};
+        if (d.content && typeof d.content === 'object') {
+          appData.content = d.content;
+          restored.content = true;
+        }
+        if (Array.isArray(d.layouts)) {
+          appData.layouts = d.layouts.filter(l => l && l.id && l.name);
+          restored.layouts = appData.layouts.length;
+        }
+        if (d.giftbase && Array.isArray(d.giftbase.gifts)) {
+          appData.giftbase = {
+            gifts: d.giftbase.gifts,
+            deleted: Array.isArray(d.giftbase.deleted) ? d.giftbase.deleted : [],
+            updatedAt: Date.now()
+          };
+          restored.gifts = appData.giftbase.gifts.length;
+        }
+        if (d.directionbase && Array.isArray(d.directionbase.directions)) {
+          appData.directionbase = {
+            directions: d.directionbase.directions,
+            updatedAt: Date.now()
+          };
+          restored.directions = appData.directionbase.directions.length;
+        }
+        if (d.addresses && Array.isArray(d.addresses.venues)) {
+          appData.addresses = {
+            venues: d.addresses.venues,
+            revision: Number(d.addresses.revision || 0) + 1,
+            updatedAt: Date.now()
+          };
+          restored.venues = appData.addresses.venues.length;
+        }
+        if (d.presentationPlan && typeof d.presentationPlan === 'object') {
+          appData.presentationPlan = d.presentationPlan;
+          restored.presentationPlan = true;
+        }
+        if (Array.isArray(d.sharedThemes)) {
+          appData.sharedThemes = d.sharedThemes;
+          restored.sharedThemes = appData.sharedThemes.length;
+        }
+        if (Array.isArray(d.trainerBlocks)) {
+          appData.trainerBlocks = d.trainerBlocks;
+          restored.trainerBlocks = appData.trainerBlocks.length;
+        }
+        store.saveAppData();
+        store.logEvent({ action: 'backup.restore', actor: auth.user, ip, userAgent, details: restored });
+        return sendJson(res, 200, { ok: true, restored });
       }
 
       if (pathname === '/api/addresses') {

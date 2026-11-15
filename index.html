@@ -5042,6 +5042,34 @@ async function api_local_vault(rawPath,options={}){
     }
   }
 
+  if(pathname==='/api/backup'&&method==='GET'){
+    if(!authUser||authUser.role!=='OWNER')throw fail('Резервное копирование доступно только Владельцу.',403);
+    const layouts=await getStoredLayouts();
+    const gb=(await VaultDB.get('giftbase',null))||{gifts:[],deleted:[],updatedAt:0};
+    const db=(await VaultDB.get('directionbase',null))||{directions:[],updatedAt:0};
+    const addr=(await VaultDB.get('addresses',null))||{venues:[],revision:0,updatedAt:0};
+    const pp=await VaultDB.get('presentation_plan',null);
+    const cnt=await VaultDB.get('content',null);
+    return {
+      backupVersion:1,exportedAt:Date.now(),exportedBy:authUser.login,
+      stats:{layouts:layouts.length,gifts:gb.gifts?.length||0,directions:db.directions?.length||0,venues:addr.venues?.length||0,trainerBlocks:trainerBlocks.length},
+      data:{content:cnt,layouts,giftbase:gb,directionbase:db,addresses:addr,presentationPlan:pp,sharedThemes:[],trainerBlocks}
+    };
+  }
+  if(pathname==='/api/backup/restore'&&method==='POST'){
+    if(!authUser||authUser.role!=='OWNER')throw fail('Восстановление доступно только Владельцу.',403);
+    if(!body||body.backupVersion!==1||!body.data||typeof body.data!=='object')throw fail('Неверный формат файла резервной копии.',400);
+    const d=body.data;
+    if(d.content&&typeof d.content==='object')await VaultDB.set('content',d.content);
+    if(Array.isArray(d.layouts))await VaultDB.set('layouts',d.layouts.filter(l=>l&&l.id&&l.name));
+    if(d.giftbase&&Array.isArray(d.giftbase.gifts))await VaultDB.set('giftbase',{gifts:d.giftbase.gifts,deleted:d.giftbase.deleted||[],updatedAt:Date.now()});
+    if(d.directionbase&&Array.isArray(d.directionbase.directions))await VaultDB.set('directionbase',{directions:d.directionbase.directions,updatedAt:Date.now()});
+    if(d.addresses&&Array.isArray(d.addresses.venues))await VaultDB.set('addresses',{venues:d.addresses.venues,revision:(Number(d.addresses.revision)||0)+1,updatedAt:Date.now()});
+    if(d.presentationPlan&&typeof d.presentationPlan==='object')await VaultDB.set('presentation_plan',d.presentationPlan);
+    if(Array.isArray(d.trainerBlocks))await VaultDB.set('trainer_blocks',d.trainerBlocks);
+    return {ok:true};
+  }
+
   if(pathname==='/api/directionbase'){
     if(method==='GET'){
       const db=await VaultDB.get('directionbase',null);
@@ -9560,6 +9588,9 @@ const ACTION_LABELS={
   'layouts.delete':'Удаление макета',
   'layouts.reorder':'Изменение порядка скриптов',
   'gifts.update':'Обновление базы подарков',
+  'directions.update':'Обновление базы направлений',
+  'backup.export':'Выгрузка резервной копии',
+  'backup.restore':'Восстановление из резервной копии',
   'addresses.update':'Обновление адресов площадок',
   'user.password.changed':'Смена пароля'
 };
@@ -10752,6 +10783,20 @@ function renderSecuritySection(){
         <button type="submit" class="primary">Сгенерировать новые резервные коды</button>
       </form>
     </div>`:''}
+    ${isOwner?`<div class="owner-card" style="grid-column:1/-1">
+      <div class="owner-card-head">
+        <div>
+          <h2>💾 Резервная копия системы (Экспорт и Восстановление)</h2>
+          <p>Выгрузите единый JSON-файл со всеми скриптами, макетами, базой подарков, базой направлений, адресами, планом презентаций и блоками тренера — или восстановите их из сохранённой копии.</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <button type="button" class="primary" id="owner-backup-download">⬇ Скачать резервную копию (.json)</button>
+        <label for="owner-backup-file" style="display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface-alt);color:var(--ink);font-size:13px;font-weight:750;cursor:pointer">⬆ Восстановить из файла (.json)</label>
+        <input type="file" id="owner-backup-file" accept=".json,application/json" hidden>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin:10px 0 0">Учётные записи сотрудников, пароли и активные сессии при восстановлении не затрагиваются.</p>
+    </div>`:''}
   </div>`;
 }
 
@@ -11534,6 +11579,65 @@ document.addEventListener('click',async e=>{
     auditFilterUser='';auditFilterAction='';auditFilterDept='';auditFilterPeriod='today';
     await loadOwnerData();renderOwnerView();
     return;
+  }
+});
+
+document.addEventListener('click',async e=>{
+  const dlBtn=e.target.closest('#owner-backup-download');
+  if(!dlBtn)return;
+  dlBtn.disabled=true;
+  const orig=dlBtn.textContent;
+  dlBtn.textContent='⏳ Формирование копии…';
+  try{
+    const bkp=await api('/api/backup');
+    const json=JSON.stringify(bkp,null,2);
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const now=new Date();
+    const pad=n=>String(n).padStart(2,'0');
+    const fname=`bauer-backup-${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.json`;
+    const a=document.createElement('a');
+    a.href=url;a.download=fname;
+    document.body.appendChild(a);a.click();a.remove();
+    URL.revokeObjectURL(url);
+    const st=bkp.stats||{};
+    toast(`✓ Копия скачана (скриптов: ${st.scripts||0}, макетов: ${st.layouts||0}, подарков: ${st.gifts||0}, направлений: ${st.directions||0})`);
+  }catch(err){
+    toast('Ошибка резервного копирования: '+(err.message||err));
+  }finally{
+    dlBtn.disabled=false;
+    dlBtn.textContent=orig;
+  }
+});
+
+document.addEventListener('change',async e=>{
+  const inp=e.target.closest('#owner-backup-file');
+  if(!inp||!inp.files||!inp.files[0])return;
+  const file=inp.files[0];
+  try{
+    const text=await file.text();
+    const parsed=JSON.parse(text);
+    if(!parsed||parsed.backupVersion!==1||!parsed.data||typeof parsed.data!=='object'){
+      toast('Неверный формат файла резервной копии');
+      inp.value='';
+      return;
+    }
+    const st=parsed.stats||{};
+    const dt=parsed.exportedAt?new Date(parsed.exportedAt).toLocaleString('ru-RU'):'неизвестно';
+    const ok=confirm(
+      `Восстановить данные из резервной копии?\n\n`+
+      `Дата копии: ${dt}\n`+
+      `Скриптов: ${st.scripts??'—'}, макетов: ${st.layouts??'—'}, подарков: ${st.gifts??'—'}, направлений: ${st.directions??'—'}, городов: ${st.cities??'—'}\n\n`+
+      `Текущие скрипты, макеты, базы и настройки будут заменены. Аккаунты и пароли пользователей сохранятся.`
+    );
+    if(!ok){inp.value='';return;}
+    await api('/api/backup/restore',{method:'POST',body:JSON.stringify(parsed)});
+    inp.value='';
+    toast('✓ Резервная копия восстановлена! Обновление страницы…');
+    setTimeout(()=>location.reload(),900);
+  }catch(err){
+    inp.value='';
+    toast('Ошибка восстановления: '+(err.message||err));
   }
 });
 
