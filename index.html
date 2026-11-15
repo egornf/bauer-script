@@ -3009,6 +3009,24 @@ function setScheduleViewingWeek(wn) {
   } catch {}
 }
 
+function findNearestPrecedingWeekPlan(plan, targetWeek) {
+  if (!plan || !plan.weeklyPlans || typeof plan.weeklyPlans !== 'object') return null;
+  const wn = Number(targetWeek) || 1;
+  for (let w = wn - 1; w >= 1; w--) {
+    const wp = plan.weeklyPlans[String(w)];
+    if (wp && Array.isArray(wp.cities) && wp.cities.length && !wp.autoDuplicatedFromWeek) {
+      return { weekNumber: w, plan: wp };
+    }
+  }
+  for (let w = wn - 1; w >= 1; w--) {
+    const wp = plan.weeklyPlans[String(w)];
+    if (wp && Array.isArray(wp.cities) && wp.cities.length) {
+      return { weekNumber: w, plan: wp };
+    }
+  }
+  return null;
+}
+
 function getActivePlanForViewingWeek(weekNum) {
   const wn = weekNum || getScheduleViewingWeek();
   let basePlan = activePresentationPlan;
@@ -3021,8 +3039,27 @@ function getActivePlanForViewingWeek(weekNum) {
     basePlan = createInitialPresentationPlan();
     activePresentationPlan = basePlan;
   }
-  if (basePlan.weeklyPlans && basePlan.weeklyPlans[String(wn)] && Array.isArray(basePlan.weeklyPlans[String(wn)].cities) && basePlan.weeklyPlans[String(wn)].cities.length) {
-    const wp = basePlan.weeklyPlans[String(wn)];
+  const wp = basePlan.weeklyPlans && basePlan.weeklyPlans[String(wn)];
+  if (wp && Array.isArray(wp.cities) && wp.cities.length && (!wp.autoDuplicatedFromWeek || basePlan.autoDuplicateNextWeek === false)) {
+    return {
+      ...basePlan,
+      weekNumber: wn,
+      weekStart: wp.weekStart || getBauerWeekStartTuesday(wn, basePlan.calendarYear || BAUER_CALENDAR_YEAR),
+      cities: wp.cities
+    };
+  }
+  if (basePlan.autoDuplicateNextWeek !== false) {
+    const prev = findNearestPrecedingWeekPlan(basePlan, wn);
+    if (prev) {
+      return {
+        ...basePlan,
+        weekNumber: wn,
+        weekStart: getBauerWeekStartTuesday(wn, basePlan.calendarYear || BAUER_CALENDAR_YEAR),
+        cities: prev.plan.cities
+      };
+    }
+  }
+  if (wp && Array.isArray(wp.cities) && wp.cities.length) {
     return {
       ...basePlan,
       weekNumber: wn,
@@ -12196,12 +12233,19 @@ function persistDraftLocally() {
       planDraft.weeklyPlans = {};
     }
     const wn = planDraft.weekNumber || getCurrentBauerWeekNumber();
-    planDraft.weeklyPlans[String(wn)] = {
+    const prevEntry = planDraft.weeklyPlans[String(wn)];
+    const citiesJson = JSON.stringify(planDraft.cities || []);
+    const keepAutoFrom = (prevEntry && prevEntry.autoDuplicatedFromWeek && JSON.stringify(prevEntry.cities || []) === citiesJson)
+      ? prevEntry.autoDuplicatedFromWeek
+      : undefined;
+    const entry = {
       weekNumber: wn,
       weekStart: planDraft.weekStart,
-      cities: JSON.parse(JSON.stringify(planDraft.cities || [])),
+      cities: JSON.parse(citiesJson),
       updatedAt: Date.now()
     };
+    if (keepAutoFrom) entry.autoDuplicatedFromWeek = keepAutoFrom;
+    planDraft.weeklyPlans[String(wn)] = entry;
     localStorage.setItem('bauer-presentation-plan-draft', JSON.stringify(planDraft));
   } catch {}
 }
@@ -12309,34 +12353,69 @@ function initPlanDraft() {
   persistDraftLocally();
 }
 
+function propagateWeekPlanForward(plan, sourceWeek, cities) {
+  if (!plan || plan.autoDuplicateNextWeek === false || !Array.isArray(cities)) return;
+  if (!plan.weeklyPlans || typeof plan.weeklyPlans !== 'object') {
+    plan.weeklyPlans = {};
+  }
+  const year = plan.calendarYear || BAUER_CALENDAR_YEAR;
+  for (let w = sourceWeek + 1; w <= 53; w++) {
+    const existing = plan.weeklyPlans[String(w)];
+    if (existing && Array.isArray(existing.cities) && existing.cities.length && !existing.autoDuplicatedFromWeek) {
+      break;
+    }
+    plan.weeklyPlans[String(w)] = {
+      weekNumber: w,
+      weekStart: getBauerWeekStartTuesday(w, year),
+      cities: JSON.parse(JSON.stringify(cities)),
+      autoDuplicatedFromWeek: sourceWeek,
+      updatedAt: Date.now()
+    };
+  }
+}
+
 function switchPlanWeek(targetWeekNum) {
   if (!planDraft) initPlanDraft();
-  const wn = Math.max(1, Math.min(52, Number(targetWeekNum) || getCurrentBauerWeekNumber()));
+  const wn = Math.max(1, Math.min(53, Number(targetWeekNum) || getCurrentBauerWeekNumber()));
   const curWn = planDraft.weekNumber || getCurrentBauerWeekNumber();
   if (!planDraft.weeklyPlans || typeof planDraft.weeklyPlans !== 'object') {
     planDraft.weeklyPlans = {};
   }
-  // Сохраняем текущую неделю перед переключением
-  planDraft.weeklyPlans[String(curWn)] = {
+  // Сохраняем текущую неделю перед переключением (не сбрасывая флаг автодубля, если ничего не меняли)
+  const prevCurEntry = planDraft.weeklyPlans[String(curWn)];
+  const curCitiesJson = JSON.stringify(planDraft.cities || []);
+  const keepCurAutoFrom = (prevCurEntry && prevCurEntry.autoDuplicatedFromWeek && JSON.stringify(prevCurEntry.cities || []) === curCitiesJson)
+    ? prevCurEntry.autoDuplicatedFromWeek
+    : undefined;
+  const curEntry = {
     weekNumber: curWn,
     weekStart: planDraft.weekStart || getBauerWeekStartTuesday(curWn, BAUER_CALENDAR_YEAR),
-    cities: JSON.parse(JSON.stringify(planDraft.cities || [])),
+    cities: JSON.parse(curCitiesJson),
     updatedAt: Date.now()
   };
+  if (keepCurAutoFrom) curEntry.autoDuplicatedFromWeek = keepCurAutoFrom;
+  planDraft.weeklyPlans[String(curWn)] = curEntry;
 
-  // Если на выбранную неделю руководитель ещё не вносил изменений — автоматически дублируем расписание!
+  // Если на выбранную неделю руководитель ещё не вносил изменений — берём ближайшую заполненную предыдущую неделю
   const existingTarget = planDraft.weeklyPlans[String(wn)];
-  if (existingTarget && Array.isArray(existingTarget.cities) && existingTarget.cities.length) {
+  if (existingTarget && Array.isArray(existingTarget.cities) && existingTarget.cities.length && (!existingTarget.autoDuplicatedFromWeek || planDraft.autoDuplicateNextWeek === false)) {
     planDraft.cities = JSON.parse(JSON.stringify(existingTarget.cities));
-  } else {
-    planDraft.cities = JSON.parse(JSON.stringify(planDraft.cities || []));
+  } else if (planDraft.autoDuplicateNextWeek !== false) {
+    const prev = findNearestPrecedingWeekPlan(planDraft, wn);
+    const sourceCities = prev ? prev.plan.cities : (existingTarget?.cities || planDraft.cities || []);
+    const sourceWeek = prev ? prev.weekNumber : curWn;
+    planDraft.cities = JSON.parse(JSON.stringify(sourceCities));
     planDraft.weeklyPlans[String(wn)] = {
       weekNumber: wn,
       weekStart: getBauerWeekStartTuesday(wn, BAUER_CALENDAR_YEAR),
       cities: JSON.parse(JSON.stringify(planDraft.cities)),
-      autoDuplicatedFromWeek: curWn,
+      autoDuplicatedFromWeek: sourceWeek,
       updatedAt: Date.now()
     };
+  } else if (existingTarget && Array.isArray(existingTarget.cities) && existingTarget.cities.length) {
+    planDraft.cities = JSON.parse(JSON.stringify(existingTarget.cities));
+  } else {
+    planDraft.cities = JSON.parse(JSON.stringify(planDraft.cities || []));
   }
   planDraft.weekNumber = wn;
   planDraft.weekStart = getBauerWeekStartTuesday(wn, BAUER_CALENDAR_YEAR);
@@ -12409,8 +12488,11 @@ function renderPlanView() {
     const w = i + 1;
     const cal = getBauerWeekDaysCalendar(w, BAUER_CALENDAR_YEAR);
     const isCur = w === currentSystemWeek;
-    const hasSaved = Boolean(planDraft.weeklyPlans?.[String(w)]);
-    return `<option value="${w}" ${w === activeWeekNum ? 'selected' : ''}>Неделя ${w} (${BAUER_CALENDAR_YEAR}) · ${cal[0].dmShort}–${cal[6].dmShort} (${cal[0].shortRu} – ${cal[6].shortRu})${isCur ? ' ★ Текущая' : ''}${hasSaved ? ' ✓' : ''}</option>`;
+    const wp = planDraft.weeklyPlans?.[String(w)];
+    const isManual = Boolean(wp && Array.isArray(wp.cities) && wp.cities.length && !wp.autoDuplicatedFromWeek);
+    const isInherited = Boolean(!isManual && planDraft.autoDuplicateNextWeek !== false && findNearestPrecedingWeekPlan(planDraft, w));
+    const mark = isManual ? ' ✓' : (isInherited ? ' ↪' : '');
+    return `<option value="${w}" ${w === activeWeekNum ? 'selected' : ''}>Неделя ${w} (${BAUER_CALENDAR_YEAR}) · ${cal[0].dmShort}–${cal[6].dmShort} (${cal[0].shortRu} – ${cal[6].shortRu})${isCur ? ' ★ Текущая' : ''}${mark}</option>`;
   }).join('');
 
   // 3 шага мастера (Дни работы и времена презентаций объединены в единый удобный Шаг 3!)
@@ -12687,14 +12769,14 @@ function renderPlanView() {
               <select id="plan-week-number-select" class="whole-sms-input" style="width:auto;font-weight:750;padding:5px 10px">
                 ${weekOptionsHtml}
               </select>
-              <button type="button" class="plan-week-btn" data-plan-week-nav="1" title="Следующая неделя (автоматически дублирует времена, если они не менялись)">Нед. ${Math.min(52, activeWeekNum + 1)} ▶</button>
+              <button type="button" class="plan-week-btn" data-plan-week-nav="1" title="Следующая неделя (автоматически дублирует времена, если они не менялись)">Нед. ${Math.min(53, activeWeekNum + 1)} ▶</button>
               ${activeWeekNum !== currentSystemWeek ? `
                 <button type="button" class="plan-week-btn" data-plan-week-today style="color:var(--teal);border-color:var(--teal)">Вернуться к текущей (${currentSystemWeek}-я нед.)</button>
               ` : ''}
             </div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;cursor:pointer" title="Если руководитель не вносил изменений на следующую неделю, времена презентаций автоматически дублируются и сохраняются">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;cursor:pointer" title="Заполненная неделя автоматически копируется на все последующие недели, пока они не заполнены отдельно">
               <input type="checkbox" id="plan-auto-duplicate-toggle" ${planDraft.autoDuplicateNextWeek !== false ? 'checked' : ''}>
-              <span>Автодублирование времён на следующую неделю</span>
+              <span>Автодублирование на все последующие недели</span>
             </label>
           </div>
 
@@ -12798,18 +12880,9 @@ async function savePresentationPlanToServer() {
     updatedAt: Date.now()
   };
 
-  // Если включено автодублирование и на следующую неделю (wn + 1) ещё нет отдельных правок — дублируем и сохраняем на следующую неделю тоже
-  if (planDraft.autoDuplicateNextWeek !== false && wn < 52) {
-    const nextWn = wn + 1;
-    if (!planDraft.weeklyPlans[String(nextWn)] || planDraft.weeklyPlans[String(nextWn)].autoDuplicatedFromWeek) {
-      planDraft.weeklyPlans[String(nextWn)] = {
-        weekNumber: nextWn,
-        weekStart: getBauerWeekStartTuesday(nextWn, BAUER_CALENDAR_YEAR),
-        cities: JSON.parse(JSON.stringify(planDraft.cities || [])),
-        autoDuplicatedFromWeek: wn,
-        updatedAt: Date.now()
-      };
-    }
+  // Если включено автодублирование — копируем на все последующие недели (до первой отдельно заполненной вручную)
+  if (planDraft.autoDuplicateNextWeek !== false && wn < 53) {
+    propagateWeekPlanForward(planDraft, wn, planDraft.cities || []);
   }
 
   persistDraftLocally();

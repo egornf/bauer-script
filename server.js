@@ -1991,14 +1991,20 @@ function createAppServer(options = {}) {
               cities: body.cities,
               updatedAt: Date.now()
             };
-            if (body.autoDuplicateNextWeek !== false && wn < 52 && (!weeklyPlans[String(wn + 1)] || weeklyPlans[String(wn + 1)].autoDuplicatedFromWeek)) {
-              weeklyPlans[String(wn + 1)] = {
-                weekNumber: wn + 1,
-                weekStart: computeWeekStartTuesday(wn + 1, body.calendarYear || 2026),
-                cities: JSON.parse(JSON.stringify(body.cities)),
-                autoDuplicatedFromWeek: wn,
-                updatedAt: Date.now()
-              };
+            if (body.autoDuplicateNextWeek !== false && wn < 53) {
+              for (let w = wn + 1; w <= 53; w++) {
+                const existingW = weeklyPlans[String(w)];
+                if (existingW && Array.isArray(existingW.cities) && existingW.cities.length && !existingW.autoDuplicatedFromWeek) {
+                  break;
+                }
+                weeklyPlans[String(w)] = {
+                  weekNumber: w,
+                  weekStart: computeWeekStartTuesday(w, body.calendarYear || 2026),
+                  cities: JSON.parse(JSON.stringify(body.cities)),
+                  autoDuplicatedFromWeek: wn,
+                  updatedAt: Date.now()
+                };
+              }
             }
           }
           const plan = {
