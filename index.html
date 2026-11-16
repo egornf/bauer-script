@@ -9674,7 +9674,7 @@ showScript=function(index=current,tab='script'){
   origShowScript(index,tab);
 };
 
-let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],deptEmployeesList=[],selectedDeptHeadId=null,empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',activityFilterPeriod='today',activitySelectedUserId='',roleDefaults={},trainerManagersList=[],trainerHeadsList=[],trainerLayoutsList=[],trainerSelectedUserId='',trainerSelectedLayoutId='',trainerBlocksList=[],trainerHeadFilter='all';
+let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],deptEmployeesList=[],selectedDeptHeadId=null,empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',activityFilterPeriod='today',activitySelectedUserId='',activitySubTab='overview',roleDefaults={},trainerManagersList=[],trainerHeadsList=[],trainerLayoutsList=[],trainerSelectedUserId='',trainerSelectedLayoutId='',trainerBlocksList=[],trainerHeadFilter='all';
 
 function formatAuditDetails(ev){
   if(!ev) return '';
@@ -9941,7 +9941,7 @@ async function loadOwnerData(){
     if(canSessions)tasks.push(api('/api/sessions').then(sRes=>{sessionsList=sRes.sessions||[];}));
     if(canAudit){
       const params=new URLSearchParams({limit:'300'});
-      const isActivityView=ownerTab==='activity';
+      const isActivityView=ownerTab==='activity'&&activitySubTab==='overview';
       if(auditFilterDept)params.set('department',auditFilterDept);
       params.set('period',isActivityView?activityFilterPeriod:auditFilterPeriod);
       if(!isActivityView&&auditFilterUser)params.set('user',auditFilterUser);
@@ -10848,6 +10848,20 @@ function renderActivityControlSection(){
   </div>`;
 }
 
+function renderActivityHub({canViewSessions,canViewAudit}){
+  const tabs=[
+    ['overview','◉ Аналитика'],
+    ...(canViewSessions?[['sessions','🟢 Сейчас ('+sessionsList.length+')']]:[]),
+    ...(canViewAudit?[['audit','📋 Журнал']]:[])
+  ];
+  const body=activitySubTab==='sessions'&&canViewSessions
+    ?renderSessionsSection()
+    :activitySubTab==='audit'&&canViewAudit
+      ?renderAuditSection()
+      :renderActivityControlSection();
+  return `<style>.activity-hub-tabs{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 16px}.activity-hub-tabs button{font-size:12px;padding:9px 13px;border-radius:9px}.activity-hub-tabs button.on{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700}</style><div class="activity-hub-tabs" role="tablist" aria-label="Разделы активности">${tabs.map(([id,label])=>`<button type="button" role="tab" class="${activitySubTab===id?'on':''}" aria-selected="${activitySubTab===id}" data-activity-section="${id}">${label}</button>`).join('')}</div>${body}`;
+}
+
 function renderSecuritySection(){
   const isOwner=currentUser?.role==='OWNER';
   return `<div class="owner-grid-2">
@@ -10922,10 +10936,13 @@ function renderOwnerView(){
   const canViewAudit=isOwner||isHead||perms.includes('audit.view');
   const canDeptScripts=isOwner||isHead||currentUser.role==='ADMIN';
   const canTrainer=isTrainer||isHead||isOwner||currentUser.role==='ADMIN'||perms.includes('scripts.trainer-blocks');
+  if(ownerTab==='sessions'){ownerTab='activity';activitySubTab='sessions';}
+  if(ownerTab==='audit'){ownerTab='activity';activitySubTab='audit';}
   if(ownerTab==='users'&&!canViewUsers)ownerTab=canTrainer?'trainer':'design';
-  if(ownerTab==='sessions'&&!canViewSessions)ownerTab=canTrainer?'trainer':'design';
-  if(ownerTab==='audit'&&!canViewAudit)ownerTab=canTrainer?'trainer':'design';
-  if(ownerTab==='activity'&&!canViewAudit)ownerTab=canTrainer?'trainer':'design';
+  if(ownerTab==='activity'&&!canViewAudit&&!canViewSessions)ownerTab=canTrainer?'trainer':'design';
+  if(ownerTab==='activity'&&activitySubTab==='overview'&&!canViewAudit)activitySubTab='sessions';
+  if(ownerTab==='activity'&&activitySubTab==='sessions'&&!canViewSessions)activitySubTab='overview';
+  if(ownerTab==='activity'&&activitySubTab==='audit'&&!canViewAudit)activitySubTab='overview';
   if(ownerTab==='trainer'&&!canTrainer)ownerTab=canViewUsers?'users':'design';
 
   const navItems=[];
@@ -10933,9 +10950,7 @@ function renderOwnerView(){
   if(canViewUsers)navItems.push(['users',`👥 ${isHead&&!perms.includes('users.manage')?'Мой отдел (сотрудники)':'Сотрудники компании'} (${usersList.length})`]);
   if(canDeptScripts)navItems.push(['dept-scripts',`📋 Скрипты отдела ${deptScriptsIds.length?'('+deptScriptsIds.length+')':''}`]);
   if(canTrainer&&!isTrainer)navItems.push(['trainer',isHead?`💡 Советы и блоки сотрудникам (${trainerManagersList.length})`:`🎓 Бизнес-тренер ДПК (${trainerManagersList.length})`]);
-  if(canViewSessions)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
-  if(canViewAudit)navItems.push(['activity',`◉ Контроль активности`]);
-  if(canViewAudit)navItems.push(['audit',`📋 Журнал действий`]);
+  if(canViewAudit||canViewSessions)navItems.push(['activity',`◉ Активность${canViewSessions?' ('+sessionsList.length+')':''}`]);
   navItems.push(['design',`🎨 Персональный дизайн`]);
   navItems.push(['security',`🔐 ${isOwner?'Безопасность и пароль':'Мой профиль и пароль'}`]);
 
@@ -10954,7 +10969,7 @@ function renderOwnerView(){
   <nav class="owner-nav" role="tablist">
     ${navItems.map(([id,lbl])=>`<button type="button" role="tab" class="${ownerTab===id?'on':''}" data-owner-tab="${id}">${lbl}</button>`).join('')}
   </nav>
-  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='trainer'?renderTrainerWorkspaceSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='activity'?renderActivityControlSection():ownerTab==='audit'?renderAuditSection():ownerTab==='design'?renderDesignSection():renderSecuritySection()}`;
+  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='trainer'?renderTrainerWorkspaceSection():ownerTab==='activity'?renderActivityHub({canViewSessions,canViewAudit}):ownerTab==='design'?renderDesignSection():renderSecuritySection()}`;
   if(ownerTab==='users'&&typeof applyEmpSearchFilter==='function')applyEmpSearchFilter();
 }
 
@@ -11397,6 +11412,14 @@ document.addEventListener('click',async e=>{
     ownerTab=tabBtn.dataset.ownerTab;
     renderOwnerView();
     if(ownerTab!=='design'&&ownerTab!=='security'){await loadOwnerData();renderOwnerView();}
+    return;
+  }
+
+  const activitySectionBtn=e.target.closest('[data-activity-section]');
+  if(activitySectionBtn){
+    activitySubTab=activitySectionBtn.dataset.activitySection||'overview';
+    await loadOwnerData();
+    renderOwnerView();
     return;
   }
 
