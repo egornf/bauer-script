@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { Document, Packer, Paragraph, HeadingLevel, ImageRun } = require('docx');
 
 const { createAppServer } = require('../server');
 
@@ -1523,6 +1524,55 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
       method: 'PUT',
       body: { scriptIds: [] }
     });
+  });
+
+  await t.test('19. Word import restores script blocks, objections and gifts with photos; export returns a Word file', async () => {
+    const imageData = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WAAAAABJRU5ErkJggg==', 'base64');
+    const source = new Document({
+      sections: [{
+        children: [
+          new Paragraph({ text: 'Проверочный скрипт', heading: HeadingLevel.TITLE }),
+          new Paragraph({ text: 'Приветствие', heading: HeadingLevel.HEADING_1 }),
+          new Paragraph({ text: 'Добрый день, меня зовут Елена.' }),
+          new Paragraph({ text: 'Подарок: Термос' }),
+          new Paragraph({ text: 'Возражения', heading: HeadingLevel.HEADING_2 }),
+          new Paragraph({ text: 'Дорого', heading: HeadingLevel.HEADING_3 }),
+          new Paragraph({ text: 'Понимаю вас, участие бесплатное.' }),
+          new Paragraph({ text: 'Подарки', heading: HeadingLevel.HEADING_1 }),
+          new Paragraph({ text: 'Подарок: Термос', heading: HeadingLevel.HEADING_2 }),
+          new Paragraph({ text: 'Условие: При посещении программы' }),
+          new Paragraph({ children: [new ImageRun({ data: imageData, type: 'png', transformation: { width: 1, height: 1 } })] }),
+          new Paragraph({ text: 'Текст подарка: Заберите термос после программы.' })
+        ]
+      }]
+    });
+    const sourceBuffer = await Packer.toBuffer(source);
+    const ownerCookies = Object.entries(ownerClient.getCookies()).map(([name, value]) => `${name}=${encodeURIComponent(value)}`).join('; ');
+    const imported = await fetch(`${baseUrl}/api/layouts/import-docx`, {
+      method: 'POST',
+      headers: {
+        Cookie: ownerCookies,
+        'X-CSRF-Token': ownerClient.getCsrfToken(),
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'X-Layout-Name': encodeURIComponent('Проверочный скрипт.docx')
+      },
+      body: sourceBuffer
+    });
+    assert.equal(imported.status, 200);
+    const importedData = await imported.json();
+    assert.equal(importedData.imported.stages, 1);
+    assert.equal(importedData.imported.gifts, 1);
+    assert.equal(importedData.imported.objections, 1);
+    assert.equal(importedData.layout.data.stages[0].lineKinds[1], 'gift');
+    assert.equal(importedData.layout.data.objections[0].title, 'Дорого');
+    assert.match(importedData.layout.data.objections[0].text, /участие бесплатное/);
+    assert.match(store.getAppData().giftbase.gifts.at(-1).photo, /^data:image\/png;base64,/);
+
+    const exported = await fetch(`${baseUrl}/api/layouts/${importedData.layout.id}/export-docx`, { headers: { Cookie: ownerCookies } });
+    assert.equal(exported.status, 200);
+    assert.match(exported.headers.get('content-type'), /wordprocessingml\.document/);
+    const exportedBuffer = Buffer.from(await exported.arrayBuffer());
+    assert.equal(exportedBuffer.subarray(0, 2).toString('ascii'), 'PK');
   });
 });
 

@@ -6776,9 +6776,11 @@ async function importWordLayout(file){
   if(!response.ok)throw new Error(result.error||'Не удалось импортировать документ.');
   if(result.csrfToken)csrfToken=result.csrfToken;
   savedLayouts=(await api('/api/layouts')).layouts||[];
+  const importedGiftBase=await api('/api/giftbase').catch(()=>null);
+  if(importedGiftBase&&Array.isArray(importedGiftBase.gifts)){giftBase.splice(0,giftBase.length,...importedGiftBase.gifts);data.gifts=clone(giftBase);giftReady=true;}
   const layout=result.layout;
-  if(layout){editorDraft=migrateWorking(layout.data);editorLayoutId=layout.id;editorLayoutName=layout.name;editorStageId=editorDraft.stages[0]?.id||null;editorSection='stage';undoStack=[];redoStack=[];rememberDraft();}
-  tab='saved';renderLayouts();toast(`Импортировано: ${result.imported?.stages||0} блоков. Проверьте текст и сохраните макет.`);
+  if(layout){editorDraft=migrateWorking(layout.data);editorDraft.gifts=clone(giftBase);editorLayoutId=layout.id;editorLayoutName=layout.name;editorStageId=editorDraft.stages[0]?.id||null;editorSection='stage';undoStack=[];redoStack=[];rememberDraft();}
+  tab='saved';renderLayouts();toast(`Импортировано: ${result.imported?.stages||0} блоков, подарков: ${result.imported?.gifts||0}, возражений: ${result.imported?.objections||0}.`);
 }
 async function exportWordLayout(id){
   const response=await fetch('/api/layouts/'+encodeURIComponent(id)+'/export-docx',{credentials:'same-origin'});

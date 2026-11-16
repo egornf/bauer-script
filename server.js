@@ -6,7 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const mammoth = require('mammoth');
-const { Document, Packer, Paragraph, HeadingLevel } = require('docx');
+const { Document, Packer, Paragraph, HeadingLevel, ImageRun } = require('docx');
 let vercelBlob = null;
 try {
   vercelBlob = require('@vercel/blob');
@@ -1063,41 +1063,118 @@ function stageFromWord(title, lines, index) {
   };
 }
 
-function wordHtmlToStages(html) {
+function wordHtmlToLayout(html) {
   const blocks = String(html || '').match(/<(h[1-6]|p|li)\b[^>]*>[\s\S]*?<\/\1>/gi) || [];
   const stages = [];
-  let current = { title: '', lines: [] };
+  const gifts = [];
+  const objections = [];
+  let current = { title: '', lines: [], objectionIds: [] };
+  let mode = 'stage';
+  let currentGift = null;
+  let currentObjection = null;
   const commit = () => {
     if (current.title || current.lines.length) {
-      stages.push(stageFromWord(current.title || `Блок ${stages.length + 1}`, current.lines, stages.length));
+      const stage = stageFromWord(current.title || `Блок ${stages.length + 1}`, current.lines, stages.length);
+      stage.objectionIds = current.objectionIds;
+      stages.push(stage);
     }
-    current = { title: '', lines: [] };
+    current = { title: '', lines: [], objectionIds: [] };
   };
   for (const block of blocks) {
-    const tag = /^<h[1-6]\b/i.test(block) ? 'heading' : 'text';
+    if (/\bdoc-title\b/i.test(block)) continue;
+    const heading = /^<h([1-6])\b/i.exec(block);
+    const level = heading ? Number(heading[1]) : 0;
     const text = decodeDocxHtml(block);
-    if (!text) continue;
-    if (tag === 'heading') {
+    const image = /<img\b[^>]*\bsrc=["'](data:image\/(?:png|jpe?g|gif|bmp);base64,[^"']+)["']/i.exec(block)?.[1] || '';
+    if (level === 1 && /^подарки$/i.test(text)) {
+      commit(); mode = 'gifts'; currentGift = null; currentObjection = null; continue;
+    }
+    if (level === 1) {
       commit();
-      current.title = text;
+      mode = 'stage'; currentObjection = null; currentGift = null;
+      current.title = text.replace(/^\d+[.)]\s*/, '');
+      continue;
+    }
+    if (mode === 'stage' && level === 2 && /^возражения$/i.test(text)) {
+      mode = 'objections'; currentObjection = null; continue;
+    }
+    if (mode === 'objections' && level >= 3) {
+      if (!text) continue;
+      currentObjection = { title: text.replace(/^клиент:\s*/i, '').slice(0, 300), text: '', textFormat: { style: {}, ranges: [] }, origin: 'document', nextStageId: '' };
+      objections.push(currentObjection);
+      current.objectionIds.push(objections.length - 1);
+      continue;
+    }
+    if (mode === 'gifts' && level >= 2) {
+      if (!text) continue;
+      currentGift = { id: `word-gift-${Date.now().toString(36)}-${gifts.length}-${crypto.randomBytes(2).toString('hex')}`, title: text.replace(/^подарок:\s*/i, '').slice(0, 180) || 'Подарок', condition: '', script: '', scriptFormat: { style: {}, ranges: [] }, photo: '' };
+      gifts.push(currentGift);
+      continue;
+    }
+    if (mode === 'objections') {
+      if (currentObjection && text) currentObjection.text = [currentObjection.text, text.replace(/^ответ:\s*/i, '')].filter(Boolean).join('\n').slice(0, 16000);
+      continue;
+    }
+    if (mode === 'gifts') {
+      if (!currentGift) continue;
+      if (image) { currentGift.photo = image; continue; }
+      if (/^условие:\s*/i.test(text)) currentGift.condition = text.replace(/^условие:\s*/i, '').slice(0, 1000);
+      else if (/^текст подарка:\s*/i.test(text)) currentGift.script = text.replace(/^текст подарка:\s*/i, '').slice(0, 16000);
+      continue;
+    }
+    if (!text) continue;
+    const giftRef = /^подарок:\s*(.+)$/i.exec(text);
+    if (giftRef) {
+      current.lines.push(`__WORD_GIFT__:${giftRef[1].trim()}`);
     } else {
       current.lines.push(text);
     }
   }
   commit();
   if (!stages.length) throw Object.assign(new Error('В документе не найден текст для макета.'), { status: 400 });
-  return stages.slice(0, 40);
+  const cappedStages = stages.slice(0, 40);
+  cappedStages.forEach(stage => {
+    stage.lines.forEach((line, index) => {
+      const match = /^__WORD_GIFT__:(.+)$/.exec(line);
+      if (!match) return;
+      const gift = gifts.find(item => item.title.trim().toLocaleLowerCase('ru') === match[1].trim().toLocaleLowerCase('ru'));
+      stage.lines[index] = gift?.script || '';
+      stage.lineKinds[index] = 'gift';
+      stage.lineGifts[index] = gift?.id || '';
+    });
+  });
+  return { stages: cappedStages, gifts, objections };
 }
 
-async function layoutToDocxBuffer(layout) {
+function imageRunFromDataUri(dataUri) {
+  const match = /^data:image\/(png|jpe?g|gif|bmp);base64,([\s\S]+)$/i.exec(String(dataUri || ''));
+  if (!match) return null;
+  const type = /^jpe?g$/i.test(match[1]) ? 'jpg' : match[1].toLowerCase();
+  const image = Buffer.from(match[2], 'base64');
+  if (!image.length || image.length > 10 * 1024 * 1024) return null;
+  return new ImageRun({ data: image, type, transformation: { width: 220, height: 220 } });
+}
+
+async function layoutToDocxBuffer(layout, giftBase = []) {
   const data = layout?.data || {};
+  const giftsById = new Map((Array.isArray(giftBase) ? giftBase : []).map(gift => [gift.id, gift]));
+  const includedGifts = new Map();
   const children = [
     new Paragraph({ text: String(layout?.name || 'Макет').slice(0, 120), heading: HeadingLevel.TITLE }),
-    new Paragraph({ text: 'Экспорт из BAUER · Навигатор разговора' })
+    new Paragraph({ text: 'Скрипт BAUER. При импорте этого файла блоки, возражения и подарки будут восстановлены.' })
   ];
   (Array.isArray(data.stages) ? data.stages : []).forEach((stage, index) => {
     children.push(new Paragraph({ text: `${index + 1}. ${String(stage.title || `Блок ${index + 1}`)}`, heading: HeadingLevel.HEADING_1 }));
-    (Array.isArray(stage.lines) ? stage.lines : []).forEach(line => {
+    (Array.isArray(stage.lines) ? stage.lines : []).forEach((line, lineIndex) => {
+      const kind = stage.lineKinds?.[lineIndex] || 'speech';
+      if (['gift', 'gift-plus-one', 'gift-plus-two'].includes(kind)) {
+        const gift = giftsById.get(stage.lineGifts?.[lineIndex]);
+        if (gift) {
+          includedGifts.set(gift.id, gift);
+          children.push(new Paragraph({ text: `Подарок: ${String(gift.title || 'Подарок')}` }));
+          return;
+        }
+      }
       const text = String(line || '').trim();
       if (text) children.push(new Paragraph({ text }));
     });
@@ -1112,6 +1189,16 @@ async function layoutToDocxBuffer(layout) {
       });
     }
   });
+  if (includedGifts.size) {
+    children.push(new Paragraph({ text: 'Подарки', heading: HeadingLevel.HEADING_1 }));
+    includedGifts.forEach(gift => {
+      children.push(new Paragraph({ text: `Подарок: ${String(gift.title || 'Подарок')}`, heading: HeadingLevel.HEADING_2 }));
+      if (gift.condition) children.push(new Paragraph({ text: `Условие: ${String(gift.condition)}` }));
+      const image = imageRunFromDataUri(gift.photo);
+      if (image) children.push(new Paragraph({ children: [image] }));
+      if (gift.script) children.push(new Paragraph({ text: `Текст подарка: ${String(gift.script)}` }));
+    });
+  }
   return Packer.toBuffer(new Document({ sections: [{ children }] }));
 }
 
@@ -2179,15 +2266,16 @@ function createAppServer(options = {}) {
         }
         let converted;
         try {
-          converted = await mammoth.convertToHtml({ buffer: file });
+          converted = await mammoth.convertToHtml({ buffer: file }, { styleMap: ["p[style-name='Title'] => p.doc-title:fresh"] });
         } catch {
           return sendJson(res, 400, { error: 'Не удалось прочитать этот Word-файл. Загрузите документ в формате .docx.' });
         }
-        const stages = wordHtmlToStages(converted.value);
+        const imported = wordHtmlToLayout(converted.value);
+        const stages = imported.stages;
         const source = appData.content?.data || (appData.layouts || [])[0]?.data || {};
         const importedData = structuredClone(source);
         importedData.stages = stages;
-        importedData.objections = [];
+        importedData.objections = imported.objections;
         importedData.gifts = [];
         importedData.schemaVersion = importedData.schemaVersion || 4;
         importedData.updatedAt = Date.now();
@@ -2202,6 +2290,14 @@ function createAppServer(options = {}) {
           data: importedData,
           savedAt: Date.now()
         };
+        const giftbase = appData.giftbase || { gifts: [], deleted: [], updatedAt: 0 };
+        const existingGifts = Array.isArray(giftbase.gifts) ? giftbase.gifts : [];
+        if (existingGifts.length + imported.gifts.length > 60) {
+          return sendJson(res, 400, { error: `В базе подарков недостаточно места: сейчас ${existingGifts.length} из 60, импорт добавит ещё ${imported.gifts.length}.` });
+        }
+        giftbase.gifts = [...existingGifts, ...imported.gifts];
+        giftbase.updatedAt = Date.now();
+        appData.giftbase = giftbase;
         appData.layouts = [layout, ...(appData.layouts || [])].slice(0, 50);
         store.saveAppData();
         store.logEvent({
@@ -2210,9 +2306,9 @@ function createAppServer(options = {}) {
           target: layout.name,
           ip,
           userAgent,
-          details: { layoutId: layout.id, stages: stages.length, fileBytes: file.length }
+          details: { layoutId: layout.id, stages: stages.length, gifts: imported.gifts.length, objections: imported.objections.length, fileBytes: file.length }
         });
-        return sendJson(res, 200, { layout, imported: { stages: stages.length } });
+        return sendJson(res, 200, { layout, imported: { stages: stages.length, gifts: imported.gifts.length, objections: imported.objections.length } });
       }
 
       const docxExportMatch = pathname.match(/^\/api\/layouts\/([^/]+)\/export-docx$/);
@@ -2224,7 +2320,7 @@ function createAppServer(options = {}) {
         }
         const layout = (appData.layouts || []).find(item => item.id === docxExportMatch[1]);
         if (!layout) return sendJson(res, 404, { error: 'Макет не найден.' });
-        const documentBuffer = await layoutToDocxBuffer(layout);
+        const documentBuffer = await layoutToDocxBuffer(layout, appData.giftbase?.gifts || []);
         const downloadName = encodeURIComponent(`${String(layout.name || 'Макет').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Макет'}.docx`);
         store.logEvent({ action: 'layouts.export_docx', actor: auth.user, target: layout.name, ip, userAgent, details: { layoutId: layout.id } });
         await store.flushToBlob();
