@@ -9674,7 +9674,7 @@ showScript=function(index=current,tab='script'){
   origShowScript(index,tab);
 };
 
-let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],deptEmployeesList=[],selectedDeptHeadId=null,empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',roleDefaults={},trainerManagersList=[],trainerHeadsList=[],trainerLayoutsList=[],trainerSelectedUserId='',trainerSelectedLayoutId='',trainerBlocksList=[],trainerHeadFilter='all';
+let ownerTab='users',usersList=[],headsList=[],sessionsList=[],auditList=[],auditStats=[],auditDepartments=[],auditIsHead=false,allLayoutsList=[],deptScriptsIds=[],deptEmployeesList=[],selectedDeptHeadId=null,empFilter='all',auditFilterDept='',auditFilterPeriod='today',auditFilterUser='',auditFilterAction='',activityFilterPeriod='today',activitySelectedUserId='',roleDefaults={},trainerManagersList=[],trainerHeadsList=[],trainerLayoutsList=[],trainerSelectedUserId='',trainerSelectedLayoutId='',trainerBlocksList=[],trainerHeadFilter='all';
 
 function formatAuditDetails(ev){
   if(!ev) return '';
@@ -9941,10 +9941,12 @@ async function loadOwnerData(){
     if(canSessions)tasks.push(api('/api/sessions').then(sRes=>{sessionsList=sRes.sessions||[];}));
     if(canAudit){
       const params=new URLSearchParams({limit:'300'});
+      const isActivityView=ownerTab==='activity';
       if(auditFilterDept)params.set('department',auditFilterDept);
-      if(auditFilterPeriod)params.set('period',auditFilterPeriod);
-      if(auditFilterUser)params.set('user',auditFilterUser);
-      if(auditFilterAction)params.set('action',auditFilterAction);
+      params.set('period',isActivityView?activityFilterPeriod:auditFilterPeriod);
+      if(!isActivityView&&auditFilterUser)params.set('user',auditFilterUser);
+      if(isActivityView)params.set('action','operator');
+      else if(auditFilterAction)params.set('action',auditFilterAction);
       tasks.push(api('/api/audit?'+params.toString()).then(aRes=>{
         auditList=aRes.events||[];
         auditStats=aRes.stats||[];
@@ -10790,6 +10792,62 @@ function renderAuditSection(){
   </div>`;
 }
 
+function renderActivityControlSection(){
+  const periodTitles={today:'Сегодня',week:'За неделю',all:'За всё время'};
+  const activityEvents=(auditList||[]).filter(ev=>(ev.action||'').startsWith('activity.'));
+  const eventKey=ev=>String(ev.actorId||('login:'+String(ev.actorLogin||'').toLowerCase()));
+  const eventsByUser=new Map();
+  activityEvents.forEach(ev=>{
+    const key=eventKey(ev);
+    if(!eventsByUser.has(key))eventsByUser.set(key,[]);
+    eventsByUser.get(key).push(ev);
+  });
+  const operatorRows=(auditStats||[]).filter(st=>st.role==='OPERATOR'||eventsByUser.has(String(st.id)));
+  const selectedExists=operatorRows.some(st=>String(st.id)===String(activitySelectedUserId));
+  if(!selectedExists)activitySelectedUserId=operatorRows[0]?.id||'';
+  const selected=operatorRows.find(st=>String(st.id)===String(activitySelectedUserId))||null;
+  const selectedEvents=selected?(eventsByUser.get(String(selected.id))||eventsByUser.get('login:'+String(selected.login||'').toLowerCase())||[]):[];
+  const latest=selectedEvents[0]||null;
+  const onlineCount=operatorRows.filter(st=>st.isOnline).length;
+  const clickCount=activityEvents.reduce((sum,ev)=>sum+(ev.action==='activity.clicks'?Number(ev.details?.clicks||ev.details?.count||1):0),0);
+  const smsCount=activityEvents.filter(ev=>ev.action==='activity.sms_copy').length;
+  const objectionCounts=new Map();
+  activityEvents.filter(ev=>ev.action==='activity.objection_view').forEach(ev=>{
+    const title=String(ev.details?.objectionTitle||ev.target||'Не указано').replace(/^Возражение:\s*/,'').trim();
+    objectionCounts.set(title,(objectionCounts.get(title)||0)+1);
+  });
+  const objections=[...objectionCounts.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const latestStage=selectedEvents.find(ev=>ev.action==='activity.objection_view'||ev.action==='activity.stage_view');
+  const stageLabel=latestStage?.details?.stageTitle
+    ? 'Этап '+(latestStage.details.stageIndex||'')+' · '+latestStage.details.stageTitle
+    : 'Этап пока не зафиксирован';
+  const selectedObjection=selectedEvents.find(ev=>ev.action==='activity.objection_view')?.details?.objectionTitle||'—';
+  const actionText=ev=>{
+    if(!ev)return 'Действий за период нет';
+    if(ev.action==='activity.objection_view')return 'Открыл возражение «'+(ev.details?.objectionTitle||ev.target||'—')+'»';
+    if(ev.action==='activity.stage_view')return 'Перешёл на '+(ev.details?.stageTitle||'этап скрипта');
+    if(ev.action==='activity.sms_copy')return 'Скопировал SMS клиенту';
+    if(ev.action==='activity.script_select')return 'Выбрал скрипт «'+(ev.details?.scriptName||ev.target||'—')+'»';
+    if(ev.action==='activity.venue_select')return 'Выбрал город или зал';
+    if(ev.action==='activity.search')return 'Искал по скрипту';
+    if(ev.action==='activity.whole_script')return 'Открыл весь скрипт';
+    return 'Активность на сайте';
+  };
+  const status=st=>st.isOnline
+    ? '<span class="activity-state online">В сети</span>'
+    : (st.lastTimestamp&&Date.now()-st.lastTimestamp<20*60*1000?'<span class="activity-state idle">Нет действий</span>':'<span class="activity-state offline">Не в сети</span>');
+  return `<style>
+    .activity-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 18px}.activity-metric{padding:15px 17px;border:1px solid var(--line);border-radius:12px;background:var(--surface-alt)}.activity-metric span{display:block;font-size:11px;color:var(--muted);margin-bottom:7px}.activity-metric strong{font-size:24px;letter-spacing:-.03em}.activity-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(245px,.6fr);gap:18px}.activity-panel{border:1px solid var(--line);border-radius:13px;background:var(--surface);padding:17px}.activity-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}.activity-panel-head h3{font-size:15px;margin:0}.activity-table-wrap{overflow:auto}.activity-table{width:100%;border-collapse:collapse;font-size:12px}.activity-table th{font-size:10px;color:var(--muted);font-weight:700;text-align:left;padding:0 10px 9px;white-space:nowrap}.activity-table td{padding:11px 10px;border-top:1px solid var(--line);vertical-align:middle}.activity-table tr{cursor:pointer}.activity-table tr:hover,.activity-table tr.selected{background:var(--surface-alt)}.activity-person{font-weight:750}.activity-login{font-size:10px;color:var(--muted);margin-top:2px}.activity-state{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:650;white-space:nowrap}.activity-state:before{content:'';width:7px;height:7px;border-radius:50%;background:#94a3b8}.activity-state.online{color:#177a53}.activity-state.online:before{background:#22a06b}.activity-state.idle{color:#9a6c27}.activity-state.idle:before{background:#d3a567}.activity-focus-name{font-size:17px;font-weight:800;margin:2px 0}.activity-focus-login{font-size:11px;color:var(--muted)}.activity-current{margin:16px 0;padding:12px;border-left:3px solid var(--teal);background:var(--teal-soft);font-size:12px;line-height:1.55}.activity-current b{display:block;font-size:10px;letter-spacing:.06em;color:var(--teal);margin-bottom:3px}.activity-route{display:flex;justify-content:space-between;gap:3px;margin:19px 0}.activity-route span{width:25%;padding-top:19px;position:relative;text-align:center;font-size:10px;color:var(--muted)}.activity-route span:before{content:'';position:absolute;top:0;left:calc(50% - 6px);width:12px;height:12px;border-radius:50%;background:#d5e1da;box-shadow:0 0 0 1px #c5d4cc}.activity-route span.done:before{background:var(--teal);box-shadow:0 0 0 1px var(--teal)}.activity-route span.active:before{background:var(--orange);box-shadow:0 0 0 1px var(--orange)}.activity-route span:not(:last-child):after{content:'';position:absolute;top:5px;left:54%;width:92%;height:2px;background:#d6e0db}.activity-route span.done:after{background:var(--teal)}.activity-facts{border-top:1px solid var(--line);padding-top:13px;display:grid;gap:9px}.activity-facts div{display:flex;justify-content:space-between;gap:10px;font-size:11px}.activity-facts span{color:var(--muted)}.activity-bottom{display:grid;grid-template-columns:.9fr 1.1fr;gap:18px;margin-top:18px}.activity-objection{display:grid;grid-template-columns:1fr 45px;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px}.activity-objection:last-child{border:0}.activity-objection b{text-align:right;color:var(--teal)}.activity-event{display:grid;grid-template-columns:48px 10px 1fr;gap:9px;font-size:11px;padding-bottom:11px}.activity-event time{color:var(--muted)}.activity-event-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);margin-top:3px;position:relative}.activity-event-dot:after{content:'';position:absolute;left:3px;top:8px;width:1px;height:34px;background:var(--line)}.activity-event:last-child .activity-event-dot:after{display:none}.activity-event small{display:block;color:var(--muted);font-size:10px;margin-top:3px}@media(max-width:850px){.activity-grid,.activity-bottom{grid-template-columns:1fr}.activity-table{min-width:620px}}@media(max-width:560px){.activity-summary{grid-template-columns:1fr 1fr}.activity-metric:last-child{grid-column:1/-1}}
+  </style><div class="owner-card">
+    <div class="owner-card-head" style="margin-bottom:18px"><div><h2>Контроль активности</h2><p>Онлайн-статус, текущие этапы скрипта, возражения и переходы к SMS внутри сайта.</p></div><button type="button" data-owner-act="refresh-activity">↻ Обновить</button></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 18px"><span style="font-size:12px;font-weight:700;color:var(--muted);align-self:center;margin-right:3px">Период:</span>${[['today','Сегодня'],['week','Неделя'],['all','Всё время']].map(([id,label])=>`<button type="button" class="${activityFilterPeriod===id?'primary':''}" data-activity-period="${id}">${label}</button>`).join('')}</div>
+    <div class="activity-summary"><div class="activity-metric"><span>В сети сейчас</span><strong>${onlineCount} <small style="font-size:11px;color:var(--muted);font-weight:500">из ${operatorRows.length}</small></strong></div><div class="activity-metric"><span>Кликов за период</span><strong>${clickCount}</strong></div><div class="activity-metric"><span>Дошли до SMS</span><strong>${smsCount}</strong></div></div>
+    <div class="activity-grid"><section class="activity-panel"><div class="activity-panel-head"><h3>Менеджеры</h3><span style="font-size:11px;color:var(--muted)">${periodTitles[activityFilterPeriod]}</span></div><div class="activity-table-wrap"><table class="activity-table"><thead><tr><th>Сотрудник</th><th>Статус</th><th>Активность</th><th>Последнее действие</th></tr></thead><tbody>${operatorRows.map(st=>{const ev=(eventsByUser.get(String(st.id))||eventsByUser.get('login:'+String(st.login||'').toLowerCase())||[])[0];return `<tr class="${String(st.id)===String(activitySelectedUserId)?'selected':''}" data-activity-user="${E(st.id)}"><td><div class="activity-person">${E(st.displayName||st.login)}</div><div class="activity-login">@${E(st.login)}</div></td><td>${status(st)}</td><td style="text-align:center;font-weight:750">${st.clicksPeriod||0}</td><td>${E(actionText(ev))}<div class="activity-login">${ev?.timestamp?fmtTime(ev.timestamp):'Нет данных'}</div></td></tr>`;}).join('')||'<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--muted)">В этом отделе пока нет менеджеров.</td></tr>'}</tbody></table></div></section>
+      <aside class="activity-panel"><div class="activity-panel-head"><h3>Сейчас у менеджера</h3></div>${selected?`<div class="activity-focus-name">${E(selected.displayName||selected.login)}</div><div class="activity-focus-login">@${E(selected.login)} · ${selected.isOnline?'в сети':'не в сети'}</div><div class="activity-current"><b>ПОСЛЕДНЕЕ ДЕЙСТВИЕ</b>${E(actionText(latest))}</div><div class="activity-route"><span class="done">Скрипт</span><span class="done">Этап</span><span class="active">Возражение</span><span>SMS</span></div><div class="activity-facts"><div><span>Текущий этап</span><b>${E(stageLabel)}</b></div><div><span>Последнее возражение</span><b>${E(selectedObjection)}</b></div><div><span>Действий за период</span><b>${selectedEvents.length}</b></div></div>`:'<p style="font-size:12px;color:var(--muted)">Выберите менеджера в таблице.</p>'}</aside></div>
+    <div class="activity-bottom"><section class="activity-panel"><div class="activity-panel-head"><h3>Частые возражения</h3><span style="font-size:11px;color:var(--muted)">открытия</span></div>${objections.map(([name,count])=>`<div class="activity-objection"><span>${E(name)}</span><b>${count}</b></div>`).join('')||'<p style="font-size:12px;color:var(--muted)">Возражения за период ещё не открывали.</p>'}</section><section class="activity-panel"><div class="activity-panel-head"><h3>Последние события</h3><span style="font-size:11px;color:var(--muted)">внутри сайта</span></div>${activityEvents.slice(0,5).map(ev=>`<div class="activity-event"><time>${fmtTime(ev.timestamp)}</time><span class="activity-event-dot"></span><div><b>${E(ev.actorName||ev.actorLogin||'Сотрудник')}</b> · ${E(actionText(ev))}<small>${ev.details?.stageTitle?E('Этап '+(ev.details.stageIndex||'')+' · '+ev.details.stageTitle):E(ev.target||'')}</small></div></div>`).join('')||'<p style="font-size:12px;color:var(--muted)">Действий за период ещё нет.</p>'}</section></div>
+  </div>`;
+}
+
 function renderSecuritySection(){
   const isOwner=currentUser?.role==='OWNER';
   return `<div class="owner-grid-2">
@@ -10867,6 +10925,7 @@ function renderOwnerView(){
   if(ownerTab==='users'&&!canViewUsers)ownerTab=canTrainer?'trainer':'design';
   if(ownerTab==='sessions'&&!canViewSessions)ownerTab=canTrainer?'trainer':'design';
   if(ownerTab==='audit'&&!canViewAudit)ownerTab=canTrainer?'trainer':'design';
+  if(ownerTab==='activity'&&!canViewAudit)ownerTab=canTrainer?'trainer':'design';
   if(ownerTab==='trainer'&&!canTrainer)ownerTab=canViewUsers?'users':'design';
 
   const navItems=[];
@@ -10875,6 +10934,7 @@ function renderOwnerView(){
   if(canDeptScripts)navItems.push(['dept-scripts',`📋 Скрипты отдела ${deptScriptsIds.length?'('+deptScriptsIds.length+')':''}`]);
   if(canTrainer&&!isTrainer)navItems.push(['trainer',isHead?`💡 Советы и блоки сотрудникам (${trainerManagersList.length})`:`🎓 Бизнес-тренер ДПК (${trainerManagersList.length})`]);
   if(canViewSessions)navItems.push(['sessions',`🟢 Активные сессии (${sessionsList.length})`]);
+  if(canViewAudit)navItems.push(['activity',`◉ Контроль активности`]);
   if(canViewAudit)navItems.push(['audit',`📋 Журнал действий`]);
   navItems.push(['design',`🎨 Персональный дизайн`]);
   navItems.push(['security',`🔐 ${isOwner?'Безопасность и пароль':'Мой профиль и пароль'}`]);
@@ -10894,7 +10954,7 @@ function renderOwnerView(){
   <nav class="owner-nav" role="tablist">
     ${navItems.map(([id,lbl])=>`<button type="button" role="tab" class="${ownerTab===id?'on':''}" data-owner-tab="${id}">${lbl}</button>`).join('')}
   </nav>
-  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='trainer'?renderTrainerWorkspaceSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='audit'?renderAuditSection():ownerTab==='design'?renderDesignSection():renderSecuritySection()}`;
+  ${ownerTab==='users'?renderUsersSection():ownerTab==='dept-scripts'?renderDepartmentScriptsSection():ownerTab==='trainer'?renderTrainerWorkspaceSection():ownerTab==='sessions'?renderSessionsSection():ownerTab==='activity'?renderActivityControlSection():ownerTab==='audit'?renderAuditSection():ownerTab==='design'?renderDesignSection():renderSecuritySection()}`;
   if(ownerTab==='users'&&typeof applyEmpSearchFilter==='function')applyEmpSearchFilter();
 }
 
@@ -11340,6 +11400,21 @@ document.addEventListener('click',async e=>{
     return;
   }
 
+  const activityPeriodBtn=e.target.closest('[data-activity-period]');
+  if(activityPeriodBtn){
+    activityFilterPeriod=activityPeriodBtn.dataset.activityPeriod||'today';
+    await loadOwnerData();
+    renderOwnerView();
+    return;
+  }
+
+  const activityUserRow=e.target.closest('[data-activity-user]');
+  if(activityUserRow){
+    activitySelectedUserId=activityUserRow.dataset.activityUser||'';
+    renderOwnerView();
+    return;
+  }
+
 
 
 
@@ -11547,6 +11622,7 @@ document.addEventListener('click',async e=>{
   const act=actBtn.dataset.ownerAct;
   if(act==='back'){showScript();return;}
   if(act==='refresh'){await loadOwnerData();renderOwnerView();toast('Данные обновлены');return;}
+  if(act==='refresh-activity'){await loadOwnerData();renderOwnerView();toast('Контроль активности обновлён');return;}
   if(act==='logout'){
     await performLogout();
     return;
