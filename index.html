@@ -6766,6 +6766,28 @@ function giftsTab(){
   return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">БАЗА ПОДАРКОВ</div><h2>Общая база для всех скриптов</h2><p class="v4-sub">${d.gifts.length} из 60. Фото, условие и текст реплики хранятся здесь один раз и подставляются в любые макеты.</p><p class="v4-hint" id="gift-saved">Изменения сохраняются автоматически и сразу действуют во всех скриптах.</p></div><div class="v4-stage-tools">${fromStageFlag&&s?`<button data-v4="back-to-stage">← Вернуться к блоку «${E(s.title)}»</button>`:''}<button class="primary" data-v4="giftbulk">Загрузить фото (сразу несколько)</button><button data-v4="giftadd" ${d.gifts.length>=60?'disabled':''}>+ Подарок</button></div></div><div class="v4-db-bar"><input type="search" data-v4-dbsearch placeholder="🔍 Фильтр по базе подарков (название, условие, текст описания)…" value="${E(dbQuery)}" autocomplete="off"><span id="v4-db-count">Показано: ${count} из ${d.gifts.length}</span></div><input type="file" id="v4-bulk" data-v4-file="bulk" accept="image/jpeg,image/png,image/webp" multiple hidden><div class="v4-gift-grid" id="v4-gift-grid">${renderGiftDbCards()}</div></section>`;
 }
 let savedChannelFilter='all';
+async function importWordLayout(file){
+  if(!file)return;
+  if(!/\.docx$/i.test(file.name))throw new Error('Выберите документ Word в формате .docx.');
+  if(file.size>25*1024*1024)throw new Error('Документ должен быть не больше 25 МБ.');
+  const token=csrfToken||getCsrfCookie();
+  const response=await fetch('/api/layouts/import-docx',{method:'POST',credentials:'same-origin',headers:{'Content-Type':file.type||'application/vnd.openxmlformats-officedocument.wordprocessingml.document','X-Layout-Name':encodeURIComponent(file.name),...(token?{'X-CSRF-Token':token}:{})},body:file});
+  const result=await response.json().catch(()=>({error:'Не удалось обработать документ.'}));
+  if(!response.ok)throw new Error(result.error||'Не удалось импортировать документ.');
+  if(result.csrfToken)csrfToken=result.csrfToken;
+  savedLayouts=(await api('/api/layouts')).layouts||[];
+  const layout=result.layout;
+  if(layout){editorDraft=migrateWorking(layout.data);editorLayoutId=layout.id;editorLayoutName=layout.name;editorStageId=editorDraft.stages[0]?.id||null;editorSection='stage';undoStack=[];redoStack=[];rememberDraft();}
+  tab='saved';renderLayouts();toast(`Импортировано: ${result.imported?.stages||0} блоков. Проверьте текст и сохраните макет.`);
+}
+async function exportWordLayout(id){
+  const response=await fetch('/api/layouts/'+encodeURIComponent(id)+'/export-docx',{credentials:'same-origin'});
+  if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.error||'Не удалось выгрузить макет.');}
+  const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement('a');
+  const layout=savedLayouts.find(item=>item.id===id);
+  link.href=url;link.download=(layout?.name||'Макет').replace(/[\\/:*?"<>|]+/g,' ').trim()+'.docx';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast('Word-файл скачан.');
+}
 function savedTab(){
   const all=savedLayouts||[],mine=all.filter(l=>!/^Перед изменением/.test(l.name)),bk=all.filter(l=>/^Перед изменением/.test(l.name));
   const usedChannels=[...new Set(mine.map(l=>String(l.channel||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
@@ -6781,7 +6803,7 @@ function savedTab(){
         <input type="text" list="v4-channel-presets" data-v4-layout-channel="${E(l.id)}" value="${E(ch)}" placeholder="Канал (А1, Д1, СКД…)" title="Канал / группа скрипта" style="width:150px;height:32px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:12px;font-weight:600">
         <input type="text" list="v4-variant-presets" data-v4-layout-variant="${E(l.id)}" value="${E(vr)}" placeholder="Вариант (с КШ, без КШ…)" title="Вариант / подгруппа (с КШ, без КШ и т.д.)" style="width:165px;height:32px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:12px;font-weight:600">
       </div>`:''}
-      <div class="v4-sact">${i>=0?`<button data-v4="lmove" data-id="${l.id}" data-d="top" title="В начало списка" ${i===0?'disabled':''}>⤒</button><button data-v4="lmove" data-id="${l.id}" data-d="-1" title="Выше" ${i===0?'disabled':''}>↑</button><button data-v4="lmove" data-id="${l.id}" data-d="1" title="Ниже" ${i===n-1?'disabled':''}>↓</button>`:''}<button data-action="edit-layout" data-id="${l.id}">Открыть</button>${canDeleteContent()?(`<button data-action="delete-layout" data-id="${l.id}">Удалить</button>`):''}</div>
+      <div class="v4-sact">${i>=0?`<button data-v4="lmove" data-id="${l.id}" data-d="top" title="В начало списка" ${i===0?'disabled':''}>⤒</button><button data-v4="lmove" data-id="${l.id}" data-d="-1" title="Выше" ${i===0?'disabled':''}>↑</button><button data-v4="lmove" data-id="${l.id}" data-d="1" title="Ниже" ${i===n-1?'disabled':''}>↓</button>`:''}<button data-action="edit-layout" data-id="${l.id}">Открыть</button><button data-v4="export-docx" data-id="${l.id}" title="Выгрузить этот макет в Word">⇩ Word</button>${canDeleteContent()?(`<button data-action="delete-layout" data-id="${l.id}">Удалить</button>`):''}</div>
     </div>`;
   };
   return `<section class="v4-card v4-pad">
@@ -6795,7 +6817,8 @@ function savedTab(){
       ${usedChannels.map(c=>`<button type="button" data-v4-saved-filter="${E(c)}" style="min-height:28px;padding:0 10px;font-size:12px;border-radius:8px;${savedChannelFilter===c?'background:var(--teal);color:#fff;border-color:var(--teal)':''}">📁 ${E(c)} (${mine.filter(l=>String(l.channel||'').trim()===c).length})</button>`).join('')}
       <button type="button" data-v4-saved-filter="__none__" style="min-height:28px;padding:0 10px;font-size:12px;border-radius:8px;${savedChannelFilter==='__none__'?'background:var(--teal);color:#fff;border-color:var(--teal)':''}">Без группы (${mine.filter(l=>!String(l.channel||'').trim()).length})</button>
     </div>
-    <div class="v4-newbar" id="new-layout-bar"><input id="new-layout-name" maxlength="100" placeholder="Название нового макета, например: Холодный обзвон" aria-label="Название нового макета"><button data-new-layout="blank">+ Пустой</button><button class="primary" data-new-layout="copy">+ Копия текущего</button></div>
+    <div class="v4-newbar" id="new-layout-bar"><input id="new-layout-name" maxlength="100" placeholder="Название нового макета, например: Холодный обзвон" aria-label="Название нового макета"><button data-new-layout="blank">+ Пустой</button><button class="primary" data-new-layout="copy">+ Копия текущего</button><button data-v4="import-docx">⇧ Импорт Word</button><input type="file" id="v4-word-import" data-v4-file="word" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden></div>
+    <p class="v4-hint" style="margin:0 0 14px">Импорт Word создаёт отдельный макет: заголовки становятся блоками, обычный текст — репликами. Выгрузка доступна у каждого макета.</p>
     ${filteredMine.map((l,i)=>row(l,mine.indexOf(l),mine.length)).join('')||'<p class="v4-empty">Макеты в этой группе не найдены.</p>'}
     ${bk.length?`<details style="margin-top:14px"><summary>Автокопии перед изменениями (${bk.length})</summary>${bk.map(l=>row(l)).join('')}</details>`:''}
   </section>`;
@@ -7116,7 +7139,8 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
   else if(f.matches('[data-v4-attach]')&&f.value!==''){const n=+f.value;mutateDraft(()=>{if(!s.objectionIds.includes(n))s.objectionIds.push(n);obSel=n})}
   else if(f.matches('[data-v4-ob="next"]')&&obSel!=null)mutateDraft(()=>{editorDraft.objections[obSel].nextStageId=f.value});
   else if(f.matches('[data-v4-file]')){const files=[...f.files];f.value='';if(!files.length)return;
-    try{if(f.dataset.v4File==='bulk'){const room=60-editorDraft.gifts.length;if(room<=0)throw new Error('В базе уже 60 подарков.');const add=[];
+    try{if(f.dataset.v4File==='word'){await importWordLayout(files[0]);}
+      else if(f.dataset.v4File==='bulk'){const room=60-editorDraft.gifts.length;if(room<=0)throw new Error('В базе уже 60 подарков.');const add=[];
         for(const file of files.slice(0,room))add.push({id:gid(),title:file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').slice(0,120),condition:'',script:'',scriptFormat:LayoutModel.cleanFormat(null,0),photo:await shrink(file)});
         mutateDraft(()=>editorDraft.gifts.push(...add));toast('Добавлено подарков: '+add.length+'. Заполните названия и скрипт описания.')}
       else{const p=await shrink(files[0]);mutateDraft(()=>{editorDraft.gifts.find(g=>g.id===f.dataset.v4File).photo=p})}}
@@ -7206,6 +7230,8 @@ lv.addEventListener('click',async e=>{
     case 'obunlink':M(()=>{s.objectionIds=s.objectionIds.filter(x=>x!==obSel);obSel=null});return;
     case 'obnew':M(()=>{if(editorDraft.objections.length>=200)throw new Error('Достигнут предел: 200 возражений.');const n=editorDraft.objections.push({title:'Новое возражение',text:'Напишите ответ оператора.',textFormat:LayoutModel.cleanFormat(null,0),origin:'suggested',nextStageId:''})-1;s.objectionIds.push(n);obSel=n});return;
     case 'apply':await applyNow();return;
+    case 'import-docx':q('#v4-word-import')?.click();return;
+    case 'export-docx':try{await exportWordLayout(id)}catch(err){toast(err.message)}return;
     case 'giftbulk':q('#v4-bulk').click();return;
     case 'giftadd':{if(editorDraft.gifts.length>=60){toast('В базе уже 60 подарков.');return;}const nid=gid();dbQuery='';M(()=>{editorDraft.gifts.unshift({id:nid,title:'Новый подарок',condition:'',script:'Введите скрипт и описание подарка для оператора.',scriptFormat:LayoutModel.cleanFormat(null,0),photo:''});highlightGiftId=nid;edit={t:'gift',id:nid};sel={s:0,e:1e9}});return;}
     case 'giftdup':{if(editorDraft.gifts.length>=60){toast('В базе уже 60 подарков.');return;}const orig=editorDraft.gifts.find(g=>g.id===id);if(!orig)return;const copyGift=clone(orig);copyGift.id=gid();copyGift.title=(copyGift.title||'Подарок').slice(0,180)+' · копия';M(()=>{const idx=editorDraft.gifts.findIndex(g=>g.id===id);editorDraft.gifts.splice(idx+1,0,copyGift);highlightGiftId=copyGift.id});return;}

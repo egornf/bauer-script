@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const mammoth = require('mammoth');
+const { Document, Packer, Paragraph, HeadingLevel } = require('docx');
 let vercelBlob = null;
 try {
   vercelBlob = require('@vercel/blob');
@@ -1004,6 +1006,113 @@ function readBody(req) {
     });
     req.on('error', err => reject(err));
   });
+}
+
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    req.on('data', chunk => {
+      total += chunk.length;
+      if (total > MAX_BODY_BYTES) {
+        reject(Object.assign(new Error('Превышен допустимый размер файла: 25 МБ.'), { status: 413 }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', err => reject(err));
+  });
+}
+
+function decodeDocxHtml(value) {
+  const text = String(value || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)));
+  return text.replace(/\r/g, '').split('\n').map(line => line.trim()).filter(Boolean).join('\n').slice(0, 16000);
+}
+
+function stageFromWord(title, lines, index) {
+  const cleanLines = lines.map(line => String(line || '').trim()).filter(Boolean).slice(0, 120);
+  return {
+    id: `word-${Date.now().toString(36)}-${index}-${crypto.randomBytes(2).toString('hex')}`,
+    guestGiftVersion: 2,
+    giftPhoto: '',
+    title: String(title || `Блок ${index + 1}`).trim().slice(0, 120),
+    showTip: false,
+    tip: '',
+    tipFormat: { style: {}, ranges: [] },
+    lines: cleanLines,
+    lineKinds: cleanLines.map(() => 'speech'),
+    lineFormats: cleanLines.map(() => ({ style: {}, ranges: [] })),
+    lineGifts: cleanLines.map(() => ''),
+    objectionIds: [],
+    hidden: false,
+    showGifts: false,
+    showSms: false,
+    giftIds: []
+  };
+}
+
+function wordHtmlToStages(html) {
+  const blocks = String(html || '').match(/<(h[1-6]|p|li)\b[^>]*>[\s\S]*?<\/\1>/gi) || [];
+  const stages = [];
+  let current = { title: '', lines: [] };
+  const commit = () => {
+    if (current.title || current.lines.length) {
+      stages.push(stageFromWord(current.title || `Блок ${stages.length + 1}`, current.lines, stages.length));
+    }
+    current = { title: '', lines: [] };
+  };
+  for (const block of blocks) {
+    const tag = /^<h[1-6]\b/i.test(block) ? 'heading' : 'text';
+    const text = decodeDocxHtml(block);
+    if (!text) continue;
+    if (tag === 'heading') {
+      commit();
+      current.title = text;
+    } else {
+      current.lines.push(text);
+    }
+  }
+  commit();
+  if (!stages.length) throw Object.assign(new Error('В документе не найден текст для макета.'), { status: 400 });
+  return stages.slice(0, 40);
+}
+
+async function layoutToDocxBuffer(layout) {
+  const data = layout?.data || {};
+  const children = [
+    new Paragraph({ text: String(layout?.name || 'Макет').slice(0, 120), heading: HeadingLevel.TITLE }),
+    new Paragraph({ text: 'Экспорт из BAUER · Навигатор разговора' })
+  ];
+  (Array.isArray(data.stages) ? data.stages : []).forEach((stage, index) => {
+    children.push(new Paragraph({ text: `${index + 1}. ${String(stage.title || `Блок ${index + 1}`)}`, heading: HeadingLevel.HEADING_1 }));
+    (Array.isArray(stage.lines) ? stage.lines : []).forEach(line => {
+      const text = String(line || '').trim();
+      if (text) children.push(new Paragraph({ text }));
+    });
+    const objections = (Array.isArray(stage.objectionIds) ? stage.objectionIds : [])
+      .map(id => Array.isArray(data.objections) ? data.objections[id] : null)
+      .filter(Boolean);
+    if (objections.length) {
+      children.push(new Paragraph({ text: 'Возражения', heading: HeadingLevel.HEADING_2 }));
+      objections.forEach(objection => {
+        if (objection.title) children.push(new Paragraph({ text: `Клиент: ${String(objection.title)}` }));
+        if (objection.text) children.push(new Paragraph({ text: `Ответ: ${String(objection.text)}` }));
+      });
+    }
+  });
+  return Packer.toBuffer(new Document({ sections: [{ children }] }));
 }
 
 function sendJson(res, status, payload, extraHeaders = {}) {
@@ -2056,6 +2165,77 @@ function createAppServer(options = {}) {
           details: { count: ids.length }
         });
         return sendJson(res, 200, { ok: true });
+      }
+
+      if (pathname === '/api/layouts/import-docx' && method === 'POST') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        if (!hasPermission(auth.user, 'layouts.manage')) {
+          store.logEvent({ action: 'layouts.import_docx.denied', actor: auth.user, ip, userAgent, status: 'denied' });
+          return sendJson(res, 403, { error: 'Недостаточно прав для импорта макетов.' });
+        }
+        const file = await readRawBody(req);
+        if (file.length < 4 || file.subarray(0, 2).toString('ascii') !== 'PK') {
+          return sendJson(res, 400, { error: 'Нужен файл Word в формате .docx.' });
+        }
+        let converted;
+        try {
+          converted = await mammoth.convertToHtml({ buffer: file });
+        } catch {
+          return sendJson(res, 400, { error: 'Не удалось прочитать этот Word-файл. Загрузите документ в формате .docx.' });
+        }
+        const stages = wordHtmlToStages(converted.value);
+        const source = appData.content?.data || (appData.layouts || [])[0]?.data || {};
+        const importedData = structuredClone(source);
+        importedData.stages = stages;
+        importedData.objections = [];
+        importedData.gifts = [];
+        importedData.schemaVersion = importedData.schemaVersion || 4;
+        importedData.updatedAt = Date.now();
+        let suppliedName = String(req.headers['x-layout-name'] || '');
+        try { suppliedName = decodeURIComponent(suppliedName); } catch { suppliedName = ''; }
+        suppliedName = suppliedName.replace(/\.[^.]+$/, '').trim();
+        const layout = {
+          id: 'l' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex'),
+          name: (suppliedName || stages[0].title || 'Импорт из Word').slice(0, 120),
+          channel: '',
+          variant: '',
+          data: importedData,
+          savedAt: Date.now()
+        };
+        appData.layouts = [layout, ...(appData.layouts || [])].slice(0, 50);
+        store.saveAppData();
+        store.logEvent({
+          action: 'layouts.import_docx',
+          actor: auth.user,
+          target: layout.name,
+          ip,
+          userAgent,
+          details: { layoutId: layout.id, stages: stages.length, fileBytes: file.length }
+        });
+        return sendJson(res, 200, { layout, imported: { stages: stages.length } });
+      }
+
+      const docxExportMatch = pathname.match(/^\/api\/layouts\/([^/]+)\/export-docx$/);
+      if (docxExportMatch && method === 'GET') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        if (!hasPermission(auth.user, 'layouts.manage')) {
+          store.logEvent({ action: 'layouts.export_docx.denied', actor: auth.user, ip, userAgent, status: 'denied' });
+          return sendJson(res, 403, { error: 'Недостаточно прав для выгрузки макетов.' });
+        }
+        const layout = (appData.layouts || []).find(item => item.id === docxExportMatch[1]);
+        if (!layout) return sendJson(res, 404, { error: 'Макет не найден.' });
+        const documentBuffer = await layoutToDocxBuffer(layout);
+        const downloadName = encodeURIComponent(`${String(layout.name || 'Макет').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Макет'}.docx`);
+        store.logEvent({ action: 'layouts.export_docx', actor: auth.user, target: layout.name, ip, userAgent, details: { layoutId: layout.id } });
+        await store.flushToBlob();
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'Content-Disposition': `attachment; filename*=UTF-8''${downloadName}`,
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'SAMEORIGIN'
+        });
+        return res.end(documentBuffer);
       }
 
       if (pathname === '/api/layouts' || pathname.startsWith('/api/layouts/')) {

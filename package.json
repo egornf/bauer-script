@@ -11,6 +11,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@vercel/blob": "^2.8.2"
+    "@vercel/blob": "^2.8.2",
+    "docx": "^9.15.4",
+    "mammoth": "^1.13.0"
   }
 }
