@@ -5979,7 +5979,7 @@ $('#whole-script').addEventListener('click',()=>{
   window.wSmsValues = wSmsValues;
   const mainScriptPicker=$('#script-picker');
   const selectedScriptId=mainScriptPicker?.value||localStorage.getItem('bauer-script-choice')||'';
-  const wholeScriptOptions=mainScriptPicker?[...mainScriptPicker.options].map(option=>`<option value="${escapeHTML(option.value)}" ${option.value===selectedScriptId?'selected':''}>${escapeHTML(option.textContent||option.value)}</option>`).join(''):'';
+  const wholeScriptOptions=mainScriptPicker?.innerHTML||'';
 
   function renderObjectionsForStage(stg,idx){
     if(typeof stg==='number'){idx=stg;stg=stages[idx];}
@@ -6152,7 +6152,9 @@ $('#whole-script').addEventListener('click',()=>{
   const smsCard=view.querySelector('#whole-sms-card');
   const smsToggleBtn=view.querySelector('#whole-sms-toggle-btn');
   const smsBody=view.querySelector('#whole-sms-body');
-  view.querySelector('#whole-script-picker')?.addEventListener('change',async event=>{
+  const wholeScriptPicker=view.querySelector('#whole-script-picker');
+  if(wholeScriptPicker)wholeScriptPicker.value=selectedScriptId;
+  wholeScriptPicker?.addEventListener('change',async event=>{
     const nextId=event.target.value;
     if(!nextId||nextId===selectedScriptId)return;
     await window.selectBauerScript?.(nextId,true);
