@@ -6795,7 +6795,7 @@ function giftsTab(){
   const count=d.gifts.filter(g=>!qNorm||[g.title,g.condition,g.script].join(' ').toLocaleLowerCase('ru').includes(qNorm)).length;
   return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">БАЗА ПОДАРКОВ</div><h2>Общая база для всех скриптов</h2><p class="v4-sub">${d.gifts.length} из 60. Фото, условие и текст реплики хранятся здесь один раз и подставляются в любые макеты.</p><p class="v4-hint" id="gift-saved">Изменения сохраняются автоматически и сразу действуют во всех скриптах.</p></div><div class="v4-stage-tools">${fromStageFlag&&s?`<button data-v4="back-to-stage">← Вернуться к блоку «${E(s.title)}»</button>`:''}<button class="primary" data-v4="giftbulk">Загрузить фото (сразу несколько)</button><button data-v4="giftadd" ${d.gifts.length>=60?'disabled':''}>+ Подарок</button></div></div><div class="v4-db-bar"><input type="search" data-v4-dbsearch placeholder="🔍 Фильтр по базе подарков (название, условие, текст описания)…" value="${E(dbQuery)}" autocomplete="off"><span id="v4-db-count">Показано: ${count} из ${d.gifts.length}</span></div><input type="file" id="v4-bulk" data-v4-file="bulk" accept="image/jpeg,image/png,image/webp" multiple hidden><div class="v4-gift-grid" id="v4-gift-grid">${renderGiftDbCards()}</div></section>`;
 }
-let savedChannelFilter='all',savedLayoutQuery='',editingLayoutMetaId='',editingLayoutNameId='';
+let savedChannelFilter='all',savedLayoutQuery='',editingLayoutMetaId='',editingLayoutNameId='',editingLayoutCustomMeta='';
 async function importWordLayout(file){
   if(!file)return;
   if(!/\.docx$/i.test(file.name))throw new Error('Выберите документ Word в формате .docx.');
@@ -6832,7 +6832,7 @@ function savedTab(){
     const ch=String(l.channel||'').trim(),vr=String(l.variant||'').trim();
     return `<div class="v4-srow ${l.id===editorLayoutId?'on':''}" style="gap:10px">
       <div class="v4-sleft" style="min-width:220px;flex:1"><div class="v4-sname">${editingLayoutNameId===l.id?`<input class="v4-layout-name-edit" data-v4-layout-name="${E(l.id)}" maxlength="120" value="${E(l.name)}" aria-label="Название макета">`:`<button type="button" class="v4-layout-name-btn" data-v4="edit-layout-name" data-id="${l.id}" title="Изменить название">${E(l.name)} <span>✎</span></button>`}<small>${dateLabel(l.savedAt)}${l.id===editorLayoutId?' · открыт сейчас':''}</small></div></div>
-      ${editingLayoutMetaId===l.id?`<div class="v4-layout-meta-edit"><select data-v4-layout-channel="${E(l.id)}" aria-label="Канал скрипта"><option value="">Без канала</option>${allChannels.map(value=>`<option value="${E(value)}" ${value===ch?'selected':''}>${E(value)}</option>`).join('')}</select><select data-v4-layout-variant="${E(l.id)}" aria-label="Вариант скрипта"><option value="">Без варианта</option>${allVariants.map(value=>`<option value="${E(value)}" ${value===vr?'selected':''}>${E(value)}</option>`).join('')}</select><button type="button" data-v4="close-layout-meta" title="Готово">✓</button></div>`:`<div class="v4-layout-meta-tags"><button type="button" data-v4="edit-layout-meta" data-id="${l.id}" title="Изменить канал и вариант">📁 ${ch?E(ch):'Без канала'} · ✎</button><button type="button" data-v4="edit-layout-meta" data-id="${l.id}" title="Изменить канал и вариант">🏷 ${vr?E(vr):'Без варианта'} · ✎</button></div>`}
+      ${editingLayoutMetaId===l.id?`<div class="v4-layout-meta-edit">${editingLayoutCustomMeta==='channel'?`<input data-v4-layout-custom="channel" data-id="${E(l.id)}" maxlength="60" placeholder="Название нового канала" aria-label="Новый канал">`:`<select data-v4-layout-channel="${E(l.id)}" aria-label="Канал скрипта"><option value="">Без канала</option>${allChannels.map(value=>`<option value="${E(value)}" ${value===ch?'selected':''}>${E(value)}</option>`).join('')}<option value="__new_channel__">+ Новый канал…</option></select>`}${editingLayoutCustomMeta==='variant'?`<input data-v4-layout-custom="variant" data-id="${E(l.id)}" maxlength="60" placeholder="Название нового варианта" aria-label="Новый вариант">`:`<select data-v4-layout-variant="${E(l.id)}" aria-label="Вариант скрипта"><option value="">Без варианта</option>${allVariants.map(value=>`<option value="${E(value)}" ${value===vr?'selected':''}>${E(value)}</option>`).join('')}<option value="__new_variant__">+ Новый вариант…</option></select>`}<button type="button" data-v4="close-layout-meta" title="Готово">✓</button></div>`:`<div class="v4-layout-meta-tags"><button type="button" data-v4="edit-layout-meta" data-id="${l.id}" title="Изменить канал и вариант">📁 ${ch?E(ch):'Без канала'} · ✎</button><button type="button" data-v4="edit-layout-meta" data-id="${l.id}" title="Изменить канал и вариант">🏷 ${vr?E(vr):'Без варианта'} · ✎</button></div>`}
       <div class="v4-sact"><button class="primary" data-v4="edit-layout" data-id="${l.id}">Открыть</button><button data-v4="export-docx" data-id="${l.id}" title="Выгрузить этот макет в Word">⇩ Word</button>${canDeleteContent()?(`<button data-action="delete-layout" data-id="${l.id}">Удалить</button>`):''}</div>
     </div>`;
   };
@@ -7082,12 +7082,20 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
   }
   else if(f.matches('[data-v4-layout-channel]')){
     const lid=f.dataset.v4LayoutChannel;
+    if(f.value==='__new_channel__'){editingLayoutCustomMeta='channel';renderLayouts();setTimeout(()=>q('[data-v4-layout-custom="channel"]')?.focus(),0);return;}
     try{await saveLayoutMeta(lid,{channel:f.value.trim()});toast('✓ Канал скрипта сохранён');}catch(err){toast(err.message);}
     return;
   }
   else if(f.matches('[data-v4-layout-variant]')){
     const lid=f.dataset.v4LayoutVariant;
+    if(f.value==='__new_variant__'){editingLayoutCustomMeta='variant';renderLayouts();setTimeout(()=>q('[data-v4-layout-custom="variant"]')?.focus(),0);return;}
     try{await saveLayoutMeta(lid,{variant:f.value.trim()});toast('✓ Вариант скрипта сохранён');}catch(err){toast(err.message);}
+    return;
+  }
+  else if(f.matches('[data-v4-layout-custom]')){
+    const key=f.dataset.v4LayoutCustom,lid=f.dataset.id,value=f.value.trim();
+    if(!value){toast(key==='channel'?'Введите название нового канала.':'Введите название нового варианта.');return;}
+    try{await saveLayoutMeta(lid,{[key]:value});editingLayoutCustomMeta='';renderLayouts();toast(key==='channel'?'✓ Новый канал создан и сохранён':'✓ Новый вариант создан и сохранён');}catch(err){toast(err.message);}
     return;
   }
   else if(f.matches('[data-v4-layout-meta]')){
@@ -7202,8 +7210,8 @@ lv.addEventListener('click',async e=>{
     case 'tab':tab=id;edit=null;del=null;pickerOpen=null;highlightGiftId=null;if(id!=='gifts')fromStageFlag=false;renderLayouts();return;
     case 'back-library':tab='saved';edit=null;obSel=null;del=null;pickerOpen=null;highlightGiftId=null;highlightDirId=null;fromStageFlag=false;renderLayouts();return;
     case 'edit-layout-name':editingLayoutNameId=id;renderLayouts();setTimeout(()=>{const input=q('[data-v4-layout-name]');if(input){input.focus();input.select();}},0);return;
-    case 'edit-layout-meta':editingLayoutMetaId=id;renderLayouts();return;
-    case 'close-layout-meta':editingLayoutMetaId='';renderLayouts();return;
+    case 'edit-layout-meta':editingLayoutMetaId=id;editingLayoutCustomMeta='';renderLayouts();return;
+    case 'close-layout-meta':editingLayoutMetaId='';editingLayoutCustomMeta='';renderLayouts();return;
     case 'edit-layout':{const layout=savedLayouts.find(item=>item.id===id);if(!layout)return;editorDraft=migrateWorking(layout.data);editorDraft.gifts=clone(giftBase);editorLayoutId=id;editorLayoutName=layout.name;editorStageId=editorDraft.stages[0]?.id||null;editorSection='stage';undoStack=[];redoStack=[];localStorage.setItem('bauer-script-choice',id);data=clone(editorDraft);current=0;tab='stage';renderCards();dispatchEvent(new Event('layouts-changed'));renderLayouts();return;}
     case 'edit-layout-settings':{const layout=savedLayouts.find(item=>item.id===id);if(!layout)return;editorDraft=migrateWorking(layout.data);editorDraft.gifts=clone(giftBase);editorLayoutId=id;editorLayoutName=layout.name;editorStageId=editorDraft.stages[0]?.id||null;editorSection='settings';undoStack=[];redoStack=[];localStorage.setItem('bauer-script-choice',id);data=clone(editorDraft);current=0;tab='settings';renderCards();dispatchEvent(new Event('layouts-changed'));renderLayouts();return;}
     case 'back-to-stage':tab='stage';edit=null;highlightGiftId=null;fromStageFlag=false;renderLayouts();return;
@@ -7292,7 +7300,7 @@ lv.addEventListener('click',async e=>{
     case 'dirdel':if(!canDeleteContent()){toast('У роли «Руководитель отдела» нет прав на удаление направлений.');return;}if(del!==id){del=id;renderLayouts();return}del=null;{const idx=directionBase.findIndex(x=>x.id===id);if(idx>=0)directionBase.splice(idx,1);saveDirectionBase();if(edit?.t==='direction'&&edit.id===id)edit=null;renderLayouts();return;}
   }
 });
-lv.addEventListener('keydown',e=>{if(e.target.matches('[data-v4-layout-name]')){if(e.key==='Enter'){e.preventDefault();e.target.blur();return;}if(e.key==='Escape'){editingLayoutNameId='';renderLayouts();return;}}if(e.key==='Enter'&&e.target.matches('[data-v4="edit"],[data-v4="edit-gift-script"],[data-v4="edit-dir-script"]')){e.preventDefault();e.target.click()}if(e.key==='Escape'&&(edit||pickerOpen!=null||dirPickerOpen!=null)){edit=null;pickerOpen=null;dirPickerOpen=null;renderLayouts()}});
+lv.addEventListener('keydown',e=>{if(e.target.matches('[data-v4-layout-name],[data-v4-layout-custom]')){if(e.key==='Enter'){e.preventDefault();e.target.blur();return;}if(e.key==='Escape'){if(e.target.matches('[data-v4-layout-name]'))editingLayoutNameId='';else editingLayoutCustomMeta='';renderLayouts();return;}}if(e.key==='Enter'&&e.target.matches('[data-v4="edit"],[data-v4="edit-gift-script"],[data-v4="edit-dir-script"]')){e.preventDefault();e.target.click()}if(e.key==='Escape'&&(edit||pickerOpen!=null||dirPickerOpen!=null)){edit=null;pickerOpen=null;dirPickerOpen=null;renderLayouts()}});
 })();
 </script>
 <script id="gift-base">
