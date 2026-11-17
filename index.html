@@ -5538,7 +5538,7 @@ async function resizeGift(file){
   }finally{URL.revokeObjectURL(url);}
 }
 
-$('#script-tab').addEventListener('click',()=>showScript());$('#gifts-tab').addEventListener('click',showGifts);$('#sms-tab').addEventListener('click',showSMS);$('#layouts-tab').addEventListener('click',()=>ensureAdmin(openLayouts));
+$('#script-tab').addEventListener('click',()=>showScript());$('#gifts-tab').addEventListener('click',showGifts);$('#sms-tab').addEventListener('click',showSMS);$('#layouts-tab').addEventListener('click',()=>ensureAdmin(async()=>{await openLayouts();tab='saved';editingLayoutMetaId='';editingLayoutNameId='';renderLayouts();}));
 $('#auth-close').addEventListener('click',()=>{$('#auth-dialog').close();afterAuth=null;});$('#auth-dialog').addEventListener('close',()=>{$('#admin-password').value='';$('#password-confirm').value='';});
 $('#password-visibility').addEventListener('click',()=>{const input=$('#admin-password');input.type=input.type==='password'?'text':'password';$('#password-visibility').textContent=input.type==='password'?'Показать':'Скрыть';});
 $('#auth-form').addEventListener('submit',async event=>{
