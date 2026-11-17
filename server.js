@@ -1165,6 +1165,16 @@ function createAppServer(options = {}) {
           res.end(method === 'HEAD' ? undefined : html);
           return;
         }
+        if (pathname === '/bauer-favicon.png') {
+          const icon = fs.readFileSync(path.join(ROOT_DIR, 'bauer-favicon.png'));
+          res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Cache-Control': 'public, max-age=86400',
+            'X-Content-Type-Options': 'nosniff'
+          });
+          res.end(method === 'HEAD' ? undefined : icon);
+          return;
+        }
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Не найдено');
         return;
