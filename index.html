@@ -708,7 +708,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-newbar input{flex:1;min-width:220px;margin:0}.v4-newbar button{min-height:42px;padding:0 16px}
 .v4-srow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--line);border-radius:14px;margin-bottom:8px;background:var(--surface-alt)}
 .v4-srow.on{border-color:var(--ui);background:var(--ui-soft)}.v4-srow small{display:block;color:var(--muted);margin-top:2px}.v4-srow button{min-height:36px;padding:0 14px;margin-left:6px}
-.v4-layout-meta-tags{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.v4-layout-meta-tags button{min-height:30px!important;margin:0!important;padding:0 10px!important;border-radius:999px!important;border:1px solid var(--line)!important;background:var(--surface)!important;color:var(--muted)!important;font-size:11px!important;font-weight:700!important}.v4-layout-meta-tags button:hover{border-color:var(--ui)!important;color:var(--accent-ink)!important;background:var(--ui-soft)!important}.v4-layout-search{width:100%;max-width:420px;min-height:38px;padding:0 13px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px}
+.v4-layout-meta-tags{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.v4-layout-meta-tags button{min-height:30px!important;margin:0!important;padding:0 10px!important;border-radius:999px!important;border:1px solid var(--line)!important;background:var(--surface)!important;color:var(--muted)!important;font-size:11px!important;font-weight:700!important}.v4-layout-meta-tags button:hover{border-color:var(--ui)!important;color:var(--accent-ink)!important;background:var(--ui-soft)!important}.v4-layout-meta-edit{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.v4-layout-meta-edit select,.v4-layout-meta-edit input{height:32px;padding:0 9px;border:1px solid var(--ui-border);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;font-size:12px;font-weight:650}.v4-layout-meta-edit select{min-width:112px}.v4-layout-meta-edit input{width:135px}.v4-layout-meta-edit button{min-height:32px!important;margin:0!important;padding:0 10px!important}.v4-layout-search{width:100%;max-width:420px;min-height:38px;padding:0 13px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px}
 }</style>
 <style id="gift-shared-style">@media screen{
 .v4-giftmode .v4-top{display:none}
@@ -6795,7 +6795,7 @@ function giftsTab(){
   const count=d.gifts.filter(g=>!qNorm||[g.title,g.condition,g.script].join(' ').toLocaleLowerCase('ru').includes(qNorm)).length;
   return `<section class="v4-card"><div class="v4-head"><div><div class="kicker">БАЗА ПОДАРКОВ</div><h2>Общая база для всех скриптов</h2><p class="v4-sub">${d.gifts.length} из 60. Фото, условие и текст реплики хранятся здесь один раз и подставляются в любые макеты.</p><p class="v4-hint" id="gift-saved">Изменения сохраняются автоматически и сразу действуют во всех скриптах.</p></div><div class="v4-stage-tools">${fromStageFlag&&s?`<button data-v4="back-to-stage">← Вернуться к блоку «${E(s.title)}»</button>`:''}<button class="primary" data-v4="giftbulk">Загрузить фото (сразу несколько)</button><button data-v4="giftadd" ${d.gifts.length>=60?'disabled':''}>+ Подарок</button></div></div><div class="v4-db-bar"><input type="search" data-v4-dbsearch placeholder="🔍 Фильтр по базе подарков (название, условие, текст описания)…" value="${E(dbQuery)}" autocomplete="off"><span id="v4-db-count">Показано: ${count} из ${d.gifts.length}</span></div><input type="file" id="v4-bulk" data-v4-file="bulk" accept="image/jpeg,image/png,image/webp" multiple hidden><div class="v4-gift-grid" id="v4-gift-grid">${renderGiftDbCards()}</div></section>`;
 }
-let savedChannelFilter='all',savedLayoutQuery='';
+let savedChannelFilter='all',savedLayoutQuery='',editingLayoutMetaId='';
 async function importWordLayout(file){
   if(!file)return;
   if(!/\.docx$/i.test(file.name))throw new Error('Выберите документ Word в формате .docx.');
@@ -6823,17 +6823,21 @@ async function exportWordLayout(id){
 function savedTab(){
   const all=savedLayouts||[],mine=all.filter(l=>!/^Перед изменением/.test(l.name)),bk=all.filter(l=>/^Перед изменением/.test(l.name));
   const usedChannels=[...new Set(mine.map(l=>String(l.channel||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const allChannels=[...new Set([...SCRIPT_CHANNEL_PRESETS,...usedChannels])];
+  const usedVariants=[...new Set(mine.map(l=>String(l.variant||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const allVariants=[...new Set([...SCRIPT_VARIANT_PRESETS,...usedVariants])];
   const query=savedLayoutQuery.trim().toLocaleLowerCase('ru');
   const filteredMine=(savedChannelFilter==='all'?mine:(savedChannelFilter==='__none__'?mine.filter(l=>!String(l.channel||'').trim()):mine.filter(l=>String(l.channel||'').trim()===savedChannelFilter))).filter(l=>!query||[l.name,l.channel,l.variant].join(' ').toLocaleLowerCase('ru').includes(query));
   const row=(l,i=-1,n=0)=>{
     const ch=String(l.channel||'').trim(),vr=String(l.variant||'').trim();
     return `<div class="v4-srow ${l.id===editorLayoutId?'on':''}" style="gap:10px">
       <div class="v4-sleft" style="min-width:220px;flex:1"><div class="v4-sname"><strong>${E(l.name)}</strong><small>${dateLabel(l.savedAt)}${l.id===editorLayoutId?' · открыт сейчас':''}</small></div></div>
-      <div class="v4-layout-meta-tags"><button type="button" data-v4="edit-layout-settings" data-id="${l.id}" title="Открыть настройки канала">📁 ${ch?E(ch):'Без канала'}</button><button type="button" data-v4="edit-layout-settings" data-id="${l.id}" title="Открыть настройки варианта">🏷 ${vr?E(vr):'Без варианта'}</button></div>
+      ${editingLayoutMetaId===l.id?`<div class="v4-layout-meta-edit"><select data-v4-layout-channel="${E(l.id)}" aria-label="Канал скрипта"><option value="">Без канала</option>${allChannels.map(value=>`<option value="${E(value)}" ${value===ch?'selected':''}>${E(value)}</option>`).join('')}</select><input list="v4-variant-presets" data-v4-layout-variant="${E(l.id)}" value="${E(vr)}" placeholder="Вариант" aria-label="Вариант скрипта"><button type="button" data-v4="close-layout-meta" title="Готово">✓</button></div>`:`<div class="v4-layout-meta-tags"><button type="button" data-v4="edit-layout-meta" data-id="${l.id}" title="Изменить канал и вариант">📁 ${ch?E(ch):'Без канала'} · ✎</button><button type="button" data-v4="edit-layout-meta" data-id="${l.id}" title="Изменить канал и вариант">🏷 ${vr?E(vr):'Без варианта'} · ✎</button></div>`}
       <div class="v4-sact"><button class="primary" data-v4="edit-layout" data-id="${l.id}">Открыть</button><button data-v4="export-docx" data-id="${l.id}" title="Выгрузить этот макет в Word">⇩ Word</button>${canDeleteContent()?(`<button data-action="delete-layout" data-id="${l.id}">Удалить</button>`):''}</div>
     </div>`;
   };
   return `<section class="v4-card v4-pad">
+    <datalist id="v4-variant-presets">${allVariants.map(value=>`<option value="${E(value)}">`).join('')}</datalist>
     <h2 style="margin:0 0 6px">Мои макеты</h2>
     <p class="v4-sub" style="margin:0 0 12px">Создавайте, находите и открывайте нужный скрипт. Канал и вариант настраиваются внутри самого скрипта.</p>
     <input class="v4-layout-search" type="search" data-v4-layout-search placeholder="🔍 Найти макет, канал или вариант…" value="${E(savedLayoutQuery)}" autocomplete="off" aria-label="Поиск макетов">
@@ -7072,6 +7076,16 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
       }
     });
   }
+  else if(f.matches('[data-v4-layout-channel]')){
+    const lid=f.dataset.v4LayoutChannel;
+    try{await saveLayoutMeta(lid,{channel:f.value.trim()});toast('✓ Канал скрипта сохранён');}catch(err){toast(err.message);}
+    return;
+  }
+  else if(f.matches('[data-v4-layout-variant]')){
+    const lid=f.dataset.v4LayoutVariant;
+    try{await saveLayoutMeta(lid,{variant:f.value.trim()});toast('✓ Вариант скрипта сохранён');}catch(err){toast(err.message);}
+    return;
+  }
   else if(f.matches('[data-v4-layout-meta]')){
     if(!editorLayoutId)return;
     const key=f.dataset.v4LayoutMeta;
@@ -7183,6 +7197,8 @@ lv.addEventListener('click',async e=>{
     case 'group':tab=id==='library'?'saved':'stage';edit=null;obSel=null;del=null;pickerOpen=null;highlightGiftId=null;highlightDirId=null;fromStageFlag=false;renderLayouts();return;
     case 'tab':tab=id;edit=null;del=null;pickerOpen=null;highlightGiftId=null;if(id!=='gifts')fromStageFlag=false;renderLayouts();return;
     case 'back-library':tab='saved';edit=null;obSel=null;del=null;pickerOpen=null;highlightGiftId=null;highlightDirId=null;fromStageFlag=false;renderLayouts();return;
+    case 'edit-layout-meta':editingLayoutMetaId=id;renderLayouts();return;
+    case 'close-layout-meta':editingLayoutMetaId='';renderLayouts();return;
     case 'edit-layout':{const layout=savedLayouts.find(item=>item.id===id);if(!layout)return;editorDraft=migrateWorking(layout.data);editorDraft.gifts=clone(giftBase);editorLayoutId=id;editorLayoutName=layout.name;editorStageId=editorDraft.stages[0]?.id||null;editorSection='stage';undoStack=[];redoStack=[];localStorage.setItem('bauer-script-choice',id);data=clone(editorDraft);current=0;tab='stage';renderCards();dispatchEvent(new Event('layouts-changed'));renderLayouts();return;}
     case 'edit-layout-settings':{const layout=savedLayouts.find(item=>item.id===id);if(!layout)return;editorDraft=migrateWorking(layout.data);editorDraft.gifts=clone(giftBase);editorLayoutId=id;editorLayoutName=layout.name;editorStageId=editorDraft.stages[0]?.id||null;editorSection='settings';undoStack=[];redoStack=[];localStorage.setItem('bauer-script-choice',id);data=clone(editorDraft);current=0;tab='settings';renderCards();dispatchEvent(new Event('layouts-changed'));renderLayouts();return;}
     case 'back-to-stage':tab='stage';edit=null;highlightGiftId=null;fromStageFlag=false;renderLayouts();return;
