@@ -4855,30 +4855,19 @@ async function api_local_vault(rawPath,options={}){
 
   if(pathname==='/api/audit/track'&&method==='POST'){
     if(!authUser)throw fail('Требуется авторизация.',401);
-    const action=String(body.action||'activity.clicks').trim();
-    const target=body.target?String(body.target).slice(0,200):null;
-    const details=(typeof body.details==='object'&&body.details!==null)?body.details:{};
-    const clicks=Math.max(1,Math.min(1000,Number(body.clicks||details.count||1)));
-    details.clicks=clicks;
-
-    const entry={
-      id:'aud_trk_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
-      timestamp:Date.now(),
-      action,
-      status:'success',
-      actorId:authUser.id||null,
-      actorLogin:authUser.login||'anonymous',
-      actorName:authUser.displayName||authUser.login||'anonymous',
-      actorRole:authUser.role||null,
-      actorManagerId:authUser.managerId||null,
-      target,
-      ip:'127.0.0.1',
-      userAgent:navigator.userAgent||'Browser',
-      details
-    };
-    audit.push(entry);
+    const rawEvents=Array.isArray(body.events)?body.events.slice(0,50):[body];
+    if(!rawEvents.length)throw fail('Нет событий для сохранения.',400);
+    const entries=rawEvents.map(raw=>{
+      const action=String(raw?.action||'activity.clicks').trim().slice(0,120);
+      const target=raw?.target?String(raw.target).slice(0,200):null;
+      const details=(typeof raw?.details==='object'&&raw.details!==null)?raw.details:{};
+      const clicks=Math.max(1,Math.min(1000,Number(raw?.clicks||details.count||1)));
+      details.clicks=clicks;
+      return {id:'aud_trk_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),timestamp:Date.now(),action,status:'success',actorId:authUser.id||null,actorLogin:authUser.login||'anonymous',actorName:authUser.displayName||authUser.login||'anonymous',actorRole:authUser.role||null,actorManagerId:authUser.managerId||null,target,ip:'127.0.0.1',userAgent:navigator.userAgent||'Browser',details};
+    });
+    audit.push(...entries);
     await VaultDB.set('audit',audit);
-    return {ok:true,id:entry.id};
+    return {ok:true,id:entries[0]?.id||null,ids:entries.map(entry=>entry.id)};
   }
 
   if(pathname==='/api/audit'&&method==='GET'){
@@ -12085,55 +12074,61 @@ window.loadOwnerData = loadOwnerData;
 <script id="activity-tracker-module">
 (() => {
   let pendingClicks = 0;
-  let clickFlushTimer = null;
+  let activityQueue = [];
+  let activityFlushTimer = null;
+  let activityFlushInProgress = false;
+  const ACTIVITY_FLUSH_MS = 15000;
+  const ACTIVITY_BATCH_SIZE = 50;
 
-  async function flushClicks() {
-    if (pendingClicks <= 0) return;
-    const count = pendingClicks;
-    pendingClicks = 0;
+  function scheduleActivityFlush() {
+    if (activityFlushTimer) return;
+    activityFlushTimer = setTimeout(() => {
+      activityFlushTimer = null;
+      flushActivity();
+    }, ACTIVITY_FLUSH_MS);
+  }
+
+  function queueActivity(action, target, details = {}, clicks = 1) {
+    activityQueue.push({ action, target, details, clicks: Math.max(1, clicks) });
+    if (activityQueue.length > 100) activityQueue = activityQueue.slice(-100);
+    if (activityQueue.length >= ACTIVITY_BATCH_SIZE) {
+      if (activityFlushTimer) clearTimeout(activityFlushTimer);
+      activityFlushTimer = null;
+      flushActivity();
+    } else scheduleActivityFlush();
+  }
+
+  async function flushActivity() {
+    if (activityFlushInProgress || (pendingClicks <= 0 && !activityQueue.length)) return;
+    if (activityFlushTimer) { clearTimeout(activityFlushTimer); activityFlushTimer = null; }
+    const events = activityQueue.splice(0, ACTIVITY_BATCH_SIZE);
+    if (pendingClicks > 0) {
+      const count = Math.min(1000, pendingClicks);
+      pendingClicks -= count;
+      events.unshift({ action: 'activity.clicks', target: 'Активность на сайте (' + count + ' кликов)', details: { count, page: (typeof currentTab !== 'undefined' ? currentTab : 'script') }, clicks: count });
+    }
+    activityFlushInProgress = true;
     try {
-      if (typeof api === 'function') {
-        await api('/api/audit/track', {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'activity.clicks',
-            target: 'Активность на сайте (' + count + ' кликов)',
-            details: { count, page: (typeof currentTab !== 'undefined' ? currentTab : 'script') },
-            clicks: count
-          })
-        });
-      }
-    } catch (e) {}
+      if (typeof api === 'function') await api('/api/audit/track', { method: 'POST', body: JSON.stringify({ events }) });
+    } catch (e) {
+      activityQueue = [...events, ...activityQueue].slice(-100);
+    } finally {
+      activityFlushInProgress = false;
+      if (pendingClicks > 0 || activityQueue.length) scheduleActivityFlush();
+    }
   }
 
   function recordClick() {
     pendingClicks++;
     if (pendingClicks >= 15) {
-      if (clickFlushTimer) clearTimeout(clickFlushTimer);
-      flushClicks();
-    } else if (!clickFlushTimer) {
-      clickFlushTimer = setTimeout(() => {
-        clickFlushTimer = null;
-        flushClicks();
-      }, 15000);
-    }
+      if (activityFlushTimer) clearTimeout(activityFlushTimer);
+      activityFlushTimer = null;
+      flushActivity();
+    } else scheduleActivityFlush();
   }
 
-  window.trackActivity = async function(action, target, details = {}, clicks = 1) {
-    recordClick();
-    try {
-      if (typeof api === 'function') {
-        await api('/api/audit/track', {
-          method: 'POST',
-          body: JSON.stringify({
-            action,
-            target,
-            details,
-            clicks: Math.max(1, clicks)
-          })
-        });
-      }
-    } catch (e) {}
+  window.trackActivity = function(action, target, details = {}, clicks = 1) {
+    queueActivity(action, target, details, clicks);
   };
 
   document.addEventListener('click', (e) => {
@@ -12206,10 +12201,10 @@ window.loadOwnerData = loadOwnerData;
 
 
   window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushClicks();
+    if (document.visibilityState === 'hidden') flushActivity();
   });
   window.addEventListener('beforeunload', () => {
-    flushClicks();
+    flushActivity();
   });
 })();
 </script>

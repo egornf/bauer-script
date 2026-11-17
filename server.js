@@ -363,7 +363,7 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     writeJsonAtomic(files.appData, appData);
   }
 
-  function logEvent({ action, actor, target = null, ip = '', userAgent = '', details = {}, status = 'success' }) {
+  function logEvent({ action, actor, target = null, ip = '', userAgent = '', details = {}, status = 'success' }, { persist = true } = {}) {
     const entry = {
       id: 'ev_' + crypto.randomUUID(),
       timestamp: Date.now(),
@@ -380,7 +380,7 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       details: { ...details, clicks: Math.max(1, Number(details?.clicks || details?.count || 1)) }
     };
     audit.push(entry);
-    saveAudit();
+    if (persist) saveAudit();
     return entry;
   }
 
@@ -430,6 +430,7 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       return true;
     },
     saveUsers,
+    saveAudit,
     getSessions: () => {
       cleanExpiredSessions();
       return sessions;
@@ -3258,23 +3259,19 @@ function createAppServer(options = {}) {
       // Activity tracking: POST /api/audit/track
       if (pathname === '/api/audit/track' && method === 'POST') {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
-        const body = await parseJson(req);
-        const action = String(body.action || 'activity.clicks').trim();
-        const target = body.target ? String(body.target).slice(0, 200) : null;
-        const details = (typeof body.details === 'object' && body.details !== null) ? body.details : {};
-        const clicks = Math.max(1, Math.min(1000, Number(body.clicks || details.count || 1)));
-        details.clicks = clicks;
-
-        const entry = store.logEvent({
-          action,
-          actor: auth.user,
-          target,
-          ip,
-          userAgent,
-          details,
-          status: 'success'
+        const body = await readBody(req);
+        const rawEvents = Array.isArray(body.events) ? body.events.slice(0, 50) : [body];
+        if (!rawEvents.length) return sendJson(res, 400, { error: 'Нет событий для сохранения.' });
+        const entries = rawEvents.map(raw => {
+          const action = String(raw?.action || 'activity.clicks').trim().slice(0, 120);
+          const target = raw?.target ? String(raw.target).slice(0, 200) : null;
+          const details = (typeof raw?.details === 'object' && raw.details !== null) ? raw.details : {};
+          const clicks = Math.max(1, Math.min(1000, Number(raw?.clicks || details.count || 1)));
+          details.clicks = clicks;
+          return store.logEvent({ action, actor: auth.user, target, ip, userAgent, details, status: 'success' }, { persist: false });
         });
-        return sendJson(res, 200, { ok: true, id: entry.id });
+        store.saveAudit();
+        return sendJson(res, 200, { ok: true, id: entries[0]?.id || null, ids: entries.map(entry => entry.id) });
       }
 
       // Audit log: GET /api/audit

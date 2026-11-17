@@ -1574,5 +1574,24 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     const exportedBuffer = Buffer.from(await exported.arrayBuffer());
     assert.equal(exportedBuffer.subarray(0, 2).toString('ascii'), 'PK');
   });
+
+  await t.test('20. Activity events can be recorded in one batch without losing individual actions', async () => {
+    const before = store.getAudit().length;
+    const tracked = await ownerClient.request('/api/audit/track', {
+      method: 'POST',
+      body: {
+        events: [
+          { action: 'activity.clicks', target: 'Активность на сайте (12 кликов)', details: { count: 12, page: 'script' }, clicks: 12 },
+          { action: 'activity.stage_view', target: 'Этап 2: Повод звонка', details: { stageIndex: 2, stageTitle: 'Повод звонка' } },
+          { action: 'activity.objection_view', target: 'Возражение: Мне некогда', details: { objectionTitle: 'Мне некогда' } }
+        ]
+      }
+    });
+    assert.equal(tracked.status, 200);
+    assert.equal(tracked.data.ids.length, 3);
+    const added = store.getAudit().slice(before);
+    assert.deepEqual(added.map(item => item.action), ['activity.clicks', 'activity.stage_view', 'activity.objection_view']);
+    assert.equal(added[0].details.clicks, 12);
+  });
 });
 
