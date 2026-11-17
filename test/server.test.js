@@ -1180,8 +1180,10 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     // 5. Verify index.html UI elements for Presentation Plan
     const html = fs.readFileSync(path.resolve('index.html'), 'utf8');
 
-    // Top tab & container
-    assert.ok(html.includes('id="plan-tab"'), 'Must have #plan-tab in header');
+    // Unified venues section and schedule container
+    assert.ok(html.includes('id="venues-tab"'), 'Must have unified venues tab in header');
+    assert.ok(html.includes('Справочник залов'), 'Must expose hall directory inside the unified venues section');
+    assert.ok(html.includes('data-venue-section="schedule"'), 'Must allow switching to the presentation schedule');
     assert.ok(html.includes('id="plan-view"'), 'Must have #plan-view container');
 
     // Always working cities

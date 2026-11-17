@@ -2405,7 +2405,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 </head>
 <body>
 <header class="app-header"><div class="brand">BAUER<small>НАВИГАТОР РАЗГОВОРА</small></div><div class="tools"><span class="status" id="status">Скрипт готов к работе</span><button class="quiet all-button" id="all-objections">Все возражения</button><button class="quiet" id="edit" aria-pressed="false">Редактор</button><button id="download">Скачать HTML</button></div></header>
-<nav class="app-switcher" aria-label="Разделы сайта"><div class="switcher-tabs"><button id="script-tab" class="section-tab active" aria-pressed="true">Скрипт</button><button id="gifts-tab" class="section-tab" aria-pressed="false" hidden="">Подарки</button><button id="sms-tab" class="section-tab" aria-pressed="false">Помощник СМС</button><button id="objections-tab" class="section-tab" aria-pressed="false">Возражения</button><button id="layouts-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M6 9V6a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg>Макеты</button><button id="addresses-tab" class="section-tab" aria-pressed="false">Адреса</button></div><span class="switcher-hint">Рабочее пространство оператора</span></nav>
+<nav class="app-switcher" aria-label="Разделы сайта"><div class="switcher-tabs"><button id="script-tab" class="section-tab active" aria-pressed="true">Скрипт</button><button id="gifts-tab" class="section-tab" aria-pressed="false" hidden="">Подарки</button><button id="sms-tab" class="section-tab" aria-pressed="false">Помощник СМС</button><button id="objections-tab" class="section-tab" aria-pressed="false">Возражения</button><button id="layouts-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M6 9V6a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg>Макеты</button><button id="venues-tab" class="section-tab" aria-pressed="false">Площадки и расписание</button></div><span class="switcher-hint">Рабочее пространство оператора</span></nav>
 <main class="workspace">
   <div class="intro">
     <div class="intro-left"><h1>От звонка до встречи</h1><p class="sub">Листайте этапы слева направо. Ответы на возражения — в каждом блоке.</p></div>
@@ -5898,12 +5898,24 @@ let revision=0,addressesReady=false;
 function syncCities(){smsCities.splice(0,smsCities.length,...[...new Set(smsSource.venues.map(v=>v.city))].sort((a,b)=>a.localeCompare(b,'ru')));}
 syncCities();
 const nav=document.querySelector('.switcher-tabs');
-if(!$('#addresses-tab'))nav.insertAdjacentHTML('beforeend','<button id="addresses-tab" class="section-tab" aria-pressed="false">Адреса</button>');
+if(!$('#venues-tab'))nav.insertAdjacentHTML('beforeend','<button id="venues-tab" class="section-tab" aria-pressed="false">Площадки и расписание</button>');
 if(!$('#whole-script'))$('.intro').insertAdjacentHTML('beforeend','<button id="whole-script" type="button">⛶ Весь скрипт</button>');
 if(!$('#addresses-view'))document.body.insertAdjacentHTML('beforeend','<main id="addresses-view" class="objections-view" hidden></main><dialog id="address-dialog" aria-labelledby="address-title"></dialog><section id="whole-view" hidden aria-label="Весь скрипт"></section>');
-const originalSetTab=setTab;setTab=function(name){$('#addresses-view').hidden=name!=='addresses';originalSetTab(name);};
+window.bauerVenuesSection=window.bauerVenuesSection||'directory';
+function canOpenPresentationSchedule(){
+  const permissions=currentUser?.permissions||[];
+  return ['OWNER','ADMIN','HEAD'].includes(currentUser?.role)||permissions.includes('addresses.manage');
+}
+function venueSectionTabs(active){
+  const scheduleAvailable=canOpenPresentationSchedule();
+  return `<nav class="venues-subtabs" aria-label="Площадки и расписание"><button type="button" class="venue-subtab ${active==='schedule'?'active':''}" data-venue-section="schedule" ${scheduleAvailable?'':'disabled title="Расписание доступно руководителю"'}>📅 Расписание презентаций</button><button type="button" class="venue-subtab ${active==='directory'?'active':''}" data-venue-section="directory">🏢 Справочник залов</button></nav>`;
+}
+window.renderVenueSectionTabs=venueSectionTabs;
+window.canOpenPresentationSchedule=canOpenPresentationSchedule;
+const originalSetTab=setTab;setTab=function(name){$('#addresses-view').hidden=name!=='venues'||window.bauerVenuesSection==='schedule';originalSetTab(name);};
 let query='',editingId=null,deleted=null;
-function showAddresses(){if(!$('#drawer').hidden)closeDrawer();for(const el of document.querySelectorAll('main'))el.hidden=true;setTab('addresses');renderAddresses();}
+function showAddresses(){window.bauerVenuesSection='directory';if(!$('#drawer').hidden)closeDrawer();for(const el of document.querySelectorAll('main'))el.hidden=true;setTab('venues');renderAddresses();}
+window.showVenueDirectory=showAddresses;
 const E=escapeHTML,openCities=new Set();
 function renderAddresses(){
   const q=query.toLocaleLowerCase('ru').trim(),match=v=>!q||[v.city,v.hall,v.address,v.route].join(' ').toLocaleLowerCase('ru').includes(q);
@@ -5914,16 +5926,19 @@ function renderAddresses(){
     const on=all.filter(v=>!v.unavailable).length,open=q?true:openCities.has(city);
     return `<details class="addr-city ${on===0?'off':''}" data-city="${E(city)}" ${open?'open':''}><summary><span class="addr-cname">${E(city)}</span><span class="addr-count ${on===all.length?'all':on?'part':'none'}">${on===all.length?`все ${all.length} работают`:on?`работают ${on} из ${all.length}`:'не работает'}</span></summary><div class="addr-body"><div class="addr-tools"><button data-city-all="on" data-city="${E(city)}">Включить все</button><button data-city-all="off" data-city="${E(city)}">Выключить все</button><button data-address-add-city="${E(city)}">+ Зал в этом городе</button></div>${shown.map(v=>`<div class="addr-hall ${v.unavailable?'off':''}"><label class="addr-switch" title="Галочка: зал работает"><input type="checkbox" data-address-toggle="${E(v.id)}" ${v.unavailable?'':'checked'}><span>${v.unavailable?'Не работает':'Работает'}</span></label><div class="addr-info"><h3>${E(v.hall)}</h3><p><strong>Адрес:</strong> ${E(v.address)}</p><p class="address-route"><strong>Ориентиры:</strong> ${E(v.route)}</p>${v.conflict?`<p class="editor-help">Требуется уточнение: ${E(v.note||'маршрут')}</p>`:''}</div><div class="addr-act"><button data-address-edit="${E(v.id)}">Редактировать</button>${canDeleteContent()?(`<button data-address-delete="${E(v.id)}" class="danger-text">Удалить</button>`):''}</div></div>`).join('')}</div></details>`;
   }).join('');
-  $('#addresses-view').innerHTML=`<div class="bank-intro"><div><h1>Адреса площадок</h1><p class="sub">${cities.length} городов · ${total} залов · работают ${work}</p></div><button class="primary" id="address-add">+ Добавить площадку</button></div><p class="editor-help">Галочка слева у зала: зал работает. Без галочки он пропадает из выбора «Город и зал» вверху и из помощника СМС. Изменения сохраняются сразу.</p><div class="bank-search"><input id="address-search" type="search" placeholder="Найти город, зал или адрес…" aria-label="Поиск адресов" value="${E(query)}">${deleted?'<button id="address-undo">Отменить удаление</button>':''}<button id="address-expand">Развернуть все</button><button id="address-collapse">Свернуть все</button></div><div class="address-list addr-accordion">${body||'<p class="empty">Площадки не найдены.</p>'}</div>`;
+  $('#addresses-view').innerHTML=`${venueSectionTabs('directory')}<div class="bank-intro"><div><h1>Справочник залов</h1><p class="sub">${cities.length} городов · ${total} залов · работают ${work}</p></div><button class="primary" id="address-add">+ Добавить площадку</button></div><p class="editor-help">Здесь хранятся города, залы, адреса и ориентиры. Галочка слева у зала: зал работает. Без неё он пропадает из выбора «Город и зал» и из помощника СМС. Изменения сохраняются сразу.</p><div class="bank-search"><input id="address-search" type="search" placeholder="Найти город, зал или адрес…" aria-label="Поиск адресов" value="${E(query)}">${deleted?'<button id="address-undo">Отменить удаление</button>':''}<button id="address-expand">Развернуть все</button><button id="address-collapse">Свернуть все</button></div><div class="address-list addr-accordion">${body||'<p class="empty">Площадки не найдены.</p>'}</div>`;
 }
 async function setWorking(ids,working){const next=smsSource.venues.map(v=>ids.includes(v.id)?{...v,unavailable:!working}:v);try{await persist(next);toast(ids.length>1?(working?'Все залы города включены':'Все залы города выключены'):(working?'Зал работает':'Зал отключён'));}catch(e){toast(e.message);renderAddresses();}}
 function applyVenues(venues){smsSource.venues=venues;syncCities();$('#sms-data').textContent=JSON.stringify(smsSource).replace(/</g,'\\u003c');if(smsInitialized){const v=venues.find(v=>v.id===smsValues.hall&&v.city===smsValues.city);if(!v||v.unavailable)smsValues.hall='';if(!smsCities.includes(smsValues.city)){smsValues.city='';$('#sms-city').value='';}smsValues.route='';smsHallOptions();$('#sms-hall').value=smsValues.hall;updateSmsPreview();}renderAddresses();}
 async function persist(venues){if(!addressesReady)throw new Error('Дождитесь загрузки адресов.');const result=await api('/api/addresses',{method:'PUT',body:JSON.stringify({venues,revision})});revision=result.revision;applyVenues(result.venues);}
 api('/api/addresses').then(result=>{revision=result.revision;addressesReady=true;applyVenues(result.venues);}).catch(error=>toast('Не удалось загрузить адреса: '+error.message));
 function editor(id){editingId=id;const v=smsSource.venues.find(v=>v.id===id)||{city:'',hall:'',address:'',route:''};$('#address-dialog').innerHTML=`<h2 id="address-title">${id?'Редактировать площадку':'Новая площадка'}</h2><form id="address-form">${[['city','Город',150],['hall','Зал',250],['address','Адрес',1000],['route','Ориентиры',6000]].map(([k,l,max])=>`<label for="addr-${k}">${l}</label>${k==='route'?`<textarea id="addr-${k}" name="${k}" rows="5" maxlength="${max}" required>${escapeHTML(v[k])}</textarea>`:`<input id="addr-${k}" name="${k}" maxlength="${max}" required value="${escapeHTML(v[k])}">`}`).join('')}<label class="address-check"><input type="checkbox" name="unavailable" ${v.unavailable?'checked':''}> Сейчас площадка недоступна</label>${v.conflict?`<p class="editor-help">${escapeHTML(v.note||'Есть противоречия в маршруте.')}</p><label class="address-check"><input type="checkbox" name="resolved"> Маршрут уточнён, противоречия устранены</label>`:''}<p id="address-error" role="alert"></p><div><button type="submit" class="primary">Сохранить</button> <button type="button" id="address-cancel">Отмена</button></div></form>`;$('#address-dialog').showModal();$('#addr-city').focus();}
-$('#addresses-tab').addEventListener('click',showAddresses);
+$('#venues-tab').addEventListener('click',()=>{
+  if(canOpenPresentationSchedule()&&typeof window.openPlanPanel==='function')window.openPlanPanel();
+  else showAddresses();
+});
 $('#addresses-view').addEventListener('input',e=>{if(e.target.id==='address-search'){const at=e.target.selectionStart;query=e.target.value;renderAddresses();$('#address-search').focus();$('#address-search').setSelectionRange(at,at);}});
-$('#addresses-view').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='address-add')ensureAdmin(()=>editor(null));
+$('#addresses-view').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.venueSection==='schedule'){if(typeof window.openPlanPanel==='function')window.openPlanPanel();return;}if(b.id==='address-add')ensureAdmin(()=>editor(null));
 if(b.dataset.addressAddCity)ensureAdmin(()=>{editor(null);$('#addr-city').value=b.dataset.addressAddCity;$('#addr-hall').focus();});
 if(b.dataset.cityAll)ensureAdmin(()=>setWorking(smsSource.venues.filter(v=>v.city===b.dataset.city).map(v=>v.id),b.dataset.cityAll==='on'));
 if(b.id==='address-expand'){smsSource.venues.forEach(v=>openCities.add(v.city));renderAddresses();}
@@ -7320,6 +7335,11 @@ api('/api/addresses').then(r=>{if(r&&r.revision>0&&Array.isArray(r.venues)){try{
 <style id="plan-styles">@media screen{
 .venue-picker, .app-header .venue-picker, .workspace-pickers-bar .venue-picker{display:none !important}
 .plan-view{flex:1;min-height:0;overflow-y:auto;width:100%;max-width:1580px;margin:0 auto;padding:24px 28px 60px}
+.venues-subtabs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 22px;padding:8px;border:1px solid var(--line);border-radius:14px;background:var(--surface-alt)}
+.venue-subtab{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 14px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:750;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease}
+.venue-subtab:hover:not(:disabled){background:var(--surface);border-color:var(--line);color:var(--ink)}
+.venue-subtab.active{background:var(--teal);border-color:var(--teal);color:#fff;box-shadow:0 2px 8px color-mix(in srgb,var(--teal) 25%,transparent)}
+.venue-subtab:disabled{cursor:not-allowed;opacity:.48}
 .plan-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--line)}
 .plan-header h1{font-size:28px;font-weight:800;letter-spacing:-.03em;margin:4px 0 6px}
 .plan-header p{margin:0;color:var(--muted);font-size:13px}
@@ -9696,7 +9716,7 @@ setTab=function(name){
   const ov=document.getElementById('owner-view');
   if(ov)ov.hidden=name!=='owner';
   const pv=document.getElementById('plan-view');
-  if(pv)pv.hidden=name!=='plan';
+  if(pv)pv.hidden=name!=='venues'||window.bauerVenuesSection!=='schedule';
   origSetTab(name);
 };
 const origShowScript=showScript;
@@ -9808,7 +9828,7 @@ function updateHeaderBadge(){
     btn.innerHTML=`${isOwner?'<span class="dot-owner"></span>':''}<span>${E(currentUser.login)} · ${E(ROLE_NAMES[currentUser.role]||currentUser.role)}</span>`;
     if(tabLbl)tabLbl.textContent=isOwner?'Владелец · Управление':currentUser.role==='ADMIN'?'Администрирование':currentUser.role==='HEAD'?'Мой отдел · Управление':currentUser.role==='TRAINER'?'Бизнес-тренер ДПК · Управление':'Профиль ('+(ROLE_NAMES[currentUser.role]||currentUser.role)+')';
     const planTab=document.getElementById('plan-tab');
-    if(planTab)planTab.hidden=!(isOwner||currentUser.role==='ADMIN'||currentUser.role==='HEAD'||(currentUser.permissions&&currentUser.permissions.includes('addresses.manage')));
+    if(planTab)planTab.hidden=true;
   }else{
     const planTab=document.getElementById('plan-tab');
     if(planTab)planTab.hidden=true;
@@ -12602,12 +12622,13 @@ function switchPlanWeek(targetWeekNum) {
 
 async function openPlanPanel() {
   try {
+    window.bauerVenuesSection='schedule';
     if ($('#drawer') && !$('#drawer').hidden) closeDrawer();
     if (typeof closeWhole === 'function' && $('#whole-view') && !$('#whole-view').hidden) closeWhole();
     for (const el of document.querySelectorAll('main')) el.hidden = true;
     if ($('#edit')) $('#edit').hidden = true;
     if ($('#all-objections')) $('#all-objections').hidden = true;
-    setTab('plan');
+    setTab('venues');
     const pv = document.getElementById('plan-view');
     if (pv) pv.hidden = false;
     if (!planDraft) initPlanDraft();
@@ -12932,6 +12953,7 @@ function renderPlanView() {
 
   // Complete HTML with Built-in 2026 Week Calendar Header, Stepper, Step Card, and Actions Bar
   container.innerHTML = `
+    ${typeof window.renderVenueSectionTabs==='function'?window.renderVenueSectionTabs('schedule'):''}
     <header class="plan-header">
       <div style="flex:1;min-width:300px">
         <h1>📅 План презентаций BAUER · Календарь недель ${BAUER_CALENDAR_YEAR}</h1>
@@ -13127,6 +13149,12 @@ async function savePresentationPlanToServer(opts = {}) {
 
 // Global Event Listeners for Presentation Plan View
 document.addEventListener('click', e => {
+  const venueSectionBtn = e.target.closest('[data-venue-section]');
+  if (venueSectionBtn?.dataset.venueSection === 'directory') {
+    e.preventDefault();
+    if (typeof window.showVenueDirectory === 'function') window.showVenueDirectory();
+    return;
+  }
   const planTabBtn = e.target.closest('#plan-tab');
   if (planTabBtn) {
     e.preventDefault();
