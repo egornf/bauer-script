@@ -482,6 +482,10 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 #whole-fullscreen:hover{background:var(--custom-accent, var(--teal, #008578)) !important;border-color:var(--custom-accent, var(--teal, #008578)) !important;color:var(--custom-accent-fg, #ffffff) !important;transform:translateY(-1px)}
 #whole-close{background:var(--custom-accent, var(--teal, #008578)) !important;color:var(--custom-accent-fg, #ffffff) !important;border:1px solid var(--custom-accent, var(--teal, #008578)) !important;border-radius:8px !important;padding:8px 18px !important;font-size:13px !important;font-weight:750 !important;cursor:pointer !important;transition:all .16s ease !important;box-shadow:0 4px 12px color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 35%, transparent) !important}
 #whole-close:hover{opacity:0.92;transform:translateY(-1px)}
+.whole-script-chooser{display:inline-flex;align-items:center;gap:10px;margin-left:auto;color:var(--custom-header-fg, #ffffff);font-size:13px;font-weight:800;white-space:nowrap}
+.whole-script-chooser select{min-width:190px;max-width:360px;height:40px;padding:0 38px 0 14px;border:1px solid color-mix(in srgb, var(--custom-accent, var(--teal, #008578)) 75%, #ffffff);border-radius:11px;background:var(--custom-accent, var(--teal, #008578)) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 13px center/11px;color:var(--custom-accent-fg, #ffffff);font:inherit;font-weight:800;appearance:none;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.16)}
+.whole-script-chooser select:focus{outline:2px solid #ffffff;outline-offset:2px}.whole-script-chooser select option{background:var(--surface,#fff);color:var(--ink,#102f44)}
+@media(max-width:760px){.whole-script-chooser{order:3;width:100%;margin-left:0;justify-content:space-between}.whole-script-chooser select{min-width:0;max-width:72%;height:36px}}
 
 .whole-body-layout{display:flex;flex-direction:column;flex:1;min-height:0;width:100%;overflow:hidden;position:relative}
 .whole-sidebar{width:100%;flex-shrink:0;display:flex;flex-direction:row;align-items:center;background:var(--custom-card-bg, var(--surface, #ffffff));border-bottom:1.5px solid var(--line);padding:10px 24px;gap:12px;transition:all .2s ease;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,0.04)}
@@ -5869,6 +5873,7 @@ async function pick(id,silent){
     if(!silent)toast('Скрипт: '+l.name);
   }catch(e){toast(e.message)}
 }
+window.selectBauerScript=pick;
 sel.addEventListener('change',()=>pick(sel.value));
 addEventListener('layouts-changed',()=>load(false));
 addEventListener('auth-changed',()=>load(true));
@@ -5972,6 +5977,9 @@ $('#whole-script').addEventListener('click',()=>{
     route:currentV?.route||smsValues?.route||''
   };
   window.wSmsValues = wSmsValues;
+  const mainScriptPicker=$('#script-picker');
+  const selectedScriptId=mainScriptPicker?.value||localStorage.getItem('bauer-script-choice')||'';
+  const wholeScriptOptions=mainScriptPicker?[...mainScriptPicker.options].map(option=>`<option value="${escapeHTML(option.value)}" ${option.value===selectedScriptId?'selected':''}>${escapeHTML(option.textContent||option.value)}</option>`).join(''):'';
 
   function renderObjectionsForStage(stg,idx){
     if(typeof stg==='number'){idx=stg;stg=stages[idx];}
@@ -6004,6 +6012,7 @@ $('#whole-script').addEventListener('click',()=>{
   view.innerHTML=`
     <header class="whole-head">
       <strong>Весь скрипт</strong>
+      ${wholeScriptOptions?`<label class="whole-script-chooser"><span>Выбор скрипта</span><select id="whole-script-picker" aria-label="Выбор варианта скрипта">${wholeScriptOptions}</select></label>`:''}
       <div style="display:flex;align-items:center;gap:8px">
         <button id="whole-fullscreen">⛶ Во весь экран</button>
         <button id="whole-close">Вернуться к этапам ×</button>
@@ -6143,6 +6152,13 @@ $('#whole-script').addEventListener('click',()=>{
   const smsCard=view.querySelector('#whole-sms-card');
   const smsToggleBtn=view.querySelector('#whole-sms-toggle-btn');
   const smsBody=view.querySelector('#whole-sms-body');
+  view.querySelector('#whole-script-picker')?.addEventListener('change',async event=>{
+    const nextId=event.target.value;
+    if(!nextId||nextId===selectedScriptId)return;
+    await window.selectBauerScript?.(nextId,true);
+    closeWhole();
+    $('#whole-script').click();
+  });
 
   let activeStageIdx=0;
   const activeObByStage={};
