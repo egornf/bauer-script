@@ -1205,6 +1205,11 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.ok(html.includes('api_local_vault'), 'Must have local vault fallback');
     assert.ok(html.includes('pathname===\'/api/presentation-plan\''), 'Local vault must handle presentation-plan to avoid route not found');
 
+    // Layout library keeps list management simple; script metadata is configured inside its settings
+    assert.ok(html.includes('data-v4-layout-search'), 'Layout library must support finding a layout');
+    assert.ok(html.includes('data-v4-layout-meta'), 'Channel and variant must be configurable from script settings');
+    assert.ok(html.includes('edit-layout-settings'), 'Layout metadata tags must open the selected script settings');
+
     // Movable schedule block in Layout Editor (Макеты)
     assert.ok(html.includes("schedule:'📅 График времени'"), 'Layout editor KINDS must include schedule');
     assert.ok(html.includes('data-v4="addschedline"'), 'Layout editor must allow adding/moving schedule block');
