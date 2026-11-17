@@ -3,20 +3,13 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const crypto = require('node:crypto');
 const mammoth = require('mammoth');
 const { Document, Packer, Paragraph, HeadingLevel, ImageRun } = require('docx');
-let vercelBlob = null;
-try {
-  vercelBlob = require('@vercel/blob');
-} catch {
-  vercelBlob = null;
-}
 
 const ROOT_DIR = __dirname;
 const INDEX_PATH = path.join(ROOT_DIR, 'index.html');
-const DEFAULT_DATA_DIR = process.env.BAUER_DATA_DIR || (process.env.VERCEL ? path.join(os.tmpdir(), 'bauer-data') : path.join(ROOT_DIR, 'data'));
+const DEFAULT_DATA_DIR = process.env.BAUER_DATA_DIR || path.join(ROOT_DIR, 'data');
 
 const SESSION_COOKIE = 'bauer_sid';
 const CSRF_COOKIE = 'bauer_csrf';
@@ -265,13 +258,8 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
   let appData = readJson(files.appData, null);
   let sharedThemes = readJson(files.sharedThemes, []);
   function saveSharedThemes() {
-    dirtySharedThemes = true;
     writeJsonAtomic(files.sharedThemes, sharedThemes);
   }
-  let dirtyAuth = false;
-  let dirtyAppData = false;
-  let dirtySharedThemes = false;
-  let blobAppDataLoaded = false;
 
   if (!appData) {
     const seed = extractSeedFromIndexHtml(htmlPath);
@@ -358,12 +346,10 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       throw new Error('Нарушение инварианта: в системе может быть только один OWNER.');
     }
     writeJsonAtomic(files.users, users);
-    dirtyAuth = true;
   }
 
   function saveSessions() {
     writeJsonAtomic(files.sessions, sessions);
-    dirtyAuth = true;
   }
 
   function saveAudit() {
@@ -371,118 +357,10 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       audit = audit.slice(-2500);
     }
     writeJsonAtomic(files.audit, audit);
-    dirtyAuth = true;
   }
 
   function saveAppData() {
     writeJsonAtomic(files.appData, appData);
-    dirtyAppData = true;
-  }
-
-  let lastBlobSyncAt = 0;
-  async function syncFromBlob({ needAppData = false, force = false } = {}) {
-    if (!process.env.BLOB_READ_WRITE_TOKEN || !vercelBlob) return;
-    const now = Date.now();
-    if (!force && (now - lastBlobSyncAt < 30000)) return;
-    lastBlobSyncAt = now;
-    try {
-      const authRes = await vercelBlob.get('bauer-state/auth.json', {
-        access: 'private',
-        useCache: false
-      });
-      if (authRes && authRes.statusCode === 200 && authRes.stream) {
-        const remoteAuth = await new Response(authRes.stream).json();
-        if (remoteAuth && typeof remoteAuth === 'object') {
-          if (Array.isArray(remoteAuth.users)) users = remoteAuth.users;
-          if (Array.isArray(remoteAuth.sessions)) sessions = remoteAuth.sessions;
-          if (Array.isArray(remoteAuth.audit)) audit = remoteAuth.audit;
-          enforceOwnerInvariants();
-        }
-      } else if (!authRes) {
-        dirtyAuth = true;
-      }
-    } catch (err) {
-      console.warn('Blob auth sync warning:', err.message);
-    }
-
-    try {
-        const thRes = await vercelBlob.get('bauer-state/shared-themes.json', { access: 'private', useCache: false });
-        if (thRes && thRes.statusCode === 200 && thRes.stream) {
-          const remoteThemes = await new Response(thRes.stream).json();
-          if (Array.isArray(remoteThemes)) sharedThemes = remoteThemes;
-        }
-      } catch (err) {}
-
-    if (needAppData && !blobAppDataLoaded) {
-      try {
-        const appRes = await vercelBlob.get('bauer-state/app-data.json', {
-          access: 'private',
-          useCache: false
-        });
-        if (appRes && appRes.statusCode === 200 && appRes.stream) {
-          const remoteApp = await new Response(appRes.stream).json();
-          if (remoteApp && typeof remoteApp === 'object') {
-            appData = remoteApp;
-            if (!Array.isArray(appData.trainerBlocks)) {
-              appData.trainerBlocks = [];
-            }
-            if (Array.isArray(appData?.layouts)) {
-              const prevCount = appData.layouts.length;
-              appData.layouts = appData.layouts.filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
-              if (appData.layouts.length !== prevCount) {
-                dirtyAppData = true;
-              }
-            }
-          }
-        }
-        blobAppDataLoaded = true;
-      } catch (err) {
-        console.warn('Blob appData sync warning:', err.message);
-      }
-    }
-  }
-
-  async function flushToBlob() {
-    if (!process.env.BLOB_READ_WRITE_TOKEN || !vercelBlob) return;
-    if (dirtyAuth) {
-      dirtyAuth = false;
-      try {
-        await vercelBlob.put('bauer-state/auth.json', JSON.stringify({ users, sessions, audit }), {
-          access: 'private',
-          addRandomSuffix: false,
-          allowOverwrite: true,
-          contentType: 'application/json'
-        });
-      } catch (err) {
-        console.error('Blob auth write error:', err.message);
-      }
-    }
-    if (dirtySharedThemes) {
-      dirtySharedThemes = false;
-      try {
-        await vercelBlob.put('bauer-state/shared-themes.json', JSON.stringify(sharedThemes), {
-          access: 'private',
-          addRandomSuffix: false,
-          allowOverwrite: true,
-          contentType: 'application/json'
-        });
-      } catch (err) {
-        console.error('Blob sharedThemes write error:', err.message);
-      }
-    }
-    if (dirtyAppData) {
-      dirtyAppData = false;
-      try {
-        await vercelBlob.put('bauer-state/app-data.json', JSON.stringify(appData), {
-          access: 'private',
-          addRandomSuffix: false,
-          allowOverwrite: true,
-          contentType: 'application/json'
-        });
-      } catch (err) {
-        console.error('Blob appData write error:', err.message);
-      }
-    }
   }
 
   function logEvent({ action, actor, target = null, ip = '', userAgent = '', details = {}, status = 'success' }) {
@@ -595,7 +473,7 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     },
     touchSession: (session) => {
       const now = Date.now();
-      const interval = process.env.BLOB_READ_WRITE_TOKEN ? 10 * 60 * 1000 : 30000;
+      const interval = 30000;
       if (now - session.lastActiveAt > interval) {
         session.lastActiveAt = now;
         saveSessions();
@@ -632,8 +510,6 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       if (item) { Object.assign(item, patch); saveSharedThemes(); }
       return item;
     },
-    syncFromBlob,
-    flushToBlob
   };
 }
 
@@ -1220,7 +1096,6 @@ function createAppServer(options = {}) {
   const store = createStore(dataDir, htmlPath, options.seedDefaultOwner !== false);
 
   async function sendJson(res, status, payload, extraHeaders = {}) {
-    await store.flushToBlob();
     const body = JSON.stringify(payload);
     res.writeHead(status, {
       'Content-Type': 'application/json; charset=utf-8',
@@ -1293,11 +1168,6 @@ function createAppServer(options = {}) {
         res.end('Не найдено');
         return;
       }
-
-      const needAppData = ['/api/content', '/api/scripts', '/api/department/scripts', '/api/giftbase', '/api/directionbase', '/api/addresses', '/api/layouts', '/api/layouts-order', '/api/presentation-plan', '/api/users', '/api/trainer', '/api/backup'].some(
-        p => pathname === p || pathname.startsWith(p + '/')
-      );
-      await store.syncFromBlob({ needAppData });
 
       const cookies = parseCookies(req);
       const auth = store.findSessionByToken(cookies[SESSION_COOKIE]);
@@ -2323,7 +2193,6 @@ function createAppServer(options = {}) {
         const documentBuffer = await layoutToDocxBuffer(layout, appData.giftbase?.gifts || []);
         const downloadName = encodeURIComponent(`${String(layout.name || 'Макет').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Макет'}.docx`);
         store.logEvent({ action: 'layouts.export_docx', actor: auth.user, target: layout.name, ip, userAgent, details: { layoutId: layout.id } });
-        await store.flushToBlob();
         res.writeHead(200, {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           'Content-Disposition': `attachment; filename*=UTF-8''${downloadName}`,
