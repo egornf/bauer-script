@@ -1526,6 +1526,31 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     const relocatedBlk = trainerBlocksCheck.data.blocks.find(b => b.id === lineBlockId);
     assert.equal(relocatedBlk.relocated, true, 'Block anchored to modified line must report relocated: true');
 
+    // 9. Personal script notes: TRAINER may use any script, HEAD only scripts in own department
+    const trainerNote = await trainerClient.request('/api/script-notes', {
+      method: 'PUT',
+      body: { layoutId: scriptA.id, text: 'Заметка тренера: отработать паузу после приветствия.' }
+    });
+    assert.equal(trainerNote.status, 200);
+    const trainerNoteGet = await trainerClient.request(`/api/script-notes?layoutId=${encodeURIComponent(scriptA.id)}`);
+    assert.equal(trainerNoteGet.status, 200);
+    assert.equal(trainerNoteGet.data.note.text, 'Заметка тренера: отработать паузу после приветствия.');
+
+    const headNote = await headClient.request('/api/script-notes', {
+      method: 'PUT',
+      body: { layoutId: scriptA.id, text: 'Заметка руководителя для своего отдела.' }
+    });
+    assert.equal(headNote.status, 200);
+    const operatorNoteDenied = await ivanovClient.request(`/api/script-notes?layoutId=${encodeURIComponent(scriptA.id)}`);
+    assert.equal(operatorNoteDenied.status, 403);
+
+    await headClient.request('/api/department/scripts', { method: 'PUT', body: { scriptIds: [scriptA.id] } });
+    const outsideHeadNote = await headClient.request('/api/script-notes', {
+      method: 'PUT',
+      body: { layoutId: scriptB.id, text: 'Эта заметка не должна сохраниться.' }
+    });
+    assert.equal(outsideHeadNote.status, 403);
+
     // Restore department scripts to empty so state is clean
     await headClient.request('/api/department/scripts', {
       method: 'PUT',

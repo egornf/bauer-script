@@ -269,12 +269,16 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
       addresses: seed.addresses || { revision: 0, venues: [] },
       giftbase: { gifts: seed.gifts || [], deleted: [], updatedAt: Date.now() },
       directionbase: { directions: [], updatedAt: Date.now() },
-      trainerBlocks: []
+      trainerBlocks: [],
+      scriptNotes: []
     };
     writeJsonAtomic(files.appData, appData);
   }
   if (!Array.isArray(appData.trainerBlocks)) {
     appData.trainerBlocks = [];
+  }
+  if (!Array.isArray(appData.scriptNotes)) {
+    appData.scriptNotes = [];
   }
 
   if (appData && Array.isArray(appData.layouts)) {
@@ -1593,6 +1597,55 @@ function createAppServer(options = {}) {
           });
           return sendJson(res, 200, { updatedAt });
         }
+      }
+
+      if (pathname === '/api/script-notes') {
+        if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
+        const isHead = auth.user.role === 'HEAD';
+        const isTrainer = auth.user.role === 'TRAINER';
+        if (!isHead && !isTrainer) {
+          return sendJson(res, 403, { error: 'Заметки к скриптам доступны только Руководителю отдела и Бизнес-тренеру ДПК.' });
+        }
+        const noteBody = method === 'GET' ? null : await readBody(req);
+        const layoutId = String((method === 'GET' ? url.searchParams.get('layoutId') : noteBody?.layoutId) || '').trim();
+        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+        const layout = allLayouts.find(l => String(l.id) === layoutId);
+        if (!layout) return sendJson(res, 404, { error: 'Скрипт не найден.' });
+        const departmentScripts = Array.isArray(auth.user.departmentScripts) ? auth.user.departmentScripts.map(String) : [];
+        if (isHead && departmentScripts.length && !departmentScripts.includes(String(layout.id))) {
+          return sendJson(res, 403, { error: 'Руководитель отдела может вести заметки только по скриптам своего отдела.' });
+        }
+        if (!Array.isArray(appData.scriptNotes)) appData.scriptNotes = [];
+        const notes = appData.scriptNotes;
+        const ownNote = notes.find(n => n && n.authorId === auth.user.id && String(n.layoutId) === String(layout.id));
+        if (method === 'GET') return sendJson(res, 200, { note: ownNote || null, layout: { id: layout.id, name: layout.name } });
+        if (method === 'PUT') {
+          const body = noteBody || {};
+          const text = String(body.text || '').trim();
+          if (!text) return sendJson(res, 400, { error: 'Заметка не может быть пустой.' });
+          if (text.length > 5000) return sendJson(res, 400, { error: 'Заметка не должна быть длиннее 5 000 символов.' });
+          const now = Date.now();
+          const authorName = auth.user.displayName || auth.user.login;
+          let note = ownNote;
+          if (note) {
+            note.text = text;
+            note.updatedAt = now;
+          } else {
+            note = { id: 'sn_' + crypto.randomUUID(), layoutId: String(layout.id), authorId: auth.user.id, authorRole: auth.user.role, authorName, text, createdAt: now, updatedAt: now };
+            notes.push(note);
+          }
+          store.saveAppData();
+          store.logEvent({ action: ownNote ? 'script.note.update' : 'script.note.create', actor: auth.user, target: layout.name, ip, userAgent, details: { noteId: note.id, layoutId: layout.id } });
+          return sendJson(res, 200, { note });
+        }
+        if (method === 'DELETE') {
+          if (!ownNote) return sendJson(res, 404, { error: 'Заметка не найдена.' });
+          appData.scriptNotes = notes.filter(n => n !== ownNote);
+          store.saveAppData();
+          store.logEvent({ action: 'script.note.delete', actor: auth.user, target: layout.name, ip, userAgent, details: { noteId: ownNote.id, layoutId: layout.id } });
+          return sendJson(res, 200, { ok: true });
+        }
+        return sendJson(res, 405, { error: 'Метод не поддерживается.' });
       }
 
       if (pathname === '/api/scripts' && method === 'GET') {
