@@ -9730,7 +9730,7 @@ if(navTabs&&!document.getElementById('owner-tab')){
   navTabs.insertAdjacentHTML('beforeend','<button id="owner-tab" class="section-tab protected-tab" aria-pressed="false"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 2l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8L10 2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span id="owner-tab-label">Владелец · Управление</span></button>');
 }
 if(!document.getElementById('owner-view')){
-  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="trainer-block-modal" class="owner-dialog" aria-labelledby="trainer-block-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog><dialog id="temp-password-dialog" class="owner-dialog" aria-labelledby="temp-pw-title"></dialog><dialog id="theme-customizer-modal" class="theme-customizer-dialog" aria-labelledby="tcd-title"></dialog>');
+  document.body.insertAdjacentHTML('beforeend','<main id="owner-view" class="owner-view" hidden></main><dialog id="user-modal" class="owner-dialog" aria-labelledby="user-modal-title"></dialog><dialog id="trainer-block-modal" class="owner-dialog" aria-labelledby="trainer-block-modal-title"></dialog><dialog id="trainer-bulk-modal" class="owner-dialog" aria-labelledby="trainer-bulk-modal-title"></dialog><dialog id="recovery-modal" class="owner-dialog" aria-labelledby="recovery-modal-title"></dialog><dialog id="owner-recover-dialog" class="owner-dialog" aria-labelledby="owner-recover-title"></dialog><dialog id="style-modal" class="style-dialog" aria-labelledby="style-modal-title"></dialog><dialog id="temp-password-dialog" class="owner-dialog" aria-labelledby="temp-pw-title"></dialog><dialog id="theme-customizer-modal" class="theme-customizer-dialog" aria-labelledby="tcd-title"></dialog>');
 }
 
 const authFoot=document.querySelector('#auth-dialog .auth-foot');
@@ -10476,6 +10476,7 @@ function renderTrainerWorkspaceSection(){
               <select id="trainer-layout-select" style="min-width:240px;height:38px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:700">
                 ${renderGroupedLayoutOptions(trainerLayoutsList.map(l=>({...l,name:l.name+(mgrEffectiveIds.includes(l.id)?'':' (скрыт руководителем)')})),selectedLayout?.id||'')}
               </select>
+              <button type="button" data-trainer-bulk="1">+ Рекомендация сотрудникам</button>
               <button type="button" class="primary" data-trainer-add-block="1" data-stage-id="${E(selectedLayout?.stages?.[0]?.id||'')}" data-after-line="end">+ Добавить персональный блок</button>
             </div>
           </div>
@@ -10644,6 +10645,61 @@ function openTrainerBlockModal(opts={}){
     if(st&&posSel)posSel.innerHTML=buildPositionOptions(st);
   });
 
+  dlg.showModal();
+}
+
+function openTrainerBulkRecommendationModal(){
+  const dlg=document.getElementById('trainer-bulk-modal');
+  if(!dlg)return;
+  const isHead=currentUser?.role==='HEAD';
+  const allowedManagers=isHead
+    ?trainerManagersList.filter(m=>m.managerId===currentUser?.id)
+    :trainerManagersList;
+  const selectedMgr=allowedManagers.find(m=>m.id===trainerSelectedUserId)||allowedManagers[0]||null;
+  const selectedLayout=trainerLayoutsList.find(l=>l.id===trainerSelectedLayoutId)||trainerLayoutsList[0]||null;
+  if(!selectedMgr||!selectedLayout){
+    toast('Сначала выберите сотрудника и скрипт');
+    return;
+  }
+  const authorLabel=isHead?'руководителя отдела':'бизнес-тренера';
+  dlg.innerHTML=`<button type="button" class="dialog-x" data-close-modal="trainer-bulk-modal" aria-label="Закрыть">✕</button>
+    <div class="kicker">РЕКОМЕНДАЦИЯ СОТРУДНИКАМ</div>
+    <h2 id="trainer-bulk-modal-title">Добавить рекомендацию</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin:4px 0 14px">Рекомендация появится в начале первого этапа выбранных скриптов и будет видна только адресатам. Это не изменяет сам общий скрипт.</p>
+    <form id="trainer-bulk-form">
+      <label for="tbr-users">Кому</label>
+      <select id="tbr-users" name="usersScope">
+        <option value="selected">Только ${E(selectedMgr.displayName||selectedMgr.login)} (@${E(selectedMgr.login)})</option>
+        <option value="all">Всем ${isHead?'сотрудникам моего отдела':'менеджерам всех отделов'} (${allowedManagers.length})</option>
+      </select>
+      <label for="tbr-layouts" style="display:block;margin-top:12px">В какие скрипты</label>
+      <select id="tbr-layouts" name="layoutsScope">
+        <option value="selected">Только «${E(selectedLayout.name)}»</option>
+        <option value="all">Во все скрипты (${trainerLayoutsList.length})</option>
+      </select>
+      <label for="tbr-title" style="display:block;margin-top:12px">Заголовок (необязательно)</label>
+      <input id="tbr-title" name="title" maxlength="160" placeholder="Например: На что обратить внимание">
+      <label for="tbr-text" style="display:block;margin-top:12px">Текст рекомендации</label>
+      <textarea id="tbr-text" name="text" required rows="5" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-alt);color:var(--ink);font:inherit;line-height:1.5" placeholder="Напишите подсказку или рекомендацию сотруднику"></textarea>
+      <p id="tbr-summary" style="font-size:12px;color:var(--muted);margin:10px 0 0"></p>
+      <p id="tbr-error" class="form-error" role="alert"></p>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="submit" class="primary" style="flex:1">+ Добавить рекомендацию</button>
+        <button type="button" data-close-modal="trainer-bulk-modal">Отмена</button>
+      </div>
+    </form>`;
+  const form=dlg.querySelector('#trainer-bulk-form');
+  const updateSummary=()=>{
+    const usersAll=form.elements.usersScope.value==='all';
+    const layoutsAll=form.elements.layoutsScope.value==='all';
+    const userCount=usersAll?allowedManagers.length:1;
+    const layoutCount=layoutsAll?trainerLayoutsList.length:1;
+    const count=userCount*layoutCount;
+    dlg.querySelector('#tbr-summary').textContent=`Будет создано рекомендаций: ${count}. Автор: ${authorLabel}.`;
+  };
+  form.elements.usersScope.addEventListener('change',updateSummary);
+  form.elements.layoutsScope.addEventListener('change',updateSummary);
+  updateSummary();
   dlg.showModal();
 }
 
@@ -11578,6 +11634,11 @@ document.addEventListener('click',async e=>{
     return;
   }
 
+  if(e.target.closest('[data-trainer-bulk]')){
+    openTrainerBulkRecommendationModal();
+    return;
+  }
+
   const editBlockBtn=e.target.closest('[data-trainer-edit-block]');
   if(editBlockBtn){
     const blk=trainerBlocksList.find(b=>b.id===editBlockBtn.dataset.trainerEditBlock);
@@ -11903,6 +11964,42 @@ document.addEventListener('change',async e=>{
 });
 
 document.addEventListener('submit',async e=>{
+  if(e.target.id==='trainer-bulk-form'){
+    e.preventDefault();
+    const form=e.target;
+    const dlg=document.getElementById('trainer-bulk-modal');
+    const errEl=dlg?.querySelector('#tbr-error');
+    if(errEl)errEl.textContent='';
+    const isHead=currentUser?.role==='HEAD';
+    const allowedManagers=isHead
+      ?trainerManagersList.filter(m=>m.managerId===currentUser?.id)
+      :trainerManagersList;
+    const fd=new FormData(form);
+    const userIds=fd.get('usersScope')==='all'
+      ?allowedManagers.map(m=>m.id)
+      :[trainerSelectedUserId];
+    const layoutIds=fd.get('layoutsScope')==='all'
+      ?trainerLayoutsList.map(l=>l.id)
+      :[trainerSelectedLayoutId];
+    try{
+      const res=await api('/api/trainer/blocks/bulk',{method:'POST',body:JSON.stringify({
+        userIds,
+        layoutIds,
+        title:String(fd.get('title')||'').trim(),
+        text:String(fd.get('text')||'').trim()
+      })});
+      dlg?.close();
+      toast(`✓ Добавлено рекомендаций: ${res.createdCount}`);
+      await loadOwnerData();
+      dispatchEvent(new Event('trainer-blocks-changed'));
+      renderOwnerView();
+    }catch(err){
+      if(errEl)errEl.textContent=err.message;
+      else toast(err.message);
+    }
+    return;
+  }
+
   if(e.target.id==='user-modal-form'){
     e.preventDefault();
     const form=e.target,editId=form.dataset.editId;

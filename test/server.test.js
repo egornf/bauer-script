@@ -1453,6 +1453,45 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.ok(!petrovScriptA.data.stages[0].lineKinds.includes('trainer-tip'));
     assert.ok(!petrovScriptA.data.objections.some(o => o.origin === 'trainer'));
 
+    // 6a. Trainer can send one recommendation to several employees and several scripts at once.
+    const trainerBulkTips = await trainerClient.request('/api/trainer/blocks/bulk', {
+      method: 'POST',
+      body: {
+        userIds: [ivanovId, petrovId],
+        layoutIds: [scriptA.id, scriptB.id],
+        title: 'Общая рекомендация тренера',
+        text: 'Перед звонком проверьте имя клиента и говорите спокойнее.'
+      }
+    });
+    assert.equal(trainerBulkTips.status, 201);
+    assert.equal(trainerBulkTips.data.createdCount, 4);
+    const petrovAfterBulk = await petrovClient.request('/api/scripts');
+    const petrovScriptB = petrovAfterBulk.data.layouts.find(l => l.id === scriptB.id);
+    assert.equal(petrovScriptB.data.stages[0].lines[0], 'Перед звонком проверьте имя клиента и говорите спокойнее.');
+
+    // A department head cannot include an employee from another department in a bulk recommendation.
+    const headCrossDeptBulk = await headClient.request('/api/trainer/blocks/bulk', {
+      method: 'POST',
+      body: {
+        userIds: [ivanovId, ownerOp.id],
+        layoutIds: [scriptA.id],
+        text: 'Недопустимая межотдельная рекомендация.'
+      }
+    });
+    assert.equal(headCrossDeptBulk.status, 403);
+
+    const headDeptBulk = await headClient.request('/api/trainer/blocks/bulk', {
+      method: 'POST',
+      body: {
+        userIds: [ivanovId, petrovId],
+        layoutIds: [scriptB.id],
+        title: 'Рекомендация руководителя',
+        text: 'Сверяйте удобное время до завершения разговора.'
+      }
+    });
+    assert.equal(headDeptBulk.status, 201);
+    assert.equal(headDeptBulk.data.createdCount, 2);
+
     // 7. Department Head (head_sergey) cannot edit/delete trainer blocks (403), CAN add/delete their own tips for their employees,
     //    sees 🎓 indicator in GET /api/department/scripts, and can uncheck scriptA for Ivanov to disable it
     const headHackTrainer = await headClient.request(`/api/trainer/blocks/${lineBlockId}`, {

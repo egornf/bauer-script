@@ -2921,6 +2921,91 @@ function createAppServer(options = {}) {
 
         const blockId = pathname.split('/')[4] || null;
 
+        // A recommendation can be sent at once to several managers and/or placed
+        // into several scripts.  It remains an ordinary personal trainer block,
+        // so operators receive it through the existing script rendering path.
+        if (pathname === '/api/trainer/blocks/bulk' && method === 'POST') {
+          const body = await readBody(req);
+          const requestedUserIds = [...new Set((Array.isArray(body.userIds) ? body.userIds : []).map(String).filter(Boolean))];
+          const requestedLayoutIds = [...new Set((Array.isArray(body.layoutIds) ? body.layoutIds : []).map(String).filter(Boolean))];
+          const text = String(body.text || '').trim();
+          const title = String(body.title || '').trim().slice(0, 160);
+
+          if (!requestedUserIds.length || !requestedLayoutIds.length) {
+            return sendJson(res, 400, { error: 'Выберите хотя бы одного сотрудника и один скрипт.' });
+          }
+          if (!text) {
+            return sendJson(res, 400, { error: 'Текст рекомендации не может быть пустым.' });
+          }
+
+          const targetUsers = requestedUserIds
+            .map(id => allUsers.find(u => u.id === id && u.role === 'OPERATOR' && u.managerId && headMap.has(u.managerId)))
+            .filter(Boolean);
+          if (targetUsers.length !== requestedUserIds.length) {
+            return sendJson(res, 404, { error: 'Один или несколько выбранных сотрудников не найдены.' });
+          }
+          if (isHead && targetUsers.some(u => u.managerId !== auth.user.id)) {
+            return sendJson(res, 403, { error: 'Руководитель отдела может добавлять рекомендации только сотрудникам своего отдела.' });
+          }
+
+          const targetLayouts = requestedLayoutIds
+            .map(id => allLayouts.find(l => String(l.id) === id))
+            .filter(Boolean);
+          if (targetLayouts.length !== requestedLayoutIds.length) {
+            return sendJson(res, 404, { error: 'Один или несколько выбранных скриптов не найдены.' });
+          }
+          const layoutsWithoutStages = targetLayouts.filter(l => !(l.data?.stages || []).length);
+          if (layoutsWithoutStages.length) {
+            return sendJson(res, 400, { error: 'В выбранных скриптах нет этапов: ' + layoutsWithoutStages.map(l => l.name).join(', ') });
+          }
+
+          const total = targetUsers.length * targetLayouts.length;
+          if (total > 500) {
+            return sendJson(res, 400, { error: 'Слишком много рекомендаций за один раз. Выберите не более 500 сочетаний сотрудник–скрипт.' });
+          }
+
+          const now = Date.now();
+          const authorDisplay = auth.user.displayName || auth.user.login;
+          const created = [];
+          for (const targetUser of targetUsers) {
+            for (const origLayout of targetLayouts) {
+              const stage = origLayout.data.stages[0];
+              const newBlock = {
+                id: 'tb_' + crypto.randomUUID(),
+                userId: targetUser.id,
+                layoutId: String(origLayout.id),
+                stageId: String(stage.id),
+                kind: 'tip',
+                type: 'tip',
+                position: 'start',
+                afterLineIndex: -1,
+                afterLineText: '',
+                anchorLineSnapshot: '',
+                title,
+                text,
+                authorId: auth.user.id,
+                authorRole: auth.user.role,
+                authorName: authorDisplay,
+                createdBy: auth.user.id,
+                createdByLogin: authorDisplay,
+                createdAt: now,
+                updatedAt: now
+              };
+              trainerBlocks.push(newBlock);
+              created.push(newBlock);
+            }
+          }
+          store.saveAppData();
+          store.logEvent({
+            action: 'trainer.block.bulk_create',
+            actor: auth.user,
+            ip,
+            userAgent,
+            details: { usersCount: targetUsers.length, layoutsCount: targetLayouts.length, blocksCount: created.length }
+          });
+          return sendJson(res, 201, { ok: true, createdCount: created.length, blocks: created });
+        }
+
         if (pathname === '/api/trainer/blocks' && method === 'GET') {
           const qUserId = url.searchParams.get('userId') || '';
           const qLayoutId = url.searchParams.get('layoutId') || '';
