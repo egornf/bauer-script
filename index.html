@@ -2065,6 +2065,26 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   gap: 18px;
   align-items: start;
 }
+.trainer-script-panel {
+  min-width: 0;
+}
+.trainer-script-toolbar {
+  padding: 14px 16px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.trainer-script-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.trainer-script-actions select {
+  width: min(100%, 360px);
+}
 @media (max-width: 980px) {
   .trainer-workspace-layout {
     grid-template-columns: 1fr;
@@ -10466,12 +10486,12 @@ function renderTrainerWorkspaceSection(){
         ${!selectedMgr?`
           <div style="padding:28px;text-align:center;color:var(--muted)">Выберите менеджера слева, чтобы настроить для него персональные блоки скрипта.</div>
         `:`
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;background:var(--surface-alt);border:1px solid var(--line);border-radius:12px;margin-bottom:16px">
+          <div class="trainer-script-toolbar">
             <div>
               <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#6d28d9;letter-spacing:.05em">Персональная доработка скрипта для сотрудника</div>
               <div style="font-size:17px;font-weight:800;color:var(--ink);margin-top:2px">${E(selectedMgr.displayName||selectedMgr.login)} <span style="font-size:13px;font-weight:600;color:var(--muted)">(@${E(selectedMgr.login)} · Отдел: ${E(selectedMgr.managerDisplayName||selectedMgr.managerLogin||'—')})</span></div>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="trainer-script-actions">
               <label for="trainer-layout-select" style="font-size:12px;font-weight:700">Скрипт:</label>
               <select id="trainer-layout-select" style="min-width:240px;height:38px;border-radius:10px;padding:0 12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:700">
                 ${renderGroupedLayoutOptions(trainerLayoutsList.map(l=>({...l,name:l.name+(mgrEffectiveIds.includes(l.id)?'':' (скрыт руководителем)')})),selectedLayout?.id||'')}
