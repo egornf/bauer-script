@@ -2169,6 +2169,8 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   padding: 8px 10px;
   text-align: left;
   vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .script-inline-table th {
   background: color-mix(in srgb, var(--teal) 14%, var(--surface-alt));
@@ -2198,6 +2200,13 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   color: var(--ink);
   font: inherit;
   font-size: 13px;
+  box-sizing: border-box;
+  display: block;
+  min-height: 34px;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .v4-tbl-cell-input:focus {
   outline: 2px solid var(--teal);
@@ -6693,7 +6702,7 @@ function lineBlock(s,i){
                     `text-align:${cObj.align||ts.cellAlign||'left'}`
                   ].filter(Boolean).join(';');
                   const giftChipHtml=gId?`<div class="v4-tbl-cell-gift-chip">${cellGift?.photo?`<img src="${cellGift.photo}" alt="">`:'🎁'}<span>${E(cellGift?(cellGift.title||'Подарок'):'Подарок не найден')}</span><button type="button" data-v4="tbl-cell-gift-clear" data-i="${i}" data-r="${rIdx}" data-c="${cIdx}" title="Убрать подарок из ячейки">✕</button></div>`:'';
-                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}">${giftChipHtml}<input type="text" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" value="${E(cell)}" placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}"></${tag}>`;
+                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}">${giftChipHtml}<textarea rows="1" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}">${E(cell).replace(/\n/g,'&#10;')}</textarea></${tag}>`;
                 }).join('')}</tr>`;
               }).join('')}
             </tbody>
@@ -6897,6 +6906,7 @@ ${library?'':`<div class="v4-top"><div class="v4-name"><input id="editor-layout-
 ${(()=>{const items=library?[['saved','📂 Макеты'],['gifts','🎁 База подарков ('+d.gifts.length+')'],['directions','🧭 База направлений ('+directionBase.length+')']]:[['stage','✎ Блоки скрипта'],['settings','⚙ Оформление скрипта']];return `<div class="v4-sections" role="tablist" aria-label="Разделы ${library?'библиотеки':'редактора скрипта'}">${library?'':`<button class="v4-sec" data-v4="back-library">← Библиотека</button>`}${items.map(([k,l])=>`<button class="v4-sec ${tab===k?'on':''}" role="tab" aria-selected="${tab===k}" data-v4="tab" data-id="${k}">${l}</button>`).join('')}</div>`;})()}
 ${tab==='stage'?`<nav class="stepper v4-tabs" aria-label="Этапы скрипта">${tabs}<button class="step v4-add" data-v4="addstage" ${d.stages.length>=40?'disabled':''}><span class="step-title">+ Блок</span></button></nav>`:''}
 ${tab==='gifts'?giftsTab():tab==='directions'?directionsTab():tab==='saved'?savedTab():tab==='settings'?`<section class="v4-card v4-pad" id="editor-inspector">${settingsInspector()}</section>`:stageTab(s)}`;
+  lv.querySelectorAll('[data-v4-tbl-cell]').forEach(resizeTableCell);
   lv.classList.toggle('v4-giftmode',tab==='gifts'||tab==='directions');
   lv.scrollTop=keep;updateEditorIndicators();
   if(edit&&(tab==='stage'||tab==='gifts'||tab==='directions')){const ta=q('[data-v4-ta]');if(ta){ta.focus({preventScroll:true});ta.setSelectionRange(Math.min(sel.s,ta.value.length),Math.min(sel.e,ta.value.length))}}
@@ -6928,6 +6938,11 @@ async function applyNow(){
     editorDraft=clone(data);editorBaseTime=r.updatedAt;undoStack=[];redoStack=[];rememberDraft();renderCards();renderLayouts();toast('Применено: скрипт «'+saved.name+'» обновлён.');
   }catch(e){toast(e.message)}
 }
+function resizeTableCell(el){
+  el.style.height='auto';
+  el.style.height=el.scrollHeight+'px';
+}
+window.addEventListener('resize',()=>lv.querySelectorAll('[data-v4-tbl-cell]').forEach(resizeTableCell));
 lv.addEventListener('mousedown',e=>{if(e.target.closest('.v4-tools button,.v4-ins button'))e.preventDefault()});
 lv.addEventListener('focusin',e=>{
   if(!start&&e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))start=historyState();
@@ -6971,6 +6986,7 @@ lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
     const next=q('[data-v4-layout-search]');if(next){next.focus();next.setSelectionRange(caret,caret);}return;
   }
   if(f.matches('[data-v4-tbl-cell]')){
+    resizeTableCell(f);
     const [li,ri,ci]=f.dataset.v4TblCell.split(',').map(Number);
     const tbl=parseScriptTableData(s.lines[li]);
     if(tbl.rows[ri]&&tbl.rows[ri][ci]!==undefined){
