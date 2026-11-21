@@ -2203,21 +2203,14 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   box-sizing: border-box;
   display: block;
   min-height: 34px;
-  resize: none;
-  overflow: hidden;
   line-height: 1.4;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
+.v4-tbl-cell-input:empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; }
 .v4-tbl-cell-input:focus {
   outline: 2px solid var(--teal);
   border-color: var(--teal);
-}
-.v4-tbl-cell-preview {
-  margin-top: 5px;
-  padding: 5px 8px;
-  border-left: 2px solid var(--teal);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .v4-table-style-bar {
   display: flex;
@@ -6718,8 +6711,7 @@ function lineBlock(s,i){
                   ].filter(Boolean).join(';');
                   const giftChipHtml=gId?`<div class="v4-tbl-cell-gift-chip">${cellGift?.photo?`<img src="${cellGift.photo}" alt="">`:'🎁'}<span>${E(cellGift?(cellGift.title||'Подарок'):'Подарок не найден')}</span><button type="button" data-v4="tbl-cell-gift-clear" data-i="${i}" data-r="${rIdx}" data-c="${cIdx}" title="Убрать подарок из ячейки">✕</button></div>`:'';
                   const cellFormat=tbl.cellFormats?.[`${rIdx},${cIdx}`];
-                  const preview=cellFormat?.ranges?.length?`<div class="v4-tbl-cell-preview" aria-label="Предпросмотр оформления">${LayoutModel.renderText(cell,cellFormat)}</div>`:'';
-                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}">${giftChipHtml}<textarea rows="1" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}">${E(cell).replace(/\n/g,'&#10;')}</textarea>${preview}</${tag}>`;
+                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}">${giftChipHtml}<div contenteditable="true" role="textbox" aria-multiline="true" aria-label="${isHdr?'Заголовок '+(cIdx+1):'Ячейка '+(rIdx+1)+':'+(cIdx+1)}" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" data-placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}">${LayoutModel.renderText(cell,cellFormat)}</div></${tag}>`;
                 }).join('')}</tr>`;
               }).join('')}
             </tbody>
@@ -6923,7 +6915,6 @@ ${library?'':`<div class="v4-top"><div class="v4-name"><input id="editor-layout-
 ${(()=>{const items=library?[['saved','📂 Макеты'],['gifts','🎁 База подарков ('+d.gifts.length+')'],['directions','🧭 База направлений ('+directionBase.length+')']]:[['stage','✎ Блоки скрипта'],['settings','⚙ Оформление скрипта']];return `<div class="v4-sections" role="tablist" aria-label="Разделы ${library?'библиотеки':'редактора скрипта'}">${library?'':`<button class="v4-sec" data-v4="back-library">← Библиотека</button>`}${items.map(([k,l])=>`<button class="v4-sec ${tab===k?'on':''}" role="tab" aria-selected="${tab===k}" data-v4="tab" data-id="${k}">${l}</button>`).join('')}</div>`;})()}
 ${tab==='stage'?`<nav class="stepper v4-tabs" aria-label="Этапы скрипта">${tabs}<button class="step v4-add" data-v4="addstage" ${d.stages.length>=40?'disabled':''}><span class="step-title">+ Блок</span></button></nav>`:''}
 ${tab==='gifts'?giftsTab():tab==='directions'?directionsTab():tab==='saved'?savedTab():tab==='settings'?`<section class="v4-card v4-pad" id="editor-inspector">${settingsInspector()}</section>`:stageTab(s)}`;
-  lv.querySelectorAll('[data-v4-tbl-cell]').forEach(resizeTableCell);
   lv.classList.toggle('v4-giftmode',tab==='gifts'||tab==='directions');
   lv.scrollTop=keep;updateEditorIndicators();
   if(edit&&(tab==='stage'||tab==='gifts'||tab==='directions')){const ta=q('[data-v4-ta]');if(ta){ta.focus({preventScroll:true});ta.setSelectionRange(Math.min(sel.s,ta.value.length),Math.min(sel.e,ta.value.length))}}
@@ -6957,10 +6948,51 @@ async function applyNow(){
 }
 function rememberTableSelection(el){
   if(!el.matches('[data-v4-tbl-cell]'))return;
+  const selection=window.getSelection();
+  if(!selection||!selection.rangeCount||!el.contains(selection.anchorNode)||!el.contains(selection.focusNode))return;
+  const range=selection.getRangeAt(0),before=range.cloneRange();
+  before.selectNodeContents(el);before.setEnd(range.startContainer,range.startOffset);
   const [line,r,c]=el.dataset.v4TblCell.split(',').map(Number);
-  tblTextSelection={line,r,c,start:el.selectionStart,end:el.selectionEnd};
+  const start=before.toString().length;
+  tblTextSelection={line,r,c,start,end:start+range.toString().length};
 }
-['select','keyup','mouseup'].forEach(type=>lv.addEventListener(type,e=>rememberTableSelection(e.target)));
+['keyup','mouseup'].forEach(type=>lv.addEventListener(type,e=>rememberTableSelection(e.target)));
+document.addEventListener('selectionchange',()=>{const el=document.activeElement;if(el&&lv.contains(el))rememberTableSelection(el);});
+function restoreTableSelection(el,start,end){
+  const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+  let node,offset=0,startNode=null,endNode=null,startOffset=0,endOffset=0;
+  while((node=walker.nextNode())){
+    const next=offset+node.data.length;
+    if(!startNode&&start<=next){startNode=node;startOffset=start-offset;}
+    if(!endNode&&end<=next){endNode=node;endOffset=end-offset;break;}
+    offset=next;
+  }
+  const range=document.createRange();
+  if(startNode){range.setStart(startNode,startOffset);range.setEnd(endNode||startNode,endNode?endOffset:startOffset);}
+  else {range.selectNodeContents(el);range.collapse(false);}
+  const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
+}
+function insertTableText(el,text){
+  const selection=window.getSelection();
+  if(!selection||!selection.rangeCount)return;
+  const range=selection.getRangeAt(0);
+  if(!el.contains(range.commonAncestorContainer))return;
+  range.deleteContents();const node=document.createTextNode(text);range.insertNode(node);
+  range.setStartAfter(node);range.collapse(true);selection.removeAllRanges();selection.addRange(range);
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+}
+lv.addEventListener('beforeinput',e=>{
+  if(e.target.matches('[data-v4-tbl-cell]')&&(e.inputType==='insertParagraph'||e.inputType==='insertLineBreak')){
+    e.preventDefault();insertTableText(e.target,'\n');
+  }
+});
+lv.addEventListener('paste',e=>{
+  if(!e.target.matches('[data-v4-tbl-cell]'))return;
+  e.preventDefault();insertTableText(e.target,(e.clipboardData?.getData('text/plain')||'').replace(/\r\n?/g,'\n'));
+});
+lv.addEventListener('compositionend',e=>{
+  if(e.target.matches('[data-v4-tbl-cell]'))e.target.dispatchEvent(new Event('input',{bubbles:true}));
+});
 function applyTableSelection(line,patch,toggleBold=false){
   const sel=tblTextSelection,pos=tblSelCell[line];
   if(!sel||sel.line!==line||!pos||sel.r!==pos.r||sel.c!==pos.c||sel.start>=sel.end)return false;
@@ -6980,14 +7012,9 @@ function applyTableSelection(line,patch,toggleBold=false){
     s.lines[line]=JSON.stringify(tbl);
   });
   const field=q(`[data-v4-tbl-cell="${line},${sel.r},${sel.c}"]`);
-  if(field){field.focus({preventScroll:true});field.setSelectionRange(sel.start,sel.end);tblTextSelection=sel;}
+  if(field){field.focus({preventScroll:true});restoreTableSelection(field,sel.start,sel.end);tblTextSelection=sel;}
   return true;
 }
-function resizeTableCell(el){
-  el.style.height='auto';
-  el.style.height=el.scrollHeight+'px';
-}
-window.addEventListener('resize',()=>lv.querySelectorAll('[data-v4-tbl-cell]').forEach(resizeTableCell));
 lv.addEventListener('mousedown',e=>{if(e.target.closest('.v4-tools button,.v4-ins button'))e.preventDefault()});
 lv.addEventListener('focusin',e=>{
   if(!start&&e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))start=historyState();
@@ -7032,16 +7059,19 @@ lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
     const next=q('[data-v4-layout-search]');if(next){next.focus();next.setSelectionRange(caret,caret);}return;
   }
   if(f.matches('[data-v4-tbl-cell]')){
-    resizeTableCell(f);
+    rememberTableSelection(f);
+    const selection=tblTextSelection;
     const [li,ri,ci]=f.dataset.v4TblCell.split(',').map(Number);
     const tbl=parseScriptTableData(s.lines[li]);
     if(tbl.rows[ri]&&tbl.rows[ri][ci]!==undefined){
       const key=`${ri},${ci}`;
-      if(tbl.cellFormats?.[key])tbl.cellFormats[key]=LayoutModel.editTextFormat(tbl.cellFormats[key],tbl.rows[ri][ci],f.value);
-      tbl.rows[ri][ci]=f.value;
-      const preview=f.parentElement.querySelector('.v4-tbl-cell-preview');
-      if(preview)preview.innerHTML=LayoutModel.renderText(f.value,tbl.cellFormats?.[key]);
-      rememberTableSelection(f);
+      const value=f.textContent||'';
+      if(tbl.cellFormats?.[key])tbl.cellFormats[key]=LayoutModel.editTextFormat(tbl.cellFormats[key],tbl.rows[ri][ci],value);
+      tbl.rows[ri][ci]=value;
+      if(!e.isComposing){
+        f.innerHTML=LayoutModel.renderText(value,tbl.cellFormats?.[key]);
+        if(selection&&selection.line===li&&selection.r===ri&&selection.c===ci)restoreTableSelection(f,selection.start,selection.end);
+      }
       s.lines[li]=JSON.stringify(tbl);
       later();
     }
