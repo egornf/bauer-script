@@ -2212,6 +2212,13 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   outline: 2px solid var(--teal);
   border-color: var(--teal);
 }
+.v4-tbl-cell-preview {
+  margin-top: 5px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--teal);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .v4-table-style-bar {
   display: flex;
   flex-wrap: wrap;
@@ -3694,7 +3701,15 @@ function parseScriptTableData(rawStr){
           if(gId)cellGifts[k]=gId;
         }
       }
-      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows,tableStyle,cellStyles,cellGifts};
+      const cellFormats={};
+      if(obj.cellFormats&&typeof obj.cellFormats==='object'){
+        for(const [key,format] of Object.entries(obj.cellFormats)){
+          if(!/^\d+,\d+$/.test(key))continue;
+          const [r,c]=key.split(',').map(Number);
+          if(r<rows.length&&c<cols)cellFormats[key]=LayoutModel.cleanFormat(format,rows[r][c].length);
+        }
+      }
+      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows,tableStyle,cellStyles,cellGifts,cellFormats};
     }
   }catch{}
   return JSON.parse(createDefaultTableJson(3,3));
@@ -3724,7 +3739,7 @@ function getScriptTableStyles(tbl){
 }
 function renderScriptTableCellContent(cellText,rIdx,cIdx,tbl,gifts=data.gifts,readonly=false){
   const gId=tbl.cellGifts&&tbl.cellGifts[`${rIdx},${cIdx}`];
-  const textHtml=cellText.trim()?fillPlanHtml(fillVenueHtml(escapeHTML(cellText))):'';
+  const textHtml=cellText.trim()?fillPlanHtml(fillVenueHtml(LayoutModel.renderText(cellText,tbl.cellFormats?.[`${rIdx},${cIdx}`]))):'';
   if(!gId)return textHtml;
   const gift=(gifts||[]).find(g=>g.id===gId);
   if(!gift){
@@ -6526,7 +6541,7 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 (()=>{
 const lv=document.getElementById('layouts-view'),E=escapeHTML,q=(s)=>lv.querySelector(s);
 let tab='stage',edit=null,obSel=null,sel={s:1e9,e:1e9},start=null,timer=null,del=null;
-let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false,tblSelCell={};
+let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false,tblSelCell={},tblTextSelection=null;
 let dirPickerOpen=null,dirPickerQuery='',dirDbQuery='',highlightDirId=null;
 const DIR_PRESETS=['Посуда','Сок','Массаж','ВТ'];
 const KINDS={speech:'Речь',gift:'🎁 Подарок',direction:'🧭 Направление',address:'📍 Адрес',schedule:'📅 График времени',table:'📊 Таблица',image:'🖼 Картинка'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
@@ -6702,7 +6717,9 @@ function lineBlock(s,i){
                     `text-align:${cObj.align||ts.cellAlign||'left'}`
                   ].filter(Boolean).join(';');
                   const giftChipHtml=gId?`<div class="v4-tbl-cell-gift-chip">${cellGift?.photo?`<img src="${cellGift.photo}" alt="">`:'🎁'}<span>${E(cellGift?(cellGift.title||'Подарок'):'Подарок не найден')}</span><button type="button" data-v4="tbl-cell-gift-clear" data-i="${i}" data-r="${rIdx}" data-c="${cIdx}" title="Убрать подарок из ячейки">✕</button></div>`:'';
-                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}">${giftChipHtml}<textarea rows="1" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}">${E(cell).replace(/\n/g,'&#10;')}</textarea></${tag}>`;
+                  const cellFormat=tbl.cellFormats?.[`${rIdx},${cIdx}`];
+                  const preview=cellFormat?.ranges?.length?`<div class="v4-tbl-cell-preview" aria-label="Предпросмотр оформления">${LayoutModel.renderText(cell,cellFormat)}</div>`:'';
+                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}">${giftChipHtml}<textarea rows="1" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}">${E(cell).replace(/\n/g,'&#10;')}</textarea>${preview}</${tag}>`;
                 }).join('')}</tr>`;
               }).join('')}
             </tbody>
@@ -6938,6 +6955,34 @@ async function applyNow(){
     editorDraft=clone(data);editorBaseTime=r.updatedAt;undoStack=[];redoStack=[];rememberDraft();renderCards();renderLayouts();toast('Применено: скрипт «'+saved.name+'» обновлён.');
   }catch(e){toast(e.message)}
 }
+function rememberTableSelection(el){
+  if(!el.matches('[data-v4-tbl-cell]'))return;
+  const [line,r,c]=el.dataset.v4TblCell.split(',').map(Number);
+  tblTextSelection={line,r,c,start:el.selectionStart,end:el.selectionEnd};
+}
+['select','keyup','mouseup'].forEach(type=>lv.addEventListener(type,e=>rememberTableSelection(e.target)));
+function applyTableSelection(line,patch,toggleBold=false){
+  const sel=tblTextSelection,pos=tblSelCell[line];
+  if(!sel||sel.line!==line||!pos||sel.r!==pos.r||sel.c!==pos.c||sel.start>=sel.end)return false;
+  const s=st(),key=`${sel.r},${sel.c}`;
+  mutateDraft(()=>{
+    const tbl=parseScriptTableData(s.lines[line]),text=tbl.rows[sel.r]?.[sel.c];
+    if(typeof text!=='string'||sel.end>text.length)return;
+    tbl.cellFormats=tbl.cellFormats||{};
+    const fmt=LayoutModel.cleanFormat(tbl.cellFormats[key],text.length);
+    if(toggleBold){
+      const cs=tbl.cellStyles[key]||{};
+      const inherited=typeof cs.bold==='boolean'?(cs.bold?700:400):(tbl.hasHeader&&sel.r===0?800:400);
+      const active=Object.assign({},fmt.style,...fmt.ranges.filter(r=>r.start<=sel.start&&r.end>sel.start).map(r=>r.style));
+      patch={weight:(active.weight??inherited)>=700?400:700};
+    }
+    tbl.cellFormats[key]=LayoutModel.applyFormat(fmt,text.length,sel.start,sel.end,patch);
+    s.lines[line]=JSON.stringify(tbl);
+  });
+  const field=q(`[data-v4-tbl-cell="${line},${sel.r},${sel.c}"]`);
+  if(field){field.focus({preventScroll:true});field.setSelectionRange(sel.start,sel.end);tblTextSelection=sel;}
+  return true;
+}
 function resizeTableCell(el){
   el.style.height='auto';
   el.style.height=el.scrollHeight+'px';
@@ -6949,6 +6994,7 @@ lv.addEventListener('focusin',e=>{
   if(e.target.matches('[data-v4-tbl-cell]')){
     const [li,ri,ci]=e.target.dataset.v4TblCell.split(',').map(Number);
     tblSelCell[li]={r:ri,c:ci};
+    if(!tblTextSelection||tblTextSelection.line!==li||tblTextSelection.r!==ri||tblTextSelection.c!==ci)rememberTableSelection(e.target);
     const lineEl=e.target.closest('.v4-line.is-table');
     if(lineEl){
       lineEl.querySelectorAll('.v4-tbl-cell-active').forEach(el=>el.classList.remove('v4-tbl-cell-active'));
@@ -6990,7 +7036,12 @@ lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
     const [li,ri,ci]=f.dataset.v4TblCell.split(',').map(Number);
     const tbl=parseScriptTableData(s.lines[li]);
     if(tbl.rows[ri]&&tbl.rows[ri][ci]!==undefined){
+      const key=`${ri},${ci}`;
+      if(tbl.cellFormats?.[key])tbl.cellFormats[key]=LayoutModel.editTextFormat(tbl.cellFormats[key],tbl.rows[ri][ci],f.value);
       tbl.rows[ri][ci]=f.value;
+      const preview=f.parentElement.querySelector('.v4-tbl-cell-preview');
+      if(preview)preview.innerHTML=LayoutModel.renderText(f.value,tbl.cellFormats?.[key]);
+      rememberTableSelection(f);
       s.lines[li]=JSON.stringify(tbl);
       later();
     }
@@ -7172,6 +7223,8 @@ lv.addEventListener('change',async e=>{const f=e.target,s=st();
   else if(f.matches('[data-v4-tbl-cstyle]')){
     const [idxStr,prop]=f.dataset.v4TblCstyle.split(',');
     const idx=+idxStr;
+    if(prop==='color'&&applyTableSelection(idx,{color:sanitizeTableColor(f.value)||'auto'}))return;
+    if(prop==='bg'&&applyTableSelection(idx,{background:sanitizeTableColor(f.value)||'none'}))return;
     const pos=tblSelCell[idx]||{r:0,c:0};
     const key=`${pos.r},${pos.c}`;
     mutateDraft(()=>{
@@ -7299,13 +7352,13 @@ lv.addEventListener('click',async e=>{
     case 'tbl-add-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols<12){tbl.rows.forEach((r,ri)=>r.push(ri===0?`Столбец ${cols+1}`:''));s.lines[i]=JSON.stringify(tbl);}});return;
     case 'tbl-del-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols>1){tbl.rows.forEach(r=>r.pop());s.lines[i]=JSON.stringify(tbl);}});return;
     case 'tbl-tstyle-reset':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const prop=b.dataset.prop;if(prop==='borderColor')tbl.tableStyle.borderColor='';s.lines[i]=JSON.stringify(tbl);});return;
-    case 'tbl-cell-bold':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};const nowBold=typeof cur.bold==='boolean'?cur.bold:(tbl.hasHeader&&pos.r===0);cur.bold=!nowBold;tbl.cellStyles[key]=cur;s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-bold':{if(applyTableSelection(i,{},true))return;const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};const nowBold=typeof cur.bold==='boolean'?cur.bold:(tbl.hasHeader&&pos.r===0);cur.bold=!nowBold;tbl.cellStyles[key]=cur;s.lines[i]=JSON.stringify(tbl);});return;}
     case 'tbl-cell-italic':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(cur.italic)delete cur.italic;else cur.italic=true;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
     case 'tbl-cell-align':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,val=b.dataset.val||'left';M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};cur.align=val;tbl.cellStyles[key]=cur;s.lines[i]=JSON.stringify(tbl);});return;}
-    case 'tbl-cell-color':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,clr=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(clr)cur.color=clr;else delete cur.color;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
-    case 'tbl-cell-bg':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,bg=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(bg)cur.bg=bg;else delete cur.bg;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-color':{if(applyTableSelection(i,{color:sanitizeTableColor(b.dataset.c)||'auto'}))return;const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,clr=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(clr)cur.color=clr;else delete cur.color;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-bg':{if(applyTableSelection(i,{background:sanitizeTableColor(b.dataset.c)||'none'}))return;const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,bg=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(bg)cur.bg=bg;else delete cur.bg;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
     case 'tbl-apply-row':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const src=tbl.cellStyles[key]?{...tbl.cellStyles[key]}:null;const cols=tbl.rows[0]?.length||0;for(let c=0;c<cols;c++){if(src)tbl.cellStyles[`${pos.r},${c}`]={...src};else delete tbl.cellStyles[`${pos.r},${c}`];}s.lines[i]=JSON.stringify(tbl);});return;}
-    case 'tbl-cell-reset':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.cellStyles)delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-reset':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.cellStyles)delete tbl.cellStyles[key];if(tbl.cellFormats)delete tbl.cellFormats[key];s.lines[i]=JSON.stringify(tbl);});return;}
     case 'tbl-cell-gift-clear':{const r=Number(b.dataset.r),c=Number(b.dataset.c),key=`${r},${c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.cellGifts)delete tbl.cellGifts[key];s.lines[i]=JSON.stringify(tbl);});return;}
     case 'img-size':M(()=>{const img=parseScriptImageData(s.lines[i]);img.size=b.dataset.size||'medium';img.widthPct=Number(b.dataset.pct)||50;s.lines[i]=JSON.stringify(img);});return;
     case 'lmove':moveLayout(id,b.dataset.d);return;
