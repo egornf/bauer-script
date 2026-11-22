@@ -638,13 +638,17 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-tools{display:flex;gap:5px;flex-wrap:wrap;align-items:center;padding:8px 10px;background:var(--surface-alt);border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
 .v4-tools button{min-height:32px;min-width:32px;padding:0 9px;font-size:13px}
 .v4-color-menu{position:relative;display:inline-block}
-.v4-color-menu summary{list-style:none;display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:12px;font-weight:750;cursor:pointer;user-select:none}
+.v4-color-menu summary{list-style:none;display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:12px;font-weight:750;cursor:pointer;user-select:none}
 .v4-color-menu summary::-webkit-details-marker{display:none}
 .v4-color-menu[open] summary{border-color:var(--teal);box-shadow:0 0 0 2px color-mix(in srgb,var(--teal) 18%,transparent)}
-.v4-color-palette{position:absolute;z-index:30;top:calc(100% + 7px);left:0;display:grid;grid-template-columns:repeat(4,30px);gap:7px;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 28px rgba(8,36,48,.22)}
-.v4-color-choice{width:30px!important;min-width:30px!important;height:30px!important;min-height:30px!important;padding:0!important;border:2px solid color-mix(in srgb,var(--ink) 20%,transparent)!important;border-radius:7px!important;font-size:13px!important;font-weight:800!important}
+.v4-palette-icon{display:inline-grid;place-items:center;width:17px;height:17px;color:var(--teal);font-weight:900;font-size:14px;line-height:1}
+.v4-color-palette{position:absolute;z-index:30;top:calc(100% + 8px);left:0;display:grid;grid-template-columns:repeat(4,38px);gap:8px;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 30px rgba(8,36,48,.24)}
+.v4-color-choice,.v4-custom-color{width:38px!important;min-width:38px!important;height:38px!important;min-height:38px!important;padding:0!important;border:2px solid color-mix(in srgb,var(--ink) 20%,transparent)!important;border-radius:8px!important;font-size:15px!important;font-weight:800!important}
 .v4-color-choice:hover,.v4-color-choice.active{border-color:var(--teal)!important;transform:scale(1.08)}
 .v4-color-choice.is-clear{background:var(--surface-alt)!important;color:var(--muted)}
+.v4-custom-color{position:relative;display:grid;place-items:center;overflow:hidden;cursor:pointer;background:conic-gradient(#e11d48,#f59e0b,#facc15,#22c55e,#06b6d4,#2563eb,#8b5cf6,#e11d48);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.55)}
+.v4-custom-color:hover{border-color:var(--teal)!important;transform:scale(1.08)}
+.v4-custom-color input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .v4-tlbl{font-size:11px;font-weight:700;color:var(--muted);margin:0 2px}
 .v4-bbar{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--surface)}
 .v4-bbar>span{font-size:11px;font-weight:700;color:var(--muted);margin-right:2px}
@@ -6571,11 +6575,17 @@ function paletteChoice(prop,value,label,active=false,index=null){
     :`data-v4="fmt" data-p='${JSON.stringify({[prop]:value})}'`;
   return `<button type="button" class="v4-color-choice ${isClear?'is-clear':''} ${active?'active':''}" ${attrs} title="${E(label)}" style="${style}">${isClear?'✕':' '}</button>`;
 }
-function formatPalette(label,prop,items,current=''){
-  return `<details class="v4-color-menu"><summary title="${E(label)}">${E(label)} <span aria-hidden="true">▾</span></summary><div class="v4-color-palette">${items.map(([value,name])=>paletteChoice(prop,value,name,current===value)).join('')}</div></details>`;
+function paletteInputValue(prop,current){
+  if(/^#[0-9a-f]{6}$/i.test(current||''))return current;
+  return prop==='color'?'#0f172a':(prop==='background'?'#fff3b0':'#e2f3ef');
+}
+function formatPalette(label,icon,prop,items,current=''){
+  const custom=`<label class="v4-custom-color" title="Выбрать свой цвет"><span aria-hidden="true">✦</span><input type="color" value="${paletteInputValue(prop,current)}" data-v4-custom-color="${prop}" aria-label="Выбрать свой цвет для: ${E(label)}"></label>`;
+  return `<details class="v4-color-menu"><summary title="${E(label)}"><span class="v4-palette-icon" aria-hidden="true">${icon}</span>${E(label)} <span aria-hidden="true">▾</span></summary><div class="v4-color-palette">${items.map(([value,name])=>paletteChoice(prop,value,name,current===value)).join('')}${custom}</div></details>`;
 }
 function blockPalette(index,current=''){
-  return `<details class="v4-color-menu"><summary title="Фон карточки">🎨 Фон <span aria-hidden="true">▾</span></summary><div class="v4-color-palette">${BLOCK_BG.map(([value,name])=>paletteChoice('blockBg',value,name,current===value,index)).join('')}</div></details>`;
+  const custom=`<label class="v4-custom-color" title="Выбрать свой цвет"><span aria-hidden="true">✦</span><input type="color" value="${paletteInputValue('blockBg',current)}" data-v4-custom-color="blockBg" data-v4-custom-target="blockbg" data-v4-index="${index}" aria-label="Выбрать свой цвет фона блока"></label>`;
+  return `<details class="v4-color-menu"><summary title="Фон карточки"><span class="v4-palette-icon" aria-hidden="true">▣</span>Фон <span aria-hidden="true">▾</span></summary><div class="v4-color-palette">${BLOCK_BG.map(([value,name])=>paletteChoice('blockBg',value,name,current===value,index)).join('')}${custom}</div></details>`;
 }
 
 function renderPickerOptions(i,curGiftId,queryStr){
@@ -6781,16 +6791,15 @@ function lineBlock(s,i){
     const bStyle=LayoutModel.blockCSS(effFmt);
     return `<div class="v4-line is-gift"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><button type="button" class="v4-gpick-btn ${isOpen?'open':''}" data-v4="toggle-picker" data-i="${i}" title="Выбрать подарок из базы подарков">${gift?`${gift.photo?`<img src="${gift.photo}" alt="">`:'🎁'}<span>${E(gift.title||'Без названия')}</span>${gift.condition?`<small>· ${E(gift.condition)}</small>`:''}`:'<span>🔍 Выбрать подарок из списка…</span>'}<b aria-hidden="true">▾</b></button>${gift?`<button type="button" class="v4-gpick-link" data-v4="goto-gift" data-id="${E(gift.id)}" title="Редактировать скрипт, описание и фото в Базе подарков">✎ В базе подарков</button>`:''}${blockBar(i,effFmt?.style?.blockBg)}<span class="v4-s"></span>${lineActionBtns(i,'Удалить реплику')}</div>${isOpen?`<div class="v4-gpick-panel"><div class="v4-gpick-top"><input type="search" class="v4-gpick-search" data-v4-picksearch="${i}" placeholder="🔍 Фильтр по подаркам: введите название, условие или слова из описания…" value="${E(pickerQuery)}" autocomplete="off"><button type="button" data-v4="new-gift-for-line" data-i="${i}">+ Создать подарок в базе</button></div><div class="v4-gpick-list" data-v4-picklist="${i}">${renderPickerOptions(i,curGiftId,pickerQuery)}</div></div>`:''}${gift?`<section class="script-gift"${bStyle?` style="${bStyle}"`:''} aria-label="${E(gift.title||'Подарок')}"><div class="script-gift-label">🎁 ${E(label)}</div><div class="script-gift-layout">${inlineGiftPhoto(gift,true)}<div class="script-gift-text"><p class="line">${(gift.script||'').trim()?LayoutModel.renderText(gift.script,gift.scriptFormat):'<span class="v4-empty">Описание подарка пусто. Нажмите «✎ В базе подарков», чтобы заполнить скрипт подарка.</span>'}</p></div></div></section>`:''}</div>`;
   }
-  const curBg=lineFmt?.style?.blockBg||(i===0?'#e2f3ef':'');
   const dispFmt=lineFmt?.style?.blockBg?lineFmt:(i===0?{...lineFmt,style:{...(lineFmt?.style||{}),blockBg:'#e2f3ef'}}:lineFmt);
-  return `<div class="v4-line"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select>${blockBar(i,curBg)}<span class="v4-s"></span>${lineActionBtns(i,'Удалить реплику')}</div>${on?editBox(s.lines[i],dispFmt):view('line',i,s.lines[i],dispFmt)}</div>`;
+  return `<div class="v4-line"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-s"></span>${lineActionBtns(i,'Удалить реплику')}</div>${on?editBox(s.lines[i],dispFmt):view('line',i,s.lines[i],dispFmt)}</div>`;
 }
 const view=(t,i,text,f)=>{const bs=t==='line'?LayoutModel.blockCSS(f):'';return `<p class="line v4-click" data-v4="edit" data-t="${t}" data-i="${i}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы изменить">${text.trim()?fillPlanHtml(fillVenueHtml(LayoutModel.renderText(text,f))):'<span class="v4-empty">Пусто. Нажмите, чтобы написать</span>'}</p>`;};
 function editBox(text,f){
   const currentStyle=Object.assign({},f?.style,...(f?.ranges||[]).filter(r=>r.start<=sel.s&&r.end>=sel.e).map(r=>r.style));
   const bs=edit?.t==='tip'?'':LayoutModel.blockCSS(f);
   const insVars=['адрес','дата','время','день_недели','дата_время'];
-  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" class="${(currentStyle.weight||400)>=700?'active':''}" title="Жирный"><b>Ж</b></button><button data-v4="italic" class="${currentStyle.italic?'active':''}" title="Курсив"><i>К</i></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span>${formatPalette('Цвет текста','color',[['auto','Авто'],...TXT.filter(v=>v!=='auto').map(v=>[v,'Цвет текста'])],currentStyle.color||'auto')}${formatPalette('Маркер','background',BG.map(v=>[v,v==='none'?'Без выделения':'Цвет маркера']),currentStyle.background||'none')}${edit?.t==='tip'?'':formatPalette('Фон блока','blockBg',BLOCK_BG,currentStyle.blockBg||'')}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><div class="line v4-inline-edit" contenteditable="true" role="textbox" aria-multiline="true" data-v4-rich-text data-placeholder="Нажмите и напишите текст…"${bs?` style="${bs}"`:''}>${LayoutModel.renderText(text,f)}</div>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="v4-hint">Меняйте текст прямо в карточке. Выделите слова и выберите оформление. «Фон блока» меняет заливку всей карточки реплики.</p></div>`;
+  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" class="${(currentStyle.weight||400)>=700?'active':''}" title="Жирный"><b>Ж</b></button><button data-v4="italic" class="${currentStyle.italic?'active':''}" title="Курсив"><i>К</i></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span>${formatPalette('Цвет текста','A','color',[['auto','Авто'],...TXT.filter(v=>v!=='auto').map(v=>[v,'Цвет текста'])],currentStyle.color||'auto')}${formatPalette('Маркер','▰','background',BG.map(v=>[v,v==='none'?'Без выделения':'Цвет маркера']),currentStyle.background||'none')}${edit?.t==='tip'?'':formatPalette('Фон блока','▣','blockBg',BLOCK_BG,currentStyle.blockBg||'')}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><div class="line v4-inline-edit" contenteditable="true" role="textbox" aria-multiline="true" data-v4-rich-text data-placeholder="Нажмите и напишите текст…"${bs?` style="${bs}"`:''}>${LayoutModel.renderText(text,f)}</div>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="v4-hint">Меняйте текст прямо в карточке. Выделите слова и выберите оформление. «Фон блока» меняет заливку всей карточки реплики.</p></div>`;
 }
 function stageTab(s){
   const isOperator=currentUser&&currentUser.role==='OPERATOR';
@@ -7220,7 +7229,22 @@ lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
   else if(f.matches('[data-v4-gift]')){const g=editorDraft.gifts.find(x=>x.id===f.dataset.id);if(g){g[f.dataset.v4Gift]=f.value;later()}}
   else if(f.matches('[data-v4-dir]')){const dir=directionBase.find(x=>x.id===f.dataset.id);if(dir){dir[f.dataset.v4Dir]=f.value;saveDirectionBase();const n=document.getElementById('dir-saved');if(n)n.textContent='✓ Сохранено автоматически. Изменения сразу действуют во всех скриптах.';}}
 });
+lv.addEventListener('toggle',e=>{
+  const menu=e.target;
+  if(!menu.matches?.('.v4-color-menu')||!menu.open)return;
+  lv.querySelectorAll('.v4-color-menu[open]').forEach(other=>{if(other!==menu)other.removeAttribute('open')});
+},true);
 lv.addEventListener('change',async e=>{const f=e.target,s=st();
+  if(f.matches('[data-v4-custom-color]')){
+    const color=f.value;
+    const target=f.dataset.v4CustomTarget;
+    if(target==='blockbg'){
+      const idx=Number(f.dataset.v4Index);
+      mutateDraft(()=>{s.lineFormats[idx]=LayoutModel.applyFormat(s.lineFormats[idx],(s.lines[idx]||'').length,0,0,{blockBg:color},false)});
+    }else fmt({[f.dataset.v4CustomColor]:color});
+    f.closest('.v4-color-menu')?.removeAttribute('open');
+    return;
+  }
   if(f.matches('[data-v4-kind]')){
     const idx=+f.dataset.v4Kind,val=f.value;
     mutateDraft(()=>{
