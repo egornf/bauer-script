@@ -647,7 +647,9 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-bcustom:hover{border-color:var(--ui);background:var(--ui-soft)}
 .v4-bcustom input[type=color]{position:absolute;inset:-4px;width:30px;height:30px;opacity:0;cursor:pointer;border:0;padding:0}
 .v4-sep{width:1px;align-self:stretch;background:var(--line);margin:0 3px}
-.v4-edit textarea{display:block;width:100%;box-sizing:border-box;padding:12px 14px;margin-bottom:8px;border-radius:12px;border:2px solid var(--ui);background:var(--surface);color:var(--ink);font:inherit;font-size:15px;line-height:1.6;resize:vertical}
+.v4-inline-edit{display:block;box-sizing:border-box;min-height:64px;padding:12px 14px;margin-bottom:8px;border:2px solid var(--ui);outline:2px solid var(--amber);outline-offset:3px;cursor:text;white-space:pre-wrap;overflow-wrap:anywhere}
+.v4-inline-edit:focus{outline-color:var(--teal)}
+.v4-inline-edit:empty::before{content:attr(data-placeholder);color:var(--muted);font-style:italic;pointer-events:none}
 .v4-tipbox{margin-top:16px}.v4-switch{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:8px}
 .v4-add-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .v4-add-gift-btn{border-color:var(--amber-line);background:var(--amber-soft);color:var(--ink)}
@@ -6534,7 +6536,7 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 (()=>{
 const lv=document.getElementById('layouts-view'),E=escapeHTML,q=(s)=>lv.querySelector(s);
 let tab='stage',edit=null,obSel=null,sel={s:1e9,e:1e9},start=null,timer=null,del=null;
-let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false,tblSelCell={},tblTextSelection=null;
+let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false,tblSelCell={},tblTextSelection=null,richTextSelection=null;
 let dirPickerOpen=null,dirPickerQuery='',dirDbQuery='',highlightDirId=null;
 const DIR_PRESETS=['Посуда','Сок','Массаж','ВТ'];
 const KINDS={speech:'Речь',gift:'🎁 Подарок',direction:'🧭 Направление',address:'📍 Адрес',schedule:'📅 График времени',table:'📊 Таблица',image:'🖼 Картинка'};const ADDR_TPL='Подскажите, пожалуйста, наш адрес: {адрес}\n{ориентиры}';
@@ -6773,7 +6775,7 @@ function editBox(text,f){
   const bsw=([v,lbl])=>`<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({blockBg:v})}' title="Заливка самого блока: ${lbl}" style="${v==='none'?'background:var(--surface-alt)':LayoutModel.blockCSS({style:{blockBg:v}})}">${v==='none'?'✕':''}</button>`;
   const bs=edit?.t==='tip'?'':LayoutModel.blockCSS(f);
   const insVars=isAddr?['город','зал','адрес','ориентиры','дата','время','день_недели','дата_время']:['дата','время','день_недели','дата_время'];
-  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" title="Жирный"><b>Ж</b></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Текст:</span>${TXT.map(v=>sw('color',v)).join('')}<span class="v4-sep"></span><span class="v4-tlbl">Маркер:</span>${BG.map(v=>sw('background',v)).join('')}${edit?.t==='tip'?'':`<span class="v4-sep"></span><span class="v4-tlbl">Блок:</span>${BLOCK_BG.map(bsw).join('')}`}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><textarea data-v4-ta rows="${Math.max(3,Math.ceil(text.length/75))}">${E(text)}</textarea>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="line" id="v4-live"${bs?` style="${bs}"`:''}>${fillPlanHtml(fillVenueHtml(LayoutModel.renderText(text,f)))}</p><p class="v4-hint">Выделите слова и нажмите кнопку — оформится выделенное. «Блок» меняет заливку всей карточки реплики.</p></div>`;
+  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" title="Жирный"><b>Ж</b></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Текст:</span>${TXT.map(v=>sw('color',v)).join('')}<span class="v4-sep"></span><span class="v4-tlbl">Маркер:</span>${BG.map(v=>sw('background',v)).join('')}${edit?.t==='tip'?'':`<span class="v4-sep"></span><span class="v4-tlbl">Блок:</span>${BLOCK_BG.map(bsw).join('')}`}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><div class="line v4-inline-edit" contenteditable="true" role="textbox" aria-multiline="true" data-v4-rich-text data-placeholder="Нажмите и напишите текст…"${bs?` style="${bs}"`:''}>${LayoutModel.renderText(text,f)}</div>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="v4-hint">Меняйте текст прямо в карточке. Выделите слова и нажмите кнопку — оформится выделенное. «Блок» меняет заливку всей карточки реплики.</p></div>`;
 }
 function stageTab(s){
   const isOperator=currentUser&&currentUser.role==='OPERATOR';
@@ -6917,13 +6919,13 @@ ${tab==='stage'?`<nav class="stepper v4-tabs" aria-label="Этапы скрип�
 ${tab==='gifts'?giftsTab():tab==='directions'?directionsTab():tab==='saved'?savedTab():tab==='settings'?`<section class="v4-card v4-pad" id="editor-inspector">${settingsInspector()}</section>`:stageTab(s)}`;
   lv.classList.toggle('v4-giftmode',tab==='gifts'||tab==='directions');
   lv.scrollTop=keep;updateEditorIndicators();
-  if(edit&&(tab==='stage'||tab==='gifts'||tab==='directions')){const ta=q('[data-v4-ta]');if(ta){ta.focus({preventScroll:true});ta.setSelectionRange(Math.min(sel.s,ta.value.length),Math.min(sel.e,ta.value.length))}}
+  if(edit&&(tab==='stage'||tab==='gifts'||tab==='directions')){const field=q('[data-v4-rich-text]');if(field){field.focus({preventScroll:true});restoreRichTextSelection(field,Math.min(sel.s,txtNow().length),Math.min(sel.e,txtNow().length))}}
   else if(pickerOpen!=null&&tab==='stage'){const ps=q(`[data-v4-picksearch="${pickerOpen}"]`);if(ps)ps.focus({preventScroll:true});}
   else if(dirPickerOpen!=null&&tab==='stage'){const ds=q(`[data-v4-dirpicksearch="${dirPickerOpen}"]`);if(ds)ds.focus({preventScroll:true});}
 };
-function fmt(patch,reset){const ta=q('[data-v4-ta]');if(!ta||!edit)return;const s=st(),a=ta.selectionStart,b=ta.selectionEnd;sel={s:a,e:b};
+function fmt(patch,reset){const field=q('[data-v4-rich-text]');if(!field||!edit)return;const s=st(),range=rememberRichTextSelection(field)||richTextSelection||{start:0,end:0},a=range.start,b=range.end;sel={s:a,e:b};
   mutateDraft(()=>{if(edit.t==='gift'){const g=giftNow();if(!g)return;g.script=g.script||'';g.scriptFormat=LayoutModel.applyFormat(g.scriptFormat,g.script.length,a,b,patch,reset);}else if(edit.t==='direction'){const dir=dirNow();if(!dir)return;dir.script=dir.script||'';dir.scriptFormat=LayoutModel.applyFormat(dir.scriptFormat,dir.script.length,a,b,patch,reset);saveDirectionBase();}else if(edit.t==='tip')s.tipFormat=LayoutModel.applyFormat(s.tipFormat,s.tip.length,a,b,patch,reset);else s.lineFormats[edit.i]=LayoutModel.applyFormat(s.lineFormats[edit.i],s.lines[edit.i].length,a,b,patch,reset);});}
-function curStyle(key){const ta=q('[data-v4-ta]'),f=fmtNow(),a=ta.selectionStart,b=ta.selectionEnd;const r=[...f.ranges].reverse().find(r=>r.start<=a&&r.end>=b&&r.style[key]);return r?r.style[key]:f.style[key]}
+function curStyle(key){const f=fmtNow(),range=richTextSelection||{start:0,end:0},a=range.start,b=range.end;const r=[...f.ranges].reverse().find(r=>r.start<=a&&r.end>=b&&r.style[key]);return r?r.style[key]:f.style[key]}
 async function shrink(file){
   if(!/^image\/(jpeg|png|webp)$/.test(file.type))throw new Error('Нужен файл JPG, PNG или WebP: '+file.name);
   const url=URL.createObjectURL(file);
@@ -6956,8 +6958,8 @@ function rememberTableSelection(el){
   const start=before.toString().length;
   tblTextSelection={line,r,c,start,end:start+range.toString().length};
 }
-['keyup','mouseup'].forEach(type=>lv.addEventListener(type,e=>rememberTableSelection(e.target)));
-document.addEventListener('selectionchange',()=>{const el=document.activeElement;if(el&&lv.contains(el))rememberTableSelection(el);});
+['keyup','mouseup'].forEach(type=>lv.addEventListener(type,e=>{rememberTableSelection(e.target);rememberRichTextSelection(e.target);}));
+document.addEventListener('selectionchange',()=>{const el=document.activeElement;if(el&&lv.contains(el)){rememberTableSelection(el);rememberRichTextSelection(el);}});
 function restoreTableSelection(el,start,end){
   const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
   let node,offset=0,startNode=null,endNode=null,startOffset=0,endOffset=0;
@@ -6981,12 +6983,51 @@ function insertTableText(el,text){
   range.setStartAfter(node);range.collapse(true);selection.removeAllRanges();selection.addRange(range);
   el.dispatchEvent(new Event('input',{bubbles:true}));
 }
+function rememberRichTextSelection(el){
+  if(!el?.matches?.('[data-v4-rich-text]'))return null;
+  const selection=window.getSelection();
+  if(!selection||!selection.rangeCount||!el.contains(selection.anchorNode)||!el.contains(selection.focusNode))return richTextSelection;
+  const range=selection.getRangeAt(0),before=range.cloneRange();
+  before.selectNodeContents(el);before.setEnd(range.startContainer,range.startOffset);
+  richTextSelection={start:before.toString().length,end:before.toString().length+range.toString().length};
+  return richTextSelection;
+}
+function restoreRichTextSelection(el,start,end){
+  const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);
+  let node,offset=0,startNode=null,endNode=null,startOffset=0,endOffset=0;
+  while((node=walker.nextNode())){
+    const next=offset+node.data.length;
+    if(!startNode&&start<=next){startNode=node;startOffset=start-offset;}
+    if(!endNode&&end<=next){endNode=node;endOffset=end-offset;break;}
+    offset=next;
+  }
+  const range=document.createRange();
+  if(startNode){range.setStart(startNode,startOffset);range.setEnd(endNode||startNode,endNode?endOffset:startOffset);}
+  else {range.selectNodeContents(el);range.collapse(false);}
+  const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
+  richTextSelection={start,end};
+}
+function insertRichText(el,text){
+  const selection=window.getSelection();
+  if(!selection||!selection.rangeCount)return;
+  const range=selection.getRangeAt(0);
+  if(!el.contains(range.commonAncestorContainer))return;
+  range.deleteContents();const node=document.createTextNode(text);range.insertNode(node);
+  range.setStartAfter(node);range.collapse(true);selection.removeAllRanges();selection.addRange(range);
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+}
 lv.addEventListener('beforeinput',e=>{
+  if(e.target.matches('[data-v4-rich-text]')&&(e.inputType==='insertParagraph'||e.inputType==='insertLineBreak')){
+    e.preventDefault();insertRichText(e.target,'\n');return;
+  }
   if(e.target.matches('[data-v4-tbl-cell]')&&(e.inputType==='insertParagraph'||e.inputType==='insertLineBreak')){
     e.preventDefault();insertTableText(e.target,'\n');
   }
 });
 lv.addEventListener('paste',e=>{
+  if(e.target.matches('[data-v4-rich-text]')){
+    e.preventDefault();insertRichText(e.target,(e.clipboardData?.getData('text/plain')||'').replace(/\r\n?/g,'\n'));return;
+  }
   if(!e.target.matches('[data-v4-tbl-cell]'))return;
   e.preventDefault();insertTableText(e.target,(e.clipboardData?.getData('text/plain')||'').replace(/\r\n?/g,'\n'));
 });
@@ -7017,7 +7058,8 @@ function applyTableSelection(line,patch,toggleBold=false){
 }
 lv.addEventListener('mousedown',e=>{if(e.target.closest('.v4-tools button,.v4-ins button'))e.preventDefault()});
 lv.addEventListener('focusin',e=>{
-  if(!start&&e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))start=historyState();
+  if(!start&&e.target.matches('[data-v4-rich-text],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))start=historyState();
+  if(e.target.matches('[data-v4-rich-text]'))rememberRichTextSelection(e.target);
   if(e.target.matches('[data-v4-tbl-cell]')){
     const [li,ri,ci]=e.target.dataset.v4TblCell.split(',').map(Number);
     tblSelCell[li]={r:ri,c:ci};
@@ -7052,7 +7094,7 @@ lv.addEventListener('focusin',e=>{
     }
   }
 });
-lv.addEventListener('focusout',e=>{if(!start||!e.target.matches('[data-v4-ta],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))return;const p=start;start=null;if(JSON.stringify(p.data)!==JSON.stringify(editorDraft)){pushUndo(p);rememberDraft()}});
+lv.addEventListener('focusout',e=>{if(!start||!e.target.matches('[data-v4-rich-text],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))return;const p=start;start=null;if(JSON.stringify(p.data)!==JSON.stringify(editorDraft)){pushUndo(p);rememberDraft()}});
 lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
   if(f.matches('[data-v4-layout-search]')){
     const caret=f.selectionStart;savedLayoutQuery=f.value;renderLayouts();
@@ -7149,8 +7191,15 @@ lv.addEventListener('input',e=>{const f=e.target,s=st();if(!s)return;
     }
     return;
   }
-  if(f.matches('[data-v4-ta]')&&edit){if(edit.t==='gift'){const g=giftNow();if(!g)return;g.scriptFormat=LayoutModel.editTextFormat(g.scriptFormat,g.script||'',f.value);g.script=f.value}else if(edit.t==='direction'){const dir=dirNow();if(!dir)return;dir.scriptFormat=LayoutModel.editTextFormat(dir.scriptFormat,dir.script||'',f.value);dir.script=f.value;saveDirectionBase();}else if(edit.t==='tip'){s.tipFormat=LayoutModel.editTextFormat(s.tipFormat,s.tip,f.value);s.tip=f.value}else{s.lineFormats[edit.i]=LayoutModel.editTextFormat(s.lineFormats[edit.i],s.lines[edit.i],f.value);s.lines[edit.i]=f.value}
-    const p=q('#v4-live');if(p){const h=LayoutModel.renderText(txtNow(),fmtNow());p.innerHTML=edit.t==='line'&&st().lineKinds[edit.i]==='address'?fillVenueHtml(h):h}later()}
+  if(f.matches('[data-v4-rich-text]')&&edit){
+    const selection=rememberRichTextSelection(f),value=f.textContent||'';
+    if(edit.t==='gift'){const g=giftNow();if(!g)return;g.scriptFormat=LayoutModel.editTextFormat(g.scriptFormat,g.script||'',value);g.script=value}
+    else if(edit.t==='direction'){const dir=dirNow();if(!dir)return;dir.scriptFormat=LayoutModel.editTextFormat(dir.scriptFormat,dir.script||'',value);dir.script=value;saveDirectionBase();}
+    else if(edit.t==='tip'){s.tipFormat=LayoutModel.editTextFormat(s.tipFormat,s.tip,value);s.tip=value}
+    else{s.lineFormats[edit.i]=LayoutModel.editTextFormat(s.lineFormats[edit.i],s.lines[edit.i],value);s.lines[edit.i]=value}
+    if(!e.isComposing){f.innerHTML=LayoutModel.renderText(value,fmtNow());if(selection)restoreRichTextSelection(f,selection.start,selection.end);}
+    later()
+  }
   else if(f.matches('[data-v4-title]')){s.title=f.value;const t=q('.step[aria-current=step] .step-title');if(t)t.textContent=f.value;later()}
   else if(f.matches('[data-v4-ob]')&&obSel!=null){const o=editorDraft.objections[obSel];if(f.dataset.v4Ob==='title')o.title=f.value;else if(f.dataset.v4Ob==='text'){o.textFormat=LayoutModel.editTextFormat(o.textFormat,o.text,f.value);o.text=f.value}later()}
   else if(f.matches('[data-v4-gift]')){const g=editorDraft.gifts.find(x=>x.id===f.dataset.id);if(g){g[f.dataset.v4Gift]=f.value;later()}}
@@ -7352,7 +7401,7 @@ lv.addEventListener('click',async e=>{
     case 'copyline':{copyLineToClipboard(s,i);renderLayouts();toast('📋 Элемент скопирован! Откройте нужный макет/блок и нажмите 📥 Вставить.');return;}
     case 'pasteline':{const clip=getLineClipboard();if(!clip){toast('Буфер пуст — сначала нажмите 📋 на нужном элементе.');return;}M(()=>{ensureLineGifts();const j=Math.max(0,Math.min(s.lines.length,i+1));s.lines.splice(j,0,clip.line);s.lineKinds.splice(j,0,clip.kind||'speech');s.lineFormats.splice(j,0,clone(clip.format||LayoutModel.cleanFormat(null,0)));s.lineGifts.splice(j,0,clip.giftId||'');if(clip.kind==='schedule')s.scheduleRemoved=false;edit=null;pickerOpen=null});toast('✓ Скопированный элемент вставлен');return;}
     case 'up':case 'down':{const j=i+(a==='up'?-1:1);if(j<0||j>=s.lines.length)return;lineOp(()=>{for(const k of ['lines','lineKinds','lineFormats','lineGifts'])[s[k][i],s[k][j]]=[s[k][j],s[k][i]]});return}
-    case 'ins':{const ta=q('[data-v4-ta]');if(!ta)return;ta.setRangeText('{'+b.dataset.k+'}',ta.selectionStart,ta.selectionEnd,'end');ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();return}
+    case 'ins':{const field=q('[data-v4-rich-text]');if(!field)return;insertRichText(field,'{'+b.dataset.k+'}');field.focus();return}
     case 'addaddrline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,ADDR_TPL);s.lineKinds.splice(j,0,'address');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit={t:'line',i:j};pickerOpen=null;sel={s:0,e:1e9}});return;
     case 'addschedline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,'');s.lineKinds.splice(j,0,'schedule');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');s.scheduleRemoved=false;edit=null;pickerOpen=null});return;
     case 'addtableline':M(()=>{ensureLineGifts();const j=i+1;s.lines.splice(j,0,createDefaultTableJson(3,3));s.lineKinds.splice(j,0,'table');s.lineFormats.splice(j,0,LayoutModel.cleanFormat(null,0));s.lineGifts.splice(j,0,'');edit=null;pickerOpen=null});return;
