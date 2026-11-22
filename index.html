@@ -2203,6 +2203,21 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   margin-bottom: 10px;
   font-size: 12.5px;
 }
+.v4-table-settings{display:grid;grid-template-columns:minmax(310px,1.15fr) minmax(290px,1fr);gap:10px;margin-bottom:10px}
+.v4-table-settings-card{padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface-alt)}
+.v4-table-settings-head{display:flex;align-items:center;gap:7px;margin-bottom:9px;font-size:13px;font-weight:850;color:var(--ink)}
+.v4-table-settings-step{display:inline-grid;place-items:center;width:21px;height:21px;border-radius:50%;background:var(--teal);color:#fff;font-size:11px}
+.v4-table-settings-body{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.v4-table-settings-body>input{flex:1;min-width:180px}
+.v4-table-cell-panel{margin-bottom:10px;border:1px solid color-mix(in srgb,var(--teal) 28%,var(--line));border-radius:11px;overflow:visible;background:color-mix(in srgb,var(--teal) 5%,var(--surface-alt))}
+.v4-table-cell-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid color-mix(in srgb,var(--teal) 16%,var(--line));background:var(--surface)}
+.v4-table-cell-head strong{font-size:13px}.v4-table-cell-head small{color:var(--muted);font-size:12px}
+.v4-table-cell-toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:9px 12px}
+.v4-table-cell-toolbar .v4-tbl-mini-btn{min-height:32px;min-width:32px;font-size:13px}
+.v4-tbl-advanced{margin:0 12px 11px;border-top:1px solid color-mix(in srgb,var(--teal) 16%,var(--line))}
+.v4-tbl-advanced summary{padding:9px 0 0;font-size:12px;font-weight:800;color:var(--teal);cursor:pointer}
+.v4-tbl-advanced-body{display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:9px 0 0}
+@media(max-width:760px){.v4-table-settings{grid-template-columns:1fr}.v4-table-cell-head{align-items:flex-start;flex-direction:column}.v4-table-settings-body>input{flex-basis:100%}}
 .v4-tbl-cell-input {
   width: 100%;
   min-width: 90px;
@@ -6587,6 +6602,21 @@ function blockPalette(index,current=''){
   const custom=`<label class="v4-custom-color" title="Выбрать свой цвет"><span aria-hidden="true">✦</span><input type="color" value="${paletteInputValue('blockBg',current)}" data-v4-custom-color="blockBg" data-v4-custom-target="blockbg" data-v4-index="${index}" aria-label="Выбрать свой цвет фона блока"></label>`;
   return `<details class="v4-color-menu"><summary title="Фон карточки"><span class="v4-palette-icon" aria-hidden="true">▣</span>Фон <span aria-hidden="true">▾</span></summary><div class="v4-color-palette">${BLOCK_BG.map(([value,name])=>paletteChoice('blockBg',value,name,current===value,index)).join('')}${custom}</div></details>`;
 }
+function tablePaletteChoice(line,prop,value,label,active=false){
+  const isClear=value==='auto'||value==='none';
+  const style=prop==='cellBg'
+    ?(isClear?'background:var(--surface-alt)':`background:${value}`)
+    :(prop==='color'?(isClear?'background:var(--surface-alt);color:var(--ink)':`background:${value};color:${value}`):(isClear?'background:var(--surface-alt)':`background:${value}`));
+  const attrs=prop==='cellBg'
+    ?`data-v4="tbl-cell-bg" data-i="${line}" data-c="${value}"`
+    :`data-v4="tbl-rich-format" data-i="${line}" data-p='${JSON.stringify({[prop]:value})}'`;
+  return `<button type="button" class="v4-color-choice ${isClear?'is-clear':''} ${active?'active':''}" ${attrs} title="${E(label)}" style="${style}">${isClear?'✕':' '}</button>`;
+}
+function tableFormatPalette(line,label,icon,prop,items,current=''){
+  const inputProp=prop==='cellBg'?'blockBg':prop;
+  const custom=`<label class="v4-custom-color" title="Выбрать свой цвет"><span aria-hidden="true">✦</span><input type="color" value="${paletteInputValue(inputProp,current)}" data-v4-tbl-custom-color="${prop}" data-i="${line}" aria-label="Выбрать свой цвет для: ${E(label)}"></label>`;
+  return `<details class="v4-color-menu"><summary title="${E(label)}"><span class="v4-palette-icon" aria-hidden="true">${icon}</span>${E(label)} <span aria-hidden="true">▾</span></summary><div class="v4-color-palette">${items.map(([value,name])=>tablePaletteChoice(line,prop,value,name,current===value)).join('')}${custom}</div></details>`;
+}
 
 function renderPickerOptions(i,curGiftId,queryStr){
   const qNorm=(queryStr||'').trim().toLocaleLowerCase('ru');
@@ -6652,78 +6682,42 @@ function lineBlock(s,i){
     const selC=Math.max(0,Math.min(cCount-1,activeCell.c||0));
     tblSelCell[i]={r:selR,c:selC};
     const cs=(tbl.cellStyles&&tbl.cellStyles[`${selR},${selC}`])||{};
-    const isCellBold=typeof cs.bold==='boolean'?cs.bold:(tbl.hasHeader&&selR===0);
-    const isCellItalic=Boolean(cs.italic);
-    const cellFontSize=cs.fontSize||'';
+    const activeTextSelection=tblTextSelection?.line===i&&tblTextSelection.r===selR&&tblTextSelection.c===selC?tblTextSelection:null;
+    const cellText=String(tbl.rows[selR]?.[selC]||'');
+    const cellFormat=LayoutModel.cleanFormat(tbl.cellFormats?.[`${selR},${selC}`],cellText.length);
+    const activeTextStyle=Object.assign({},cellFormat.style,...(activeTextSelection?cellFormat.ranges.filter(r=>r.start<=activeTextSelection.start&&r.end>activeTextSelection.start).map(r=>r.style):[]));
+    const isCellBold=(activeTextStyle.weight??(typeof cs.bold==='boolean'?(cs.bold?700:400):(tbl.hasHeader&&selR===0?800:400)))>=700;
+    const isCellItalic=activeTextStyle.italic??Boolean(cs.italic);
     const cellAlign=cs.align||ts.cellAlign||'left';
-    const cellTextColor=cs.color||'#0f172a';
     const cellBgColor=cs.bg||'#ffffff';
+    const cellTextColor=activeTextStyle.color||'auto';
+    const cellMarkerColor=activeTextStyle.background||'none';
     const cellGiftId=(tbl.cellGifts&&tbl.cellGifts[`${selR},${selC}`])||'';
     const tblBorderColor=ts.borderColor||'#cbd5e1';
-    const textColors=['#0f172a','#008578','#dc2626','#2563eb','#d97706','#7c3aed'];
-    const bgColors=['#fef3c7','#dcfce7','#dbeafe','#fce7f3','#ede9fe','#f1f5f9'];
     const fontSizes=[11,12,13,14,15,16,18,20,22,24,28];
     return `<div class="v4-line is-table" data-v4-tbl-line="${i}"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-tlbl" style="font-weight:700;color:var(--teal)">📊 Генератор таблиц (${rCount}×${cCount})</span>${blockBar(i,curBg)}<span class="v4-s"></span>${lineActionBtns(i,'Удалить таблицу')}</div>
-      <div class="v4-table-gen-bar">
-        <label style="display:inline-flex;align-items:center;gap:4px;font-weight:700">Строк: <input type="number" min="1" max="30" value="${rCount}" id="v4-tbl-rows-${i}" style="width:58px;height:30px;padding:0 6px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)"></label>
-        <label style="display:inline-flex;align-items:center;gap:4px;font-weight:700">Столбцов: <input type="number" min="1" max="12" value="${cCount}" id="v4-tbl-cols-${i}" style="width:58px;height:30px;padding:0 6px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)"></label>
-        <button type="button" class="primary" data-v4="tbl-generate" data-i="${i}" style="min-height:30px;padding:0 10px;font-size:12px">Сгенерировать размер</button>
-        <button type="button" data-v4="tbl-add-row" data-i="${i}" style="min-height:30px;padding:0 8px;font-size:12px">+ Строка</button>
-        <button type="button" data-v4="tbl-del-row" data-i="${i}" style="min-height:30px;padding:0 8px;font-size:12px" ${rCount<=1?'disabled':''}>− Строка</button>
-        <button type="button" data-v4="tbl-add-col" data-i="${i}" style="min-height:30px;padding:0 8px;font-size:12px">+ Столбец</button>
-        <button type="button" data-v4="tbl-del-col" data-i="${i}" style="min-height:30px;padding:0 8px;font-size:12px" ${cCount<=1?'disabled':''}>− Столбец</button>
-        <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:700"><input type="checkbox" data-v4-tbl-header="${i}" ${tbl.hasHeader?'checked':''}> Выделить 1-ю строку как шапку</label>
-        <input type="text" data-v4-tbl-title="${i}" placeholder="Заголовок таблицы (необязательно)" value="${E(tbl.title)}" style="flex:1;min-width:190px;height:30px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink)">
+      <div class="v4-table-settings">
+        <section class="v4-table-settings-card"><div class="v4-table-settings-head"><span class="v4-table-settings-step">1</span>Структура и заголовок</div><div class="v4-table-settings-body">
+          <label style="display:inline-flex;align-items:center;gap:4px;font-weight:700">Строки <input type="number" min="1" max="30" value="${rCount}" id="v4-tbl-rows-${i}" style="width:54px"></label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-weight:700">Столбцы <input type="number" min="1" max="12" value="${cCount}" id="v4-tbl-cols-${i}" style="width:54px"></label>
+          <button type="button" class="primary" data-v4="tbl-generate" data-i="${i}">Применить размер</button>
+          <button type="button" data-v4="tbl-add-row" data-i="${i}">+ Строка</button><button type="button" data-v4="tbl-del-row" data-i="${i}" ${rCount<=1?'disabled':''}>− Строка</button>
+          <button type="button" data-v4="tbl-add-col" data-i="${i}">+ Столбец</button><button type="button" data-v4="tbl-del-col" data-i="${i}" ${cCount<=1?'disabled':''}>− Столбец</button>
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:700"><input type="checkbox" data-v4-tbl-header="${i}" ${tbl.hasHeader?'checked':''}> Первая строка — шапка</label>
+          <input type="text" data-v4-tbl-title="${i}" placeholder="Заголовок таблицы (необязательно)" value="${E(tbl.title)}">
+        </div></section>
+        <section class="v4-table-settings-card"><div class="v4-table-settings-head"><span class="v4-table-settings-step">2</span>Внешний вид таблицы</div><div class="v4-table-settings-body">
+          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},fontSize" title="Размер шрифта всей таблицы">${fontSizes.map(sz=>`<option value="${sz}" ${ts.fontSize===sz?'selected':''}>Шрифт ${sz}px</option>`).join('')}</select>
+          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},borderWidth" title="Толщина границ"><option value="0" ${ts.borderWidth==='0'?'selected':''}>Без границ</option><option value="1" ${ts.borderWidth==='1'?'selected':''}>Граница 1px</option><option value="2" ${ts.borderWidth==='2'?'selected':''}>Граница 2px</option><option value="3" ${ts.borderWidth==='3'?'selected':''}>Граница 3px</option></select>
+          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},borderStyle" title="Стиль границ"><option value="solid" ${ts.borderStyle==='solid'?'selected':''}>Сплошная</option><option value="dashed" ${ts.borderStyle==='dashed'?'selected':''}>Пунктир</option><option value="dotted" ${ts.borderStyle==='dotted'?'selected':''}>Точки</option></select>
+          <label style="display:inline-flex;align-items:center;gap:5px;font-weight:700">Цвет границ <input type="color" class="v4-tbl-color-pick" data-v4-tbl-tstyle="${i},borderColor" value="${E(tblBorderColor)}" title="Цвет границ"></label>
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:700"><input type="checkbox" data-v4-tbl-outer="${i}" ${ts.outerBorder!==false?'checked':''}> Внешняя рамка</label>
+        </div></section>
       </div>
-      <div class="v4-table-style-bar">
-        <div class="v4-tbl-style-group">
-          <span class="v4-tbl-style-label">Таблица:</span>
-          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},fontSize" title="Размер шрифта всей таблицы">
-            ${fontSizes.map(sz=>`<option value="${sz}" ${ts.fontSize===sz?'selected':''}>Шрифт ${sz}px</option>`).join('')}
-          </select>
-          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},borderWidth" title="Толщина границ таблицы и ячеек">
-            <option value="0" ${ts.borderWidth==='0'?'selected':''}>Без границ</option>
-            <option value="1" ${ts.borderWidth==='1'?'selected':''}>Граница 1px</option>
-            <option value="2" ${ts.borderWidth==='2'?'selected':''}>Граница 2px</option>
-            <option value="3" ${ts.borderWidth==='3'?'selected':''}>Граница 3px</option>
-          </select>
-          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},borderStyle" title="Стиль границ">
-            <option value="solid" ${ts.borderStyle==='solid'?'selected':''}>Сплошная</option>
-            <option value="dashed" ${ts.borderStyle==='dashed'?'selected':''}>Пунктир</option>
-            <option value="dotted" ${ts.borderStyle==='dotted'?'selected':''}>Точки</option>
-          </select>
-          <input type="color" class="v4-tbl-color-pick" data-v4-tbl-tstyle="${i},borderColor" value="${E(tblBorderColor)}" title="Цвет границ таблицы и ячеек">
-          ${ts.borderColor?`<button type="button" class="v4-tbl-mini-btn" data-v4="tbl-tstyle-reset" data-i="${i}" data-prop="borderColor" title="Сбросить цвет границ">✕</button>`:''}
-          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:600;margin-left:2px"><input type="checkbox" data-v4-tbl-outer="${i}" ${ts.outerBorder!==false?'checked':''}> Внешняя рамка</label>
-        </div>
-        <span class="v4-tbl-style-sep"></span>
-        <div class="v4-tbl-style-group">
-          <span class="v4-tbl-style-label" data-v4-tbl-active-lbl="${i}">Ячейка ${selR+1}:${selC+1}:</span>
-          <select class="v4-tbl-mini-select" data-v4-tbl-cstyle="${i},fontSize" title="Размер шрифта выбранной ячейки">
-            <option value="" ${!cellFontSize?'selected':''}>Шрифт: авто</option>
-            ${fontSizes.map(sz=>`<option value="${sz}" ${Number(cellFontSize)===sz?'selected':''}>${sz}px</option>`).join('')}
-          </select>
-          <button type="button" class="v4-tbl-mini-btn ${isCellBold?'active':''}" data-v4="tbl-cell-bold" data-i="${i}" title="Жирный текст в ячейке"><b>Ж</b></button>
-          <button type="button" class="v4-tbl-mini-btn ${isCellItalic?'active':''}" data-v4="tbl-cell-italic" data-i="${i}" title="Курсив в ячейке"><i>К</i></button>
-          <button type="button" class="v4-tbl-mini-btn ${cellAlign==='left'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="left" title="Выровнять по левому краю">⬅</button>
-          <button type="button" class="v4-tbl-mini-btn ${cellAlign==='center'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="center" title="По центру">⬌</button>
-          <button type="button" class="v4-tbl-mini-btn ${cellAlign==='right'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="right" title="По правому краю">➡</button>
-          <span class="v4-tbl-style-label" style="margin-left:3px">Текст:</span>
-          ${textColors.map(c=>`<button type="button" class="v4-tbl-color-dot" style="background:${c}" data-v4="tbl-cell-color" data-i="${i}" data-c="${c}" title="Цвет текста ${c}"></button>`).join('')}
-          <input type="color" class="v4-tbl-color-pick" data-v4-tbl-cstyle="${i},color" value="${E(cellTextColor)}" title="Свой цвет текста">
-          <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-color" data-i="${i}" data-c="" title="Сбросить цвет текста">✕</button>
-          <span class="v4-tbl-style-label" style="margin-left:3px">Заливка:</span>
-          ${bgColors.map(c=>`<button type="button" class="v4-tbl-color-dot" style="background:${c}" data-v4="tbl-cell-bg" data-i="${i}" data-c="${c}" title="Заливка ячейки ${c}"></button>`).join('')}
-          <input type="color" class="v4-tbl-color-pick" data-v4-tbl-cstyle="${i},bg" value="${E(cellBgColor)}" title="Своя заливка ячейки">
-          <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-bg" data-i="${i}" data-c="" title="Убрать заливку">✕</button>
-          <select class="v4-tbl-mini-select" data-v4-tbl-cell-gift="${i}" title="Вставить подарок из базы в выбранную ячейку" style="max-width:210px">
-            <option value="">🎁 Вставить подарок…</option>
-            ${(editorDraft.gifts||[]).map(g=>`<option value="${E(g.id)}" ${cellGiftId===g.id?'selected':''}>🎁 ${E(g.title||'Без названия')}${g.condition?' · '+E(g.condition):''}</option>`).join('')}
-          </select>
-          <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-apply-row" data-i="${i}" title="Применить стиль этой ячейки ко всей строке">На всю строку</button>
-          <button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-reset" data-i="${i}" title="Сбросить оформление ячейки">Сброс</button>
-        </div>
-      </div>
+      <section class="v4-table-cell-panel"><div class="v4-table-cell-head"><div><strong data-v4-tbl-active-lbl="${i}">3 · Оформление ячейки ${selR+1}:${selC+1}</strong><small> Выделите слова — изменится только выделение. Без выделения оформится весь текст ячейки.</small></div><small>Сначала нажмите на нужную ячейку</small></div>
+        <div class="v4-table-cell-toolbar"><button type="button" class="v4-tbl-mini-btn ${isCellBold?'active':''}" data-v4="tbl-cell-bold" data-i="${i}" title="Жирный"><b>Ж</b></button><button type="button" class="v4-tbl-mini-btn ${isCellItalic?'active':''}" data-v4="tbl-cell-italic" data-i="${i}" title="Курсив"><i>К</i></button><button type="button" class="v4-tbl-mini-btn" data-v4="tbl-rich-size" data-i="${i}" data-d="-2" title="Уменьшить текст">A−</button><button type="button" class="v4-tbl-mini-btn" data-v4="tbl-rich-size" data-i="${i}" data-d="2" title="Увеличить текст">A+</button><span class="v4-sep"></span>${tableFormatPalette(i,'Цвет текста','A','color',TXT.map(v=>[v,'Цвет текста']),cellTextColor)}${tableFormatPalette(i,'Маркер','▰','background',BG.filter(v=>v!=='none').map(v=>[v,'Цвет маркера']),cellMarkerColor)}${tableFormatPalette(i,'Фон ячейки','▣', 'cellBg',BLOCK_BG.filter(([v])=>v!=='none'),cellBgColor)}<button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-reset" data-i="${i}" title="Сбросить оформление ячейки">Сброс</button></div>
+        <details class="v4-tbl-advanced"><summary>Дополнительно: выравнивание, подарок и копирование стиля</summary><div class="v4-tbl-advanced-body"><span class="v4-tbl-style-label">Выравнивание:</span><button type="button" class="v4-tbl-mini-btn ${cellAlign==='left'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="left" title="По левому краю">⬅</button><button type="button" class="v4-tbl-mini-btn ${cellAlign==='center'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="center" title="По центру">⬌</button><button type="button" class="v4-tbl-mini-btn ${cellAlign==='right'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="right" title="По правому краю">➡</button><select class="v4-tbl-mini-select" data-v4-tbl-cell-gift="${i}" title="Вставить подарок из базы в выбранную ячейку" style="max-width:230px"><option value="">🎁 Вставить подарок…</option>${(editorDraft.gifts||[]).map(g=>`<option value="${E(g.id)}" ${cellGiftId===g.id?'selected':''}>🎁 ${E(g.title||'Без названия')}${g.condition?' · '+E(g.condition):''}</option>`).join('')}</select><button type="button" class="v4-tbl-mini-btn" data-v4="tbl-apply-row" data-i="${i}" title="Применить фон, выравнивание и размер к строке">На всю строку</button></div></details>
+      </section>
       <div class="script-table-block"${bStyle?` style="${bStyle}"`:''}>
         ${tbl.title.trim()?`<div class="script-table-title">📊 ${E(tbl.title)}</div>`:''}
         <div class="script-table-scroll">
@@ -7058,7 +7052,7 @@ lv.addEventListener('paste',e=>{
 lv.addEventListener('compositionend',e=>{
   if(e.target.matches('[data-v4-tbl-cell]'))e.target.dispatchEvent(new Event('input',{bubbles:true}));
 });
-function applyTableSelection(line,patch,toggleBold=false){
+function applyTableSelection(line,patch,toggleProp=''){
   const sel=tblTextSelection,pos=tblSelCell[line];
   if(!sel||sel.line!==line||!pos||sel.r!==pos.r||sel.c!==pos.c||sel.start>=sel.end)return false;
   const s=st(),key=`${sel.r},${sel.c}`;
@@ -7067,11 +7061,13 @@ function applyTableSelection(line,patch,toggleBold=false){
     if(typeof text!=='string'||sel.end>text.length)return;
     tbl.cellFormats=tbl.cellFormats||{};
     const fmt=LayoutModel.cleanFormat(tbl.cellFormats[key],text.length);
-    if(toggleBold){
+    if(toggleProp){
       const cs=tbl.cellStyles[key]||{};
       const inherited=typeof cs.bold==='boolean'?(cs.bold?700:400):(tbl.hasHeader&&sel.r===0?800:400);
       const active=Object.assign({},fmt.style,...fmt.ranges.filter(r=>r.start<=sel.start&&r.end>sel.start).map(r=>r.style));
-      patch={weight:(active.weight??inherited)>=700?400:700};
+      patch=toggleProp==='weight'
+        ?{weight:(active.weight??inherited)>=700?400:700}
+        :{[toggleProp]:!Boolean(active[toggleProp])};
     }
     tbl.cellFormats[key]=LayoutModel.applyFormat(fmt,text.length,sel.start,sel.end,patch);
     s.lines[line]=JSON.stringify(tbl);
@@ -7080,7 +7076,27 @@ function applyTableSelection(line,patch,toggleBold=false){
   if(field){field.focus({preventScroll:true});restoreTableSelection(field,sel.start,sel.end);tblTextSelection=sel;}
   return true;
 }
-lv.addEventListener('mousedown',e=>{if(e.target.closest('.v4-tools button,.v4-ins button'))e.preventDefault()});
+function applyTableRichFormat(line,patch,toggleProp=''){
+  if(applyTableSelection(line,patch,toggleProp))return true;
+  const s=st(),pos=tblSelCell[line]||{r:0,c:0},key=`${pos.r},${pos.c}`;
+  mutateDraft(()=>{
+    const tbl=parseScriptTableData(s.lines[line]),text=String(tbl.rows[pos.r]?.[pos.c]||'');
+    const fmt=LayoutModel.cleanFormat(tbl.cellFormats?.[key],text.length);
+    if(toggleProp){
+      const cs=tbl.cellStyles?.[key]||{};
+      const inherited=typeof cs.bold==='boolean'?(cs.bold?700:400):(tbl.hasHeader&&pos.r===0?800:400);
+      const active=Object.assign({},fmt.style);
+      patch=toggleProp==='weight'
+        ?{weight:(active.weight??inherited)>=700?400:700}
+        :{[toggleProp]:!Boolean(active[toggleProp])};
+    }
+    tbl.cellFormats=tbl.cellFormats||{};
+    tbl.cellFormats[key]=LayoutModel.applyFormat(fmt,text.length,0,text.length,patch);
+    s.lines[line]=JSON.stringify(tbl);
+  });
+  return true;
+}
+lv.addEventListener('mousedown',e=>{if(e.target.closest('.v4-tools button,.v4-ins button,.v4-table-cell-toolbar button,.v4-tbl-advanced button'))e.preventDefault()});
 lv.addEventListener('focusin',e=>{
   if(!start&&e.target.matches('[data-v4-rich-text],[data-v4-title],[data-v4-ob],[data-v4-gift],[data-v4-tbl-cell],[data-v4-tbl-title],[data-v4-img-caption],[data-v4-img-pct]'))start=historyState();
   if(e.target.matches('[data-v4-rich-text]'))rememberRichTextSelection(e.target);
@@ -7093,7 +7109,7 @@ lv.addEventListener('focusin',e=>{
       lineEl.querySelectorAll('.v4-tbl-cell-active').forEach(el=>el.classList.remove('v4-tbl-cell-active'));
       e.target.closest('th,td')?.classList.add('v4-tbl-cell-active');
       const lbl=lineEl.querySelector('[data-v4-tbl-active-lbl]');
-      if(lbl)lbl.textContent=`Ячейка ${ri+1}:${ci+1}:`;
+      if(lbl)lbl.textContent=`3 · Оформление ячейки ${ri+1}:${ci+1}`;
       const s=st();
       if(s){
         const tbl=parseScriptTableData(s.lines[li]);
@@ -7235,6 +7251,15 @@ lv.addEventListener('toggle',e=>{
   lv.querySelectorAll('.v4-color-menu[open]').forEach(other=>{if(other!==menu)other.removeAttribute('open')});
 },true);
 lv.addEventListener('change',async e=>{const f=e.target,s=st();
+  if(f.matches('[data-v4-tbl-custom-color]')){
+    const idx=Number(f.dataset.i),prop=f.dataset.v4TblCustomColor,color=f.value;
+    if(prop==='cellBg'){
+      const pos=tblSelCell[idx]||{r:0,c:0},key=`${pos.r},${pos.c}`;
+      mutateDraft(()=>{const tbl=parseScriptTableData(s.lines[idx]);tbl.cellStyles=tbl.cellStyles||{};tbl.cellStyles[key]={...(tbl.cellStyles[key]||{}),bg:color};s.lines[idx]=JSON.stringify(tbl);});
+    }else applyTableRichFormat(idx,{[prop]:color});
+    f.closest('.v4-color-menu')?.removeAttribute('open');
+    return;
+  }
   if(f.matches('[data-v4-custom-color]')){
     const color=f.value;
     const target=f.dataset.v4CustomTarget;
@@ -7470,8 +7495,10 @@ lv.addEventListener('click',async e=>{
     case 'tbl-add-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols<12){tbl.rows.forEach((r,ri)=>r.push(ri===0?`Столбец ${cols+1}`:''));s.lines[i]=JSON.stringify(tbl);}});return;
     case 'tbl-del-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols>1){tbl.rows.forEach(r=>r.pop());s.lines[i]=JSON.stringify(tbl);}});return;
     case 'tbl-tstyle-reset':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const prop=b.dataset.prop;if(prop==='borderColor')tbl.tableStyle.borderColor='';s.lines[i]=JSON.stringify(tbl);});return;
-    case 'tbl-cell-bold':{if(applyTableSelection(i,{},true))return;const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};const nowBold=typeof cur.bold==='boolean'?cur.bold:(tbl.hasHeader&&pos.r===0);cur.bold=!nowBold;tbl.cellStyles[key]=cur;s.lines[i]=JSON.stringify(tbl);});return;}
-    case 'tbl-cell-italic':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`;M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(cur.italic)delete cur.italic;else cur.italic=true;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
+    case 'tbl-cell-bold':applyTableRichFormat(i,{},'weight');return;
+    case 'tbl-cell-italic':applyTableRichFormat(i,{},'italic');return;
+    case 'tbl-rich-format':applyTableRichFormat(i,JSON.parse(b.dataset.p));return;
+    case 'tbl-rich-size':{const style=(()=>{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,tbl=parseScriptTableData(s.lines[i]),fmt=LayoutModel.cleanFormat(tbl.cellFormats?.[key],String(tbl.rows[pos.r]?.[pos.c]||'').length);const selection=tblTextSelection?.line===i&&tblTextSelection.r===pos.r&&tblTextSelection.c===pos.c?tblTextSelection:null;return Object.assign({},fmt.style,...(selection?fmt.ranges.filter(r=>r.start<=selection.start&&r.end>selection.start).map(r=>r.style):[]));})();applyTableRichFormat(i,{size:Math.max(11,Math.min(36,(style.size||data.settings.fontSize||14)+Number(b.dataset.d)))});return;}
     case 'tbl-cell-align':{const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,val=b.dataset.val||'left';M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};cur.align=val;tbl.cellStyles[key]=cur;s.lines[i]=JSON.stringify(tbl);});return;}
     case 'tbl-cell-color':{if(applyTableSelection(i,{color:sanitizeTableColor(b.dataset.c)||'auto'}))return;const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,clr=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(clr)cur.color=clr;else delete cur.color;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
     case 'tbl-cell-bg':{if(applyTableSelection(i,{background:sanitizeTableColor(b.dataset.c)||'none'}))return;const pos=tblSelCell[i]||{r:0,c:0},key=`${pos.r},${pos.c}`,bg=sanitizeTableColor(b.dataset.c);M(()=>{const tbl=parseScriptTableData(s.lines[i]);tbl.cellStyles=tbl.cellStyles||{};const cur=tbl.cellStyles[key]||{};if(bg)cur.bg=bg;else delete cur.bg;if(Object.keys(cur).length)tbl.cellStyles[key]=cur;else delete tbl.cellStyles[key];s.lines[i]=JSON.stringify(tbl);});return;}
