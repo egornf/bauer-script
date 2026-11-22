@@ -637,7 +637,14 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-empty{color:var(--muted);font-style:italic}
 .v4-tools{display:flex;gap:5px;flex-wrap:wrap;align-items:center;padding:8px 10px;background:var(--surface-alt);border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
 .v4-tools button{min-height:32px;min-width:32px;padding:0 9px;font-size:13px}
-.v4-tools .v4-sw{width:26px;min-width:26px;height:26px;min-height:26px;padding:0;border-radius:50%;border:2px solid var(--line);font-weight:800;font-size:12px}
+.v4-color-menu{position:relative;display:inline-block}
+.v4-color-menu summary{list-style:none;display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font-size:12px;font-weight:750;cursor:pointer;user-select:none}
+.v4-color-menu summary::-webkit-details-marker{display:none}
+.v4-color-menu[open] summary{border-color:var(--teal);box-shadow:0 0 0 2px color-mix(in srgb,var(--teal) 18%,transparent)}
+.v4-color-palette{position:absolute;z-index:30;top:calc(100% + 7px);left:0;display:grid;grid-template-columns:repeat(4,30px);gap:7px;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 28px rgba(8,36,48,.22)}
+.v4-color-choice{width:30px!important;min-width:30px!important;height:30px!important;min-height:30px!important;padding:0!important;border:2px solid color-mix(in srgb,var(--ink) 20%,transparent)!important;border-radius:7px!important;font-size:13px!important;font-weight:800!important}
+.v4-color-choice:hover,.v4-color-choice.active{border-color:var(--teal)!important;transform:scale(1.08)}
+.v4-color-choice.is-clear{background:var(--surface-alt)!important;color:var(--muted)}
 .v4-tlbl{font-size:11px;font-weight:700;color:var(--muted);margin:0 2px}
 .v4-bbar{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--surface)}
 .v4-bbar>span{font-size:11px;font-weight:700;color:var(--muted);margin-right:2px}
@@ -2490,6 +2497,7 @@ function cleanStyle(value={}){
   const style={};
   if([400,500,600,700,800].includes(value?.weight))style.weight=value.weight;
   if(Number.isInteger(value?.size)&&value.size>=12&&value.size<=36)style.size=value.size;
+  if(value?.italic===true||value?.italic===false)style.italic=value.italic;
   if(colorValue(value?.color)||value?.color==='auto')style.color=value.color;
   if(colorValue(value?.background)||value?.background==='none')style.background=value.background;
   if(colorValue(value?.blockBg)||value?.blockBg==='none')style.blockBg=value.blockBg;
@@ -2542,6 +2550,7 @@ function blockCSS(format){
 function formatCSS(style){
   const s=cleanStyle(style),parts=[];
   if(s.weight)parts.push(`font-weight:${s.weight}`);
+  if(s.italic===true)parts.push('font-style:italic');
   if(s.size)parts.push(`font-size:${s.size}px`);
   const hasBg=colorValue(s.background);
   const hasColor=colorValue(s.color);
@@ -2595,7 +2604,7 @@ function applyFormat(format,length,start,end,patch,reset=false){
   const f=cleanFormat(format,length),style=cleanStyle(patch);
   if(style.blockBg!==undefined){f.style.blockBg=style.blockBg;return cleanFormat(f,length);}
   if(start===end){if(reset)return {style:{},ranges:[]};f.style={...f.style,...style};f.ranges=f.ranges.map(r=>({...r,style:Object.fromEntries(Object.entries(r.style).filter(([key])=>!Object.hasOwn(style,key)))}));return f;}
-  if(reset){f.ranges.push({start,end,style:{weight:400,size:18,color:'auto',background:'none'}});}else f.ranges.push({start,end,style});
+  if(reset){f.ranges.push({start,end,style:{weight:400,italic:false,size:18,color:'auto',background:'none'}});}else f.ranges.push({start,end,style});
   return cleanFormat(f,length);
 }
 function editTextFormat(format,before,after){
@@ -6550,8 +6559,23 @@ const fmtNow=()=>{if(edit?.t==='gift')return giftNow()?.scriptFormat||LayoutMode
 const txtNow=()=>{if(edit?.t==='gift')return giftNow()?.script||'';if(edit?.t==='direction')return dirNow()?.script||'';const s=st();return edit.t==='tip'?s.tip:s.lines[edit.i]};
 function blockBar(i,curBg){
   const norm=curBg||'';
-  const hex=/^#[0-9a-f]{6}$/i.test(norm)?norm:'#e2f3ef';
-  return `<div class="v4-bbar" title="Заливка самого блока"><span class="v4-tlbl">Фон блока:</span>${BLOCK_BG.map(([c,lbl])=>{const isAct=(c==='none'&&(!norm||norm==='none'))||(c!=='none'&&norm.toLowerCase()===c);const swCss=c==='none'?'background:var(--surface-alt)':LayoutModel.blockCSS({style:{blockBg:c}});return `<button type="button" class="v4-bsw ${isAct?'active on':''}" data-v4="blockbg" data-i="${i}" data-c="${c}" title="Заливка блока: ${lbl}" style="${swCss}">${c==='none'?'✕':''}</button>`;}).join('')}<label class="v4-bcustom" title="Выбрать свой цвет заливки блока">🎨<input type="color" data-v4-blockcolor="${i}" value="${hex}"></label></div>`;
+  return `<div class="v4-bbar" title="Заливка самого блока"><span class="v4-tlbl">Фон блока:</span>${blockPalette(i,norm)}</div>`;
+}
+function paletteChoice(prop,value,label,active=false,index=null){
+  const isClear=value==='auto'||value==='none';
+  const style=prop==='blockBg'
+    ?(isClear?'background:var(--surface-alt)':LayoutModel.blockCSS({style:{blockBg:value}}))
+    :(prop==='color'?(isClear?'background:var(--surface-alt);color:var(--ink)':`background:${value};color:${value}`):(isClear?'background:var(--surface-alt)':`background:${value}`));
+  const attrs=prop==='blockBg'
+    ?`data-v4="blockbg" data-i="${index}" data-c="${value}"`
+    :`data-v4="fmt" data-p='${JSON.stringify({[prop]:value})}'`;
+  return `<button type="button" class="v4-color-choice ${isClear?'is-clear':''} ${active?'active':''}" ${attrs} title="${E(label)}" style="${style}">${isClear?'✕':' '}</button>`;
+}
+function formatPalette(label,prop,items,current=''){
+  return `<details class="v4-color-menu"><summary title="${E(label)}">${E(label)} <span aria-hidden="true">▾</span></summary><div class="v4-color-palette">${items.map(([value,name])=>paletteChoice(prop,value,name,current===value)).join('')}</div></details>`;
+}
+function blockPalette(index,current=''){
+  return `<details class="v4-color-menu"><summary title="Фон карточки">🎨 Фон <span aria-hidden="true">▾</span></summary><div class="v4-color-palette">${BLOCK_BG.map(([value,name])=>paletteChoice('blockBg',value,name,current===value,index)).join('')}</div></details>`;
 }
 
 function renderPickerOptions(i,curGiftId,queryStr){
@@ -6763,18 +6787,10 @@ function lineBlock(s,i){
 }
 const view=(t,i,text,f)=>{const bs=t==='line'?LayoutModel.blockCSS(f):'';return `<p class="line v4-click" data-v4="edit" data-t="${t}" data-i="${i}" tabindex="0"${bs?` style="${bs}"`:''} title="Нажмите, чтобы изменить">${text.trim()?fillPlanHtml(fillVenueHtml(LayoutModel.renderText(text,f))):'<span class="v4-empty">Пусто. Нажмите, чтобы написать</span>'}</p>`;};
 function editBox(text,f){
-  const sw=(k,v)=>{
-    if(k==='color'){
-      const cCss=v==='auto'?'color:inherit;border-color:var(--line)':`${LayoutModel.formatCSS({color:v})};border-color:var(--t-fg)`;
-      return `<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({[k]:v})}' title="Цвет текста" style="${cCss}">A</button>`;
-    }
-    const mCss=v==='none'?'background:transparent':LayoutModel.formatCSS({background:v});
-    return `<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({[k]:v})}' title="Выделение текста маркером" style="${mCss}">${v==='none'?'✕':''}</button>`;
-  };
-  const bsw=([v,lbl])=>`<button class="v4-sw" data-v4="fmt" data-p='${JSON.stringify({blockBg:v})}' title="Заливка самого блока: ${lbl}" style="${v==='none'?'background:var(--surface-alt)':LayoutModel.blockCSS({style:{blockBg:v}})}">${v==='none'?'✕':''}</button>`;
+  const currentStyle=Object.assign({},f?.style,...(f?.ranges||[]).filter(r=>r.start<=sel.s&&r.end>=sel.e).map(r=>r.style));
   const bs=edit?.t==='tip'?'':LayoutModel.blockCSS(f);
   const insVars=['адрес','дата','время','день_недели','дата_время'];
-  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" title="Жирный"><b>Ж</b></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Текст:</span>${TXT.map(v=>sw('color',v)).join('')}<span class="v4-sep"></span><span class="v4-tlbl">Маркер:</span>${BG.map(v=>sw('background',v)).join('')}${edit?.t==='tip'?'':`<span class="v4-sep"></span><span class="v4-tlbl">Блок:</span>${BLOCK_BG.map(bsw).join('')}`}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><div class="line v4-inline-edit" contenteditable="true" role="textbox" aria-multiline="true" data-v4-rich-text data-placeholder="Нажмите и напишите текст…"${bs?` style="${bs}"`:''}>${LayoutModel.renderText(text,f)}</div>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="v4-hint">Меняйте текст прямо в карточке. Выделите слова и нажмите кнопку — оформится выделенное. «Блок» меняет заливку всей карточки реплики.</p></div>`;
+  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" class="${(currentStyle.weight||400)>=700?'active':''}" title="Жирный"><b>Ж</b></button><button data-v4="italic" class="${currentStyle.italic?'active':''}" title="Курсив"><i>К</i></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span>${formatPalette('Цвет текста','color',[['auto','Авто'],...TXT.filter(v=>v!=='auto').map(v=>[v,'Цвет текста'])],currentStyle.color||'auto')}${formatPalette('Маркер','background',BG.map(v=>[v,v==='none'?'Без выделения':'Цвет маркера']),currentStyle.background||'none')}${edit?.t==='tip'?'':formatPalette('Фон блока','blockBg',BLOCK_BG,currentStyle.blockBg||'')}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><div class="line v4-inline-edit" contenteditable="true" role="textbox" aria-multiline="true" data-v4-rich-text data-placeholder="Нажмите и напишите текст…"${bs?` style="${bs}"`:''}>${LayoutModel.renderText(text,f)}</div>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="v4-hint">Меняйте текст прямо в карточке. Выделите слова и выберите оформление. «Фон блока» меняет заливку всей карточки реплики.</p></div>`;
 }
 function stageTab(s){
   const isOperator=currentUser&&currentUser.role==='OPERATOR';
@@ -7389,6 +7405,7 @@ lv.addEventListener('click',async e=>{
     case 'edit-dir-script':edit={t:'direction',id};sel={s:1e9,e:1e9};highlightDirId=id;renderLayouts();return;
     case 'done':edit=null;renderLayouts();return;
     case 'bold':fmt({weight:(curStyle('weight')||400)>=700?400:700});return;
+    case 'italic':fmt({italic:!curStyle('italic')});return;
     case 'size':fmt({size:Math.max(12,Math.min(36,(curStyle('size')||data.settings.fontSize||18)+Number(b.dataset.d)))});return;
     case 'fmt':fmt(JSON.parse(b.dataset.p));return;
     case 'fmtreset':fmt({},true);return;
