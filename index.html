@@ -2203,7 +2203,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   margin-bottom: 10px;
   font-size: 12.5px;
 }
-.v4-table-settings{display:grid;grid-template-columns:minmax(310px,1.15fr) minmax(290px,1fr);gap:10px;margin-bottom:10px}
+.v4-table-settings{display:block;margin-bottom:10px}
 .v4-table-settings-card{padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface-alt)}
 .v4-table-settings-head{display:flex;align-items:center;gap:7px;margin-bottom:9px;font-size:13px;font-weight:850;color:var(--ink)}
 .v4-table-settings-step{display:inline-grid;place-items:center;width:21px;height:21px;border-radius:50%;background:var(--teal);color:#fff;font-size:11px}
@@ -2217,7 +2217,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-tbl-advanced{margin:0 12px 11px;border-top:1px solid color-mix(in srgb,var(--teal) 16%,var(--line))}
 .v4-tbl-advanced summary{padding:9px 0 0;font-size:12px;font-weight:800;color:var(--teal);cursor:pointer}
 .v4-tbl-advanced-body{display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:9px 0 0}
-@media(max-width:760px){.v4-table-settings{grid-template-columns:1fr}.v4-table-cell-head{align-items:flex-start;flex-direction:column}.v4-table-settings-body>input{flex-basis:100%}}
+@media(max-width:760px){.v4-table-cell-head{align-items:flex-start;flex-direction:column}.v4-table-settings-body>input{flex-basis:100%}}
 .v4-tbl-cell-input {
   width: 100%;
   min-width: 90px;
@@ -3668,7 +3668,7 @@ function createDefaultTableJson(rowsCount=3,colsCount=3){
     title:'',
     hasHeader:true,
     rows,
-    tableStyle:{fontSize:14,borderWidth:'1',borderStyle:'solid',borderColor:'',outerBorder:true,cellAlign:'left'},
+    tableStyle:{fontSize:14,borderWidth:'3',borderStyle:'solid',borderColor:'#000000',outerBorder:true,cellAlign:'left'},
     cellStyles:{},
     cellGifts:{}
   });
@@ -3691,11 +3691,11 @@ function parseScriptTableData(rawStr){
       });
       const ts=obj.tableStyle&&typeof obj.tableStyle==='object'?obj.tableStyle:{};
       const tableStyle={
-        fontSize:Math.max(11,Math.min(28,Number(ts.fontSize)||14)),
-        borderWidth:['0','1','2','3'].includes(String(ts.borderWidth))?String(ts.borderWidth):'1',
-        borderStyle:['solid','dashed','dotted'].includes(ts.borderStyle)?ts.borderStyle:'solid',
-        borderColor:sanitizeTableColor(ts.borderColor),
-        outerBorder:ts.outerBorder!==false,
+        fontSize:14,
+        borderWidth:'3',
+        borderStyle:'solid',
+        borderColor:'#000000',
+        outerBorder:true,
         cellAlign:['left','center','right'].includes(ts.cellAlign)?ts.cellAlign:'left'
       };
       const cellStyles={};
@@ -3738,13 +3738,10 @@ function parseScriptTableData(rawStr){
   return JSON.parse(createDefaultTableJson(3,3));
 }
 function getScriptTableStyles(tbl){
-  const ts=tbl.tableStyle||{fontSize:14,borderWidth:'1',borderStyle:'solid',borderColor:'',outerBorder:true,cellAlign:'left'};
-  const bw=Number(ts.borderWidth??1);
-  const bc=ts.borderColor||'var(--line)';
-  const bs=ts.borderStyle||'solid';
-  const cellBorderCss=bw<=0?'border:none;':`border:${bw}px ${bs} ${bc};`;
-  const tableBorderCss=bw<=0||ts.outerBorder===false?'border:none;':`border:${bw}px ${bs} ${bc};`;
-  const tableCss=`font-size:${ts.fontSize||14}px;${tableBorderCss}`;
+  const ts={fontSize:14,borderWidth:'3',borderStyle:'solid',borderColor:'#000000',outerBorder:true,cellAlign:tbl.tableStyle?.cellAlign||'left'};
+  const cellBorderCss='border:3px solid #000000;';
+  const tableBorderCss='border:3px solid #000000;';
+  const tableCss=`font-size:14px;${tableBorderCss}`;
   const getCellCss=(rIdx,cIdx,isHeader=false)=>{
     const cs=(tbl.cellStyles&&tbl.cellStyles[`${rIdx},${cIdx}`])||{};
     let css=cellBorderCss;
@@ -6693,8 +6690,6 @@ function lineBlock(s,i){
     const cellTextColor=activeTextStyle.color||'auto';
     const cellMarkerColor=activeTextStyle.background||'none';
     const cellGiftId=(tbl.cellGifts&&tbl.cellGifts[`${selR},${selC}`])||'';
-    const tblBorderColor=ts.borderColor||'#cbd5e1';
-    const fontSizes=[11,12,13,14,15,16,18,20,22,24,28];
     return `<div class="v4-line is-table" data-v4-tbl-line="${i}"><div class="v4-meta"><select data-v4-kind="${i}" aria-label="Тип реплики">${Object.entries(KINDS).map(([k,l])=>`<option value="${k}" ${k===kind?'selected':''}>${l}</option>`).join('')}</select><span class="v4-tlbl" style="font-weight:700;color:var(--teal)">📊 Генератор таблиц (${rCount}×${cCount})</span>${blockBar(i,curBg)}<span class="v4-s"></span>${lineActionBtns(i,'Удалить таблицу')}</div>
       <div class="v4-table-settings">
         <section class="v4-table-settings-card"><div class="v4-table-settings-head"><span class="v4-table-settings-step">1</span>Структура и заголовок</div><div class="v4-table-settings-body">
@@ -6705,13 +6700,6 @@ function lineBlock(s,i){
           <button type="button" data-v4="tbl-add-col" data-i="${i}">+ Столбец</button><button type="button" data-v4="tbl-del-col" data-i="${i}" ${cCount<=1?'disabled':''}>− Столбец</button>
           <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:700"><input type="checkbox" data-v4-tbl-header="${i}" ${tbl.hasHeader?'checked':''}> Первая строка — шапка</label>
           <input type="text" data-v4-tbl-title="${i}" placeholder="Заголовок таблицы (необязательно)" value="${E(tbl.title)}">
-        </div></section>
-        <section class="v4-table-settings-card"><div class="v4-table-settings-head"><span class="v4-table-settings-step">2</span>Внешний вид таблицы</div><div class="v4-table-settings-body">
-          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},fontSize" title="Размер шрифта всей таблицы">${fontSizes.map(sz=>`<option value="${sz}" ${ts.fontSize===sz?'selected':''}>Шрифт ${sz}px</option>`).join('')}</select>
-          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},borderWidth" title="Толщина границ"><option value="0" ${ts.borderWidth==='0'?'selected':''}>Без границ</option><option value="1" ${ts.borderWidth==='1'?'selected':''}>Граница 1px</option><option value="2" ${ts.borderWidth==='2'?'selected':''}>Граница 2px</option><option value="3" ${ts.borderWidth==='3'?'selected':''}>Граница 3px</option></select>
-          <select class="v4-tbl-mini-select" data-v4-tbl-tstyle="${i},borderStyle" title="Стиль границ"><option value="solid" ${ts.borderStyle==='solid'?'selected':''}>Сплошная</option><option value="dashed" ${ts.borderStyle==='dashed'?'selected':''}>Пунктир</option><option value="dotted" ${ts.borderStyle==='dotted'?'selected':''}>Точки</option></select>
-          <label style="display:inline-flex;align-items:center;gap:5px;font-weight:700">Цвет границ <input type="color" class="v4-tbl-color-pick" data-v4-tbl-tstyle="${i},borderColor" value="${E(tblBorderColor)}" title="Цвет границ"></label>
-          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-weight:700"><input type="checkbox" data-v4-tbl-outer="${i}" ${ts.outerBorder!==false?'checked':''}> Внешняя рамка</label>
         </div></section>
       </div>
       <section class="v4-table-cell-panel"><div class="v4-table-cell-head"><div><strong data-v4-tbl-active-lbl="${i}">3 · Оформление ячейки ${selR+1}:${selC+1}</strong><small> Выделите слова — изменится только выделение. Без выделения оформится весь текст ячейки.</small></div><small>Сначала нажмите на нужную ячейку</small></div>
