@@ -2686,7 +2686,7 @@ function upgrade(value){
     const rawKinds=(stage.lines||[]).map((l,n)=>
       !stage.guestGiftVersion&&stage.showGifts&&/термос/iu.test(l)?'gift-plus-one':
       !stage.guestGiftVersion&&stage.showGifts&&/вафельниц/iu.test(l)?'gift-plus-two':
-      ['speech','gift','gift-plus-one','gift-plus-two','address','schedule','table','image','trainer-line','trainer-tip'].includes(stage.lineKinds?.[n])?stage.lineKinds[n]:
+      ['speech','gift','gift-plus-one','gift-plus-two','address','schedule','table','image','direction','trainer-line','trainer-tip'].includes(stage.lineKinds?.[n])?stage.lineKinds[n]:
       (/ЭТО СПЕЦИАЛЬНЫЙ ПОДАРОК-СЮРПРИЗ|^Руководство подготовило для вас особенный подарок/iu.test(l.trim())?'gift':'speech')
     );
     const lines=[],lineKinds=[],lineFormats=[],lineGifts=[],lineTrainerMeta=[];
@@ -2727,6 +2727,9 @@ function upgrade(value){
         lines.push('');lineKinds.push('gift');lineFormats.push(cleanFormat(null,0));lineGifts.push(gid);lineTrainerMeta.push(null);
       }else if(k==='schedule'){
         lines.push('');lineKinds.push('schedule');lineFormats.push(cleanFormat(stage.lineFormats?.[n],0));lineGifts.push('');lineTrainerMeta.push(null);
+      }else if(k==='direction'){
+        // Направление — это ссылка на общую базу. Не превращаем её в обычную речь при обновлении страницы.
+        lines.push(l);lineKinds.push('direction');lineFormats.push(fmt);lineGifts.push(gid);lineTrainerMeta.push(null);
       }else if(k==='table'||k==='image'){
         lines.push(l);lineKinds.push(k);lineFormats.push(fmt);lineGifts.push('');lineTrainerMeta.push(null);
       }else if(k==='trainer-line'||k==='trainer-tip'){
