@@ -3676,6 +3676,7 @@ function createDefaultTableJson(rowsCount=3,colsCount=3){
     hasHeader:true,
     rows,
     tableStyle:{fontSize:14,borderWidth:'3',borderStyle:'solid',borderColor:'#000000',outerBorder:true,cellAlign:'left'},
+    columnWidths:Array.from({length:c},()=>100/c),
     cellStyles:{},
     cellGifts:{}
   });
@@ -3685,6 +3686,18 @@ function sanitizeTableColor(val){
   if(!s)return '';
   if(/^#[0-9a-fA-F]{3,8}$/.test(s)||/^rgba?\([^)]+\)$/.test(s))return s;
   return '';
+}
+function normalizeTableColumnWidths(value,cols){
+  const count=Math.max(1,Number(cols)||1),minimum=Math.min(12,Math.max(5,(100/count)*.45));
+  let widths=Array.isArray(value)&&value.length===count?value.map(Number):[];
+  if(!widths.length||widths.some(width=>!Number.isFinite(width)||width<=0))widths=Array.from({length:count},()=>100/count);
+  const total=widths.reduce((sum,width)=>sum+width,0)||1;
+  widths=widths.map(width=>Math.max(0,(width/total)*100));
+  const extra=widths.map(width=>Math.max(0,width-minimum));
+  const extraTotal=extra.reduce((sum,width)=>sum+width,0);
+  if(extraTotal<=0)return Array.from({length:count},()=>Number((100/count).toFixed(3)));
+  const available=100-minimum*count;
+  return extra.map(width=>Number((minimum+(width/extraTotal)*available).toFixed(3)));
 }
 function parseScriptTableData(rawStr){
   try{
@@ -3705,6 +3718,7 @@ function parseScriptTableData(rawStr){
         outerBorder:true,
         cellAlign:['left','center','right','justify'].includes(ts.cellAlign)?ts.cellAlign:'left'
       };
+      const columnWidths=normalizeTableColumnWidths(obj.columnWidths,cols);
       const cellStyles={};
       if(obj.cellStyles&&typeof obj.cellStyles==='object'){
         for(const [k,v] of Object.entries(obj.cellStyles)){
@@ -3739,7 +3753,7 @@ function parseScriptTableData(rawStr){
           if(r<rows.length&&c<cols)cellFormats[key]=LayoutModel.cleanFormat(format,rows[r][c].length);
         }
       }
-      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows,tableStyle,cellStyles,cellGifts,cellFormats};
+      return {title:String(obj.title||''),hasHeader:obj.hasHeader!==false,rows,tableStyle,columnWidths,cellStyles,cellGifts,cellFormats};
     }
   }catch{}
   return JSON.parse(createDefaultTableJson(3,3));
@@ -3748,6 +3762,8 @@ function moveScriptTableColumn(tbl,from,to){
   const cols=tbl?.rows?.[0]?.length||0;
   if(!Number.isInteger(from)||!Number.isInteger(to)||from<0||to<0||from>=cols||to>=cols||from===to)return false;
   tbl.rows.forEach(row=>{const [cell]=row.splice(from,1);row.splice(to,0,cell);});
+  const widths=normalizeTableColumnWidths(tbl.columnWidths,cols);
+  const [width]=widths.splice(from,1);widths.splice(to,0,width);tbl.columnWidths=widths;
   const remap=source=>{
     const next={};
     for(const [key,value] of Object.entries(source||{})){
@@ -3767,7 +3783,7 @@ function getScriptTableStyles(tbl){
   const ts={fontSize:14,borderWidth:'3',borderStyle:'solid',borderColor:'#000000',outerBorder:true,cellAlign:tbl.tableStyle?.cellAlign||'left'};
   const cellBorderCss='border:3px solid #000000;';
   const tableBorderCss='border:3px solid #000000;';
-  const tableCss=`font-size:14px;${tableBorderCss}`;
+  const tableCss=`width:100%;table-layout:fixed;font-size:14px;${tableBorderCss}`;
   const getCellCss=(rIdx,cIdx,isHeader=false)=>{
     const cs=(tbl.cellStyles&&tbl.cellStyles[`${rIdx},${cIdx}`])||{};
     let css=cellBorderCss;
@@ -3802,7 +3818,7 @@ function renderScriptTableBlock(rawStr,bCss='',gifts=data.gifts,readonly=false){
   const {tableCss,getCellCss}=getScriptTableStyles(tbl);
   const headRow=tbl.hasHeader?tbl.rows[0]:null;
   const bodyRows=tbl.hasHeader?tbl.rows.slice(1):tbl.rows;
-  return `<div class="line script-table-block"${bCss?` style="${bCss}"`:''}>${tbl.title.trim()?`<div class="script-table-title">📊 ${escapeHTML(tbl.title)}</div>`:''}<div class="script-table-scroll"><table class="script-inline-table" style="${tableCss}">${headRow?`<thead><tr>${headRow.map((cell,cIdx)=>`<th style="${getCellCss(0,cIdx,true)}">${renderScriptTableCellContent(cell,0,cIdx,tbl,gifts,readonly)}</th>`).join('')}</tr></thead>`:''}<tbody>${bodyRows.map((row,bIdx)=>{const rIdx=tbl.hasHeader?bIdx+1:bIdx;return `<tr>${row.map((cell,cIdx)=>`<td style="${getCellCss(rIdx,cIdx,false)}">${renderScriptTableCellContent(cell,rIdx,cIdx,tbl,gifts,readonly)}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div></div>`;
+  return `<div class="line script-table-block"${bCss?` style="${bCss}"`:''}>${tbl.title.trim()?`<div class="script-table-title">📊 ${escapeHTML(tbl.title)}</div>`:''}<div class="script-table-scroll"><table class="script-inline-table" style="${tableCss}"><colgroup>${tbl.columnWidths.map(width=>`<col style="width:${width}%">`).join('')}</colgroup>${headRow?`<thead><tr>${headRow.map((cell,cIdx)=>`<th style="${getCellCss(0,cIdx,true)}">${renderScriptTableCellContent(cell,0,cIdx,tbl,gifts,readonly)}</th>`).join('')}</tr></thead>`:''}<tbody>${bodyRows.map((row,bIdx)=>{const rIdx=tbl.hasHeader?bIdx+1:bIdx;return `<tr>${row.map((cell,cIdx)=>`<td style="${getCellCss(rIdx,cIdx,false)}">${renderScriptTableCellContent(cell,rIdx,cIdx,tbl,gifts,readonly)}</td>`).join('')}</tr>`;}).join('')}</tbody></table></div></div>`;
 }
 function parseScriptImageData(rawStr){
   try{
@@ -6590,6 +6606,13 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 .v4-tbl-col-drag:hover{border-color:var(--teal);color:var(--teal)}
 .v4-tbl-col-drag:active,.v4-tbl-col-dragging{cursor:grabbing;opacity:.55}
 [data-v4-tbl-col-target].v4-tbl-col-drop{box-shadow:inset 4px 0 0 var(--teal);background:color-mix(in srgb,var(--teal) 10%,var(--surface))}
+.v4-align-btn{display:inline-grid !important;place-items:center;min-width:36px;padding:0 !important}
+.v4-align-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+[data-v4-tbl-col-target]{position:relative}
+.v4-tbl-col-resize{position:absolute;z-index:12;top:-1px;right:-6px;bottom:-1px;width:12px;cursor:col-resize;touch-action:none}
+.v4-tbl-col-resize::after{content:'';position:absolute;top:0;bottom:0;left:5px;width:2px;border-radius:2px;background:transparent;transition:background .14s ease}
+.v4-tbl-col-resize:hover::after,.v4-tbl-col-resize.is-resizing::after{background:var(--teal)}
+body.v4-table-resizing,body.v4-table-resizing *{cursor:col-resize !important;user-select:none !important}
 .v4-tbl-drag-hint{margin:8px 2px 0;color:var(--muted);font-size:12px;font-weight:650}
 #scroll-top{position:fixed;right:22px;bottom:22px;z-index:250;width:46px;height:46px;border:0;border-radius:50%;background:#123753;color:#fff;font-size:25px;font-weight:850;line-height:1;box-shadow:0 6px 18px rgba(18,55,83,.42);cursor:pointer;transition:transform .15s ease,opacity .15s ease}
 #scroll-top:hover{transform:translateY(-3px)}
@@ -6601,7 +6624,7 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 const lv=document.getElementById('layouts-view'),E=escapeHTML,q=(s)=>lv.querySelector(s);
 let tab='stage',edit=null,obSel=null,sel={s:1e9,e:1e9},start=null,timer=null,del=null;
 let pickerOpen=null,pickerQuery='',dbQuery='',highlightGiftId=null,fromStageFlag=false,tblSelCell={},tblTextSelection=null,richTextSelection=null;
-let tableDragColumn=null;
+let tableDragColumn=null,tableColumnResize=null;
 let dirPickerOpen=null,dirPickerQuery='',dirDbQuery='',highlightDirId=null;
 let autosaveBaseline='',autosaveLayoutId=null,autosaveRunning=null;
 function commitPendingEditorHistory(){
@@ -6695,6 +6718,15 @@ function paletteChoice(prop,value,label,active=false,index=null){
 function paletteInputValue(prop,current){
   if(/^#[0-9a-f]{6}$/i.test(current||''))return current;
   return prop==='color'?'#0f172a':(prop==='background'?'#fff3b0':'#e2f3ef');
+}
+function alignIcon(align){
+  const lines={
+    left:'M2 3h12M2 6h8M2 9h12M2 12h9',
+    center:'M2 3h12M4 6h8M2 9h12M4 12h8',
+    right:'M2 3h12M6 6h8M2 9h12M5 12h9',
+    justify:'M2 3h12M2 6h12M2 9h12M2 12h12'
+  };
+  return `<svg class="v4-align-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="${lines[align]||lines.left}"></path></svg>`;
 }
 function formatPalette(label,icon,prop,items,current=''){
   const custom=`<label class="v4-custom-color" title="Выбрать свой цвет"><span aria-hidden="true">✦</span><input type="color" value="${paletteInputValue(prop,current)}" data-v4-custom-color="${prop}" aria-label="Выбрать свой цвет для: ${E(label)}"></label>`;
@@ -6808,13 +6840,14 @@ function lineBlock(s,i){
         </div></section>
       </div>
       <section class="v4-table-cell-panel"><div class="v4-table-cell-head"><div><strong data-v4-tbl-active-lbl="${i}">3 · Оформление ячейки ${selR+1}:${selC+1}</strong><small> Выделите слова — изменится только выделение. Без выделения оформится весь текст ячейки.</small></div><small>Сначала нажмите на нужную ячейку</small></div>
-        <div class="v4-table-cell-toolbar"><button type="button" class="v4-tbl-mini-btn ${isCellBold?'active':''}" data-v4="tbl-cell-bold" data-i="${i}" title="Жирный"><b>Ж</b></button><button type="button" class="v4-tbl-mini-btn ${isCellItalic?'active':''}" data-v4="tbl-cell-italic" data-i="${i}" title="Курсив"><i>К</i></button><button type="button" class="v4-tbl-mini-btn" data-v4="tbl-rich-size" data-i="${i}" data-d="-2" title="Уменьшить текст">A−</button><button type="button" class="v4-tbl-mini-btn" data-v4="tbl-rich-size" data-i="${i}" data-d="2" title="Увеличить текст">A+</button><span class="v4-sep"></span><span class="v4-tbl-style-label">Выравнивание:</span><button type="button" class="v4-tbl-mini-btn ${cellAlign==='left'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="left" title="По левому краю">Л</button><button type="button" class="v4-tbl-mini-btn ${cellAlign==='center'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="center" title="По центру">Ц</button><button type="button" class="v4-tbl-mini-btn ${cellAlign==='right'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="right" title="По правому краю">П</button><button type="button" class="v4-tbl-mini-btn ${cellAlign==='justify'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="justify" title="По ширине">Ш</button><span class="v4-sep"></span>${tableFormatPalette(i,'Цвет текста','A','color',TXT.map(v=>[v,'Цвет текста']),cellTextColor)}${tableFormatPalette(i,'Маркер','▰','background',BG.filter(v=>v!=='none').map(v=>[v,'Цвет маркера']),cellMarkerColor)}${tableFormatPalette(i,'Фон ячейки','▣', 'cellBg',BLOCK_BG.filter(([v])=>v!=='none'),cellBgColor)}<button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-reset" data-i="${i}" title="Сбросить оформление ячейки">Сброс</button></div>
+        <div class="v4-table-cell-toolbar"><button type="button" class="v4-tbl-mini-btn ${isCellBold?'active':''}" data-v4="tbl-cell-bold" data-i="${i}" title="Жирный"><b>Ж</b></button><button type="button" class="v4-tbl-mini-btn ${isCellItalic?'active':''}" data-v4="tbl-cell-italic" data-i="${i}" title="Курсив"><i>К</i></button><button type="button" class="v4-tbl-mini-btn" data-v4="tbl-rich-size" data-i="${i}" data-d="-2" title="Уменьшить текст">A−</button><button type="button" class="v4-tbl-mini-btn" data-v4="tbl-rich-size" data-i="${i}" data-d="2" title="Увеличить текст">A+</button><span class="v4-sep"></span><span class="v4-tbl-style-label">Выравнивание:</span><button type="button" class="v4-tbl-mini-btn v4-align-btn ${cellAlign==='left'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="left" title="По левому краю" aria-label="По левому краю">${alignIcon('left')}</button><button type="button" class="v4-tbl-mini-btn v4-align-btn ${cellAlign==='center'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="center" title="По центру" aria-label="По центру">${alignIcon('center')}</button><button type="button" class="v4-tbl-mini-btn v4-align-btn ${cellAlign==='right'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="right" title="По правому краю" aria-label="По правому краю">${alignIcon('right')}</button><button type="button" class="v4-tbl-mini-btn v4-align-btn ${cellAlign==='justify'?'active':''}" data-v4="tbl-cell-align" data-i="${i}" data-val="justify" title="По ширине" aria-label="По ширине">${alignIcon('justify')}</button><span class="v4-sep"></span>${tableFormatPalette(i,'Цвет текста','A','color',TXT.map(v=>[v,'Цвет текста']),cellTextColor)}${tableFormatPalette(i,'Маркер','▰','background',BG.filter(v=>v!=='none').map(v=>[v,'Цвет маркера']),cellMarkerColor)}${tableFormatPalette(i,'Фон ячейки','▣', 'cellBg',BLOCK_BG.filter(([v])=>v!=='none'),cellBgColor)}<button type="button" class="v4-tbl-mini-btn" data-v4="tbl-cell-reset" data-i="${i}" title="Сбросить оформление ячейки">Сброс</button></div>
         <details class="v4-tbl-advanced"><summary>Дополнительно: подарок и оформление всей строки</summary><div class="v4-tbl-advanced-body"><select class="v4-tbl-mini-select" data-v4-tbl-cell-gift="${i}" title="Вставить подарок из базы в выбранную ячейку" style="max-width:230px"><option value="">🎁 Вставить подарок…</option>${(editorDraft.gifts||[]).map(g=>`<option value="${E(g.id)}" ${cellGiftId===g.id?'selected':''}>🎁 ${E(g.title||'Без названия')}${g.condition?' · '+E(g.condition):''}</option>`).join('')}</select><button type="button" class="v4-tbl-mini-btn" data-v4="tbl-apply-row" data-i="${i}" title="Применить фон, выравнивание и размер к строке">На всю строку</button></div></details>
       </section>
       <div class="script-table-block"${bStyle?` style="${bStyle}"`:''}>
         ${tbl.title.trim()?`<div class="script-table-title">📊 ${E(tbl.title)}</div>`:''}
         <div class="script-table-scroll">
           <table class="script-inline-table" style="${tableCss}">
+            <colgroup>${tbl.columnWidths.map(width=>`<col style="width:${width}%">`).join('')}</colgroup>
             <tbody>
               ${tbl.rows.map((row,rIdx)=>{
                 const isHdr=tbl.hasHeader&&rIdx===0;
@@ -6836,13 +6869,14 @@ function lineBlock(s,i){
                   const giftChipHtml=gId?`<div class="v4-tbl-cell-gift-chip">${cellGift?.photo?`<img src="${cellGift.photo}" alt="">`:'🎁'}<span>${E(cellGift?(cellGift.title||'Подарок'):'Подарок не найден')}</span><button type="button" data-v4="tbl-cell-gift-clear" data-i="${i}" data-r="${rIdx}" data-c="${cIdx}" title="Убрать подарок из ячейки">✕</button></div>`:'';
                   const cellFormat=tbl.cellFormats?.[`${rIdx},${cIdx}`];
                   const dragHandle=isColumnControlRow?`<button type="button" draggable="true" class="v4-tbl-col-drag" data-v4-tbl-col-drag="${i},${cIdx}" title="Перетащите, чтобы поменять столбцы местами" aria-label="Переместить столбец ${cIdx+1}">⠿</button>`:'';
-                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}"${isColumnControlRow?` data-v4-tbl-col-target="${i},${cIdx}"`:''}>${dragHandle}${giftChipHtml}<div contenteditable="true" role="textbox" aria-multiline="true" aria-label="${isHdr?'Заголовок '+(cIdx+1):'Ячейка '+(rIdx+1)+':'+(cIdx+1)}" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" data-placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}">${LayoutModel.renderText(cell,cellFormat)}</div></${tag}>`;
+                  const resizeHandle=isColumnControlRow&&cIdx<cCount-1?`<span class="v4-tbl-col-resize" data-v4-tbl-col-resize="${i},${cIdx}" role="separator" aria-orientation="vertical" aria-label="Изменить ширину столбца ${cIdx+1}"></span>`:'';
+                  return `<${tag} class="${isAct?'v4-tbl-cell-active':''}" style="${cCss}"${isColumnControlRow?` data-v4-tbl-col-target="${i},${cIdx}"`:''}>${dragHandle}${giftChipHtml}<div contenteditable="true" role="textbox" aria-multiline="true" aria-label="${isHdr?'Заголовок '+(cIdx+1):'Ячейка '+(rIdx+1)+':'+(cIdx+1)}" class="v4-tbl-cell-input${(cObj.bg||cObj.color||cObj.bold!=null||cObj.italic||cObj.fontSize)?' is-styled':''}" style="${inpCss}" data-v4-tbl-cell="${i},${rIdx},${cIdx}" data-placeholder="${gId?'Доп. текст (необязательно)':(isHdr?'Заголовок '+(cIdx+1):'Ячейка')}">${LayoutModel.renderText(cell,cellFormat)}</div>${resizeHandle}</${tag}>`;
                 }).join('')}</tr>`;
               }).join('')}
             </tbody>
           </table>
         </div>
-        <p class="v4-tbl-drag-hint">⠿ Перетащите значок в первой строке, чтобы поменять столбцы местами.</p>
+        <p class="v4-tbl-drag-hint">⠿ Перетаскивайте значок для перестановки. Потяните границу между столбцами, чтобы изменить их ширину.</p>
       </div>
     </div>`;
   }
@@ -6890,7 +6924,7 @@ function editBox(text,f){
   const bs=LayoutModel.blockCSS(f);
   const insVars=['адрес','дата','время','день_недели','дата_время'];
   const align=currentStyle.align||'left';
-  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" class="${(currentStyle.weight||400)>=700?'active':''}" title="Жирный"><b>Ж</b></button><button data-v4="italic" class="${currentStyle.italic?'active':''}" title="Курсив"><i>К</i></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Выравнивание:</span><button data-v4="align" data-align="left" class="${align==='left'?'active':''}" title="По левому краю">Л</button><button data-v4="align" data-align="center" class="${align==='center'?'active':''}" title="По центру">Ц</button><button data-v4="align" data-align="right" class="${align==='right'?'active':''}" title="По правому краю">П</button><button data-v4="align" data-align="justify" class="${align==='justify'?'active':''}" title="По ширине">Ш</button><span class="v4-sep"></span>${formatPalette('Цвет текста','A','color',TXT.map(v=>[v,'Цвет текста']),currentStyle.color||'auto')}${formatPalette('Маркер','▰','background',BG.map(v=>[v,v==='none'?'Без выделения':'Цвет маркера']),currentStyle.background||'none')}${edit?.t==='tip'?'':formatPalette('Фон блока','▣','blockBg',BLOCK_BG,currentStyle.blockBg||'')}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><div class="line v4-inline-edit" contenteditable="true" role="textbox" aria-multiline="true" data-v4-rich-text data-placeholder="Нажмите и напишите текст…"${bs?` style="${bs}"`:''}>${LayoutModel.renderText(text,f)}</div>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="v4-hint">Меняйте текст прямо в карточке. Выделите слова и выберите оформление. Выравнивание применяется ко всей карточке.</p></div>`;
+  return `<div class="v4-edit"><div class="v4-tools"><button data-v4="bold" class="${(currentStyle.weight||400)>=700?'active':''}" title="Жирный"><b>Ж</b></button><button data-v4="italic" class="${currentStyle.italic?'active':''}" title="Курсив"><i>К</i></button><button data-v4="size" data-d="-2" title="Меньше">A−</button><button data-v4="size" data-d="2" title="Больше">A+</button><span class="v4-sep"></span><span class="v4-tlbl">Выравнивание:</span><button data-v4="align" data-align="left" class="v4-align-btn ${align==='left'?'active':''}" title="По левому краю" aria-label="По левому краю">${alignIcon('left')}</button><button data-v4="align" data-align="center" class="v4-align-btn ${align==='center'?'active':''}" title="По центру" aria-label="По центру">${alignIcon('center')}</button><button data-v4="align" data-align="right" class="v4-align-btn ${align==='right'?'active':''}" title="По правому краю" aria-label="По правому краю">${alignIcon('right')}</button><button data-v4="align" data-align="justify" class="v4-align-btn ${align==='justify'?'active':''}" title="По ширине" aria-label="По ширине">${alignIcon('justify')}</button><span class="v4-sep"></span>${formatPalette('Цвет текста','A','color',TXT.map(v=>[v,'Цвет текста']),currentStyle.color||'auto')}${formatPalette('Маркер','▰','background',BG.map(v=>[v,v==='none'?'Без выделения':'Цвет маркера']),currentStyle.background||'none')}${edit?.t==='tip'?'':formatPalette('Фон блока','▣','blockBg',BLOCK_BG,currentStyle.blockBg||'')}<span class="v4-sep"></span><button data-v4="fmtreset" title="Сбросить оформление">Сброс</button><button class="primary" data-v4="done">Готово</button></div><div class="line v4-inline-edit" contenteditable="true" role="textbox" aria-multiline="true" data-v4-rich-text data-placeholder="Нажмите и напишите текст…"${bs?` style="${bs}"`:''}>${LayoutModel.renderText(text,f)}</div>${edit?.t==='line'?`<div class="v4-ins">Вставить переменную: ${insVars.map(k=>`<button type="button" data-v4="ins" data-k="${k}">{${k}}</button>`).join('')}</div>`:''}<p class="v4-hint">Меняйте текст прямо в карточке. Выделите слова и выберите оформление. Выравнивание применяется ко всей карточке.</p></div>`;
 }
 function stageTab(s){
   const isOperator=currentUser&&currentUser.role==='OPERATOR';
@@ -7060,6 +7094,49 @@ lv.addEventListener('drop',e=>{
   tableDragColumn=null;clearTableColumnDrop();
 });
 lv.addEventListener('dragend',()=>{tableDragColumn=null;clearTableColumnDrop();});
+function finishTableColumnResize(save=true){
+  const state=tableColumnResize;if(!state)return;
+  tableColumnResize=null;
+  state.handle?.classList.remove('is-resizing');
+  document.body.classList.remove('v4-table-resizing');
+  if(!save||!state.changed)return;
+  const stage=editorDraft?.stages.find(item=>item.id===state.stageId);
+  if(!stage||typeof stage.lines?.[state.line]!=='string')return;
+  mutateDraft(()=>{
+    const table=parseScriptTableData(stage.lines[state.line]);
+    table.columnWidths=normalizeTableColumnWidths(state.widths,table.rows[0]?.length||0);
+    stage.lines[state.line]=JSON.stringify(table);
+  });
+}
+lv.addEventListener('pointerdown',event=>{
+  const handle=event.target.closest?.('[data-v4-tbl-col-resize]');
+  if(!handle||event.button!==0)return;
+  const [line,column]=handle.dataset.v4TblColResize.split(',').map(Number);
+  const stage=st(),tableEl=handle.closest('table');
+  if(!stage||!tableEl||!Number.isInteger(line)||!Number.isInteger(column))return;
+  const table=parseScriptTableData(stage.lines[line]),count=table.rows[0]?.length||0;
+  if(column<0||column>=count-1)return;
+  event.preventDefault();event.stopPropagation();
+  tableColumnResize={stageId:stage.id,line,column,startX:event.clientX,tableEl,handle,widths:normalizeTableColumnWidths(table.columnWidths,count),changed:false};
+  handle.classList.add('is-resizing');
+  document.body.classList.add('v4-table-resizing');
+  try{handle.setPointerCapture(event.pointerId)}catch{}
+});
+document.addEventListener('pointermove',event=>{
+  const state=tableColumnResize;if(!state)return;
+  const tableWidth=Math.max(1,state.tableEl.getBoundingClientRect().width);
+  const count=state.widths.length,minimum=Math.min(12,Math.max(5,(100/count)*.45));
+  const first=state.widths[state.column],second=state.widths[state.column+1],combined=first+second;
+  const requested=first+((event.clientX-state.startX)/tableWidth)*100;
+  const nextFirst=Math.max(minimum,Math.min(combined-minimum,requested));
+  if(Math.abs(nextFirst-first)<.02)return;
+  state.widths[state.column]=nextFirst;
+  state.widths[state.column+1]=combined-nextFirst;
+  state.tableEl.querySelectorAll('colgroup col').forEach((col,index)=>{col.style.width=`${state.widths[index]}%`;});
+  state.changed=true;
+});
+document.addEventListener('pointerup',()=>finishTableColumnResize(true));
+document.addEventListener('pointercancel',()=>finishTableColumnResize(false));
 let lastTab='stage';
 function adoptDraftGifts(){if((tab!=='gifts'||lastTab!=='gifts')&&giftSig(editorDraft.gifts)!==giftSig(giftBase))editorDraft.gifts=clone(giftBase);lastTab=tab;}
 function syncGifts(){const next=clone(editorDraft.gifts);for(const g of giftBase)if(!next.some(x=>x.id===g.id))giftDeleted.add(g.id);next.forEach(g=>giftDeleted.delete(g.id));
@@ -7630,14 +7707,15 @@ lv.addEventListener('click',async e=>{
           nextRows.push(row);
         }
         tbl.rows=nextRows;
+        tbl.columnWidths=normalizeTableColumnWidths(tbl.columnWidths,newC);
         s.lines[i]=JSON.stringify(tbl);
       });
       return;
     }
     case 'tbl-add-row':M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.rows.length<30){const cols=tbl.rows[0]?.length||3;tbl.rows.push(Array(cols).fill(''));s.lines[i]=JSON.stringify(tbl);}});return;
     case 'tbl-del-row':M(()=>{const tbl=parseScriptTableData(s.lines[i]);if(tbl.rows.length>1){tbl.rows.pop();s.lines[i]=JSON.stringify(tbl);}});return;
-    case 'tbl-add-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols<12){tbl.rows.forEach((r,ri)=>r.push(ri===0?`Столбец ${cols+1}`:''));s.lines[i]=JSON.stringify(tbl);}});return;
-    case 'tbl-del-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols>1){tbl.rows.forEach(r=>r.pop());s.lines[i]=JSON.stringify(tbl);}});return;
+    case 'tbl-add-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols<12){tbl.rows.forEach((r,ri)=>r.push(ri===0?`Столбец ${cols+1}`:''));tbl.columnWidths=normalizeTableColumnWidths([],cols+1);s.lines[i]=JSON.stringify(tbl);}});return;
+    case 'tbl-del-col':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const cols=tbl.rows[0]?.length||0;if(cols>1){tbl.rows.forEach(r=>r.pop());tbl.columnWidths=normalizeTableColumnWidths([],cols-1);s.lines[i]=JSON.stringify(tbl);}});return;
     case 'tbl-tstyle-reset':M(()=>{const tbl=parseScriptTableData(s.lines[i]);const prop=b.dataset.prop;if(prop==='borderColor')tbl.tableStyle.borderColor='';s.lines[i]=JSON.stringify(tbl);});return;
     case 'tbl-cell-bold':applyTableRichFormat(i,{},'weight');return;
     case 'tbl-cell-italic':applyTableRichFormat(i,{},'italic');return;
