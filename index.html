@@ -6591,7 +6591,7 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 .v4-tbl-col-drag:active,.v4-tbl-col-dragging{cursor:grabbing;opacity:.55}
 [data-v4-tbl-col-target].v4-tbl-col-drop{box-shadow:inset 4px 0 0 var(--teal);background:color-mix(in srgb,var(--teal) 10%,var(--surface))}
 .v4-tbl-drag-hint{margin:8px 2px 0;color:var(--muted);font-size:12px;font-weight:650}
-#scroll-top{position:fixed;right:22px;bottom:22px;z-index:250;width:46px;height:46px;border:0;border-radius:50%;background:var(--teal);color:#fff;font-size:25px;font-weight:850;line-height:1;box-shadow:0 6px 18px color-mix(in srgb,var(--teal) 42%,transparent);cursor:pointer;transition:transform .15s ease,opacity .15s ease}
+#scroll-top{position:fixed;right:22px;bottom:22px;z-index:250;width:46px;height:46px;border:0;border-radius:50%;background:#123753;color:#fff;font-size:25px;font-weight:850;line-height:1;box-shadow:0 6px 18px rgba(18,55,83,.42);cursor:pointer;transition:transform .15s ease,opacity .15s ease}
 #scroll-top:hover{transform:translateY(-3px)}
 #scroll-top[hidden]{display:none}
 @media (max-width:640px){#scroll-top{right:14px;bottom:14px;width:42px;height:42px}}
@@ -6622,7 +6622,8 @@ const scrollTopButton=document.getElementById('scroll-top');
 let scrollTopSource=document.scrollingElement;
 function updateScrollTopButton(){
   if(!scrollTopButton)return;
-  const positions=[window.scrollY||0,document.documentElement.scrollTop||0,lv?.scrollTop||0];
+  const wholeContent=[...document.querySelectorAll('#whole-view:not([hidden]) .whole-content')].find(el=>el.getClientRects().length);
+  const positions=[window.scrollY||0,document.documentElement.scrollTop||0,lv?.scrollTop||0,wholeContent?.scrollTop||0];
   if(scrollTopSource&&typeof scrollTopSource.scrollTop==='number')positions.push(scrollTopSource.scrollTop);
   scrollTopButton.hidden=Math.max(...positions)<180;
 }
@@ -6633,7 +6634,8 @@ document.addEventListener('scroll',event=>{
 },true);
 window.addEventListener('resize',updateScrollTopButton);
 scrollTopButton?.addEventListener('click',()=>{
-  const source=scrollTopSource&&typeof scrollTopSource.scrollTo==='function'?scrollTopSource:document.scrollingElement;
+  const wholeContent=[...document.querySelectorAll('#whole-view:not([hidden]) .whole-content')].find(el=>el.getClientRects().length);
+  const source=wholeContent||((scrollTopSource&&typeof scrollTopSource.scrollTo==='function')?scrollTopSource:document.scrollingElement);
   source?.scrollTo?.({top:0,behavior:'smooth'});
   if(source!==document.scrollingElement)window.scrollTo({top:0,behavior:'smooth'});
 });
