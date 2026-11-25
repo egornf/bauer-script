@@ -611,6 +611,9 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px}
 .v4-name{display:flex;align-items:center;gap:12px;flex:1;min-width:260px}
 .v4-name input{flex:1;max-width:420px;height:42px;border-radius:12px;border:1px solid var(--line);padding:0 14px;font:inherit;font-weight:700;background:var(--surface);color:var(--ink)}
+.v4-global-font{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
+.v4-global-font span{font-size:12px;color:var(--teal)}
+.v4-global-font select{height:30px;border:0;background:transparent;color:var(--ink);font:inherit;font-weight:800;outline:0;cursor:pointer}
 .v4-acts{display:flex;gap:8px;flex-wrap:wrap}.v4-acts button{min-height:42px;padding:0 16px}
 .v4-tabs{display:flex!important;gap:8px;overflow-x:auto;padding:2px 2px 12px}
 .v4-tabs .step{flex:0 0 auto}.v4-tabs .step.v4-hid{opacity:.55;border-style:dashed}
@@ -2171,7 +2174,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .script-inline-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: var(--script-font-size, 14px);
   background: var(--surface);
   border-radius: 8px;
   overflow: hidden;
@@ -2227,7 +2230,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   background: var(--surface);
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--script-font-size, 13px);
   box-sizing: border-box;
   display: block;
   min-height: 34px;
@@ -3783,7 +3786,7 @@ function getScriptTableStyles(tbl){
   const ts={fontSize:14,borderWidth:'3',borderStyle:'solid',borderColor:'#000000',outerBorder:true,cellAlign:tbl.tableStyle?.cellAlign||'left'};
   const cellBorderCss='border:3px solid #000000;';
   const tableBorderCss='border:3px solid #000000;';
-  const tableCss=`width:100%;table-layout:fixed;font-size:14px;${tableBorderCss}`;
+  const tableCss=`width:100%;table-layout:fixed;font-size:var(--script-font-size,14px);${tableBorderCss}`;
   const getCellCss=(rIdx,cIdx,isHeader=false)=>{
     const cs=(tbl.cellStyles&&tbl.cellStyles[`${rIdx},${cIdx}`])||{};
     let css=cellBorderCss;
@@ -6614,6 +6617,7 @@ document.addEventListener('keydown',e=>{if(!$('#whole-view').hidden&&e.key==='Es
 .v4-tbl-col-resize::after{content:'';position:absolute;top:0;bottom:0;left:5px;width:2px;border-radius:2px;background:transparent;transition:background .14s ease}
 .v4-tbl-col-resize:hover::after,.v4-tbl-col-resize.is-resizing::after{background:var(--teal)}
 body.v4-table-resizing,body.v4-table-resizing *{cursor:col-resize !important;user-select:none !important}
+body.v4-table-resizing .script-inline-table col{transition:width .06s linear;will-change:width}
 .v4-tbl-drag-hint{margin:8px 2px 0;color:var(--muted);font-size:12px;font-weight:650}
 #scroll-top{position:fixed;right:22px;bottom:22px;z-index:250;width:46px;height:46px;border:0;border-radius:50%;background:#123753;color:#fff;font-size:25px;font-weight:850;line-height:1;box-shadow:0 6px 18px rgba(18,55,83,.42);cursor:pointer;transition:transform .15s ease,opacity .15s ease}
 #scroll-top:hover{transform:translateY(-3px)}
@@ -7128,6 +7132,7 @@ lv.addEventListener('drop',e=>{
 lv.addEventListener('dragend',()=>{tableDragColumn=null;clearTableColumnDrop();});
 function finishTableColumnResize(save=true){
   const state=tableColumnResize;if(!state)return;
+  if(state.frame){cancelAnimationFrame(state.frame);state.frame=0;applyTableColumnResize(state,state.lastClientX);}
   tableColumnResize=null;
   state.handle?.classList.remove('is-resizing');
   document.body.classList.remove('v4-table-resizing');
@@ -7140,6 +7145,16 @@ function finishTableColumnResize(save=true){
     stage.lines[state.line]=JSON.stringify(table);
   });
 }
+function applyTableColumnResize(state,clientX){
+  const tableWidth=Math.max(1,state.tableEl.getBoundingClientRect().width);
+  const requested=state.initialFirst+((clientX-state.startX)/tableWidth)*100;
+  const nextFirst=Math.max(state.minimum,Math.min(state.combined-state.minimum,requested));
+  if(Math.abs(nextFirst-state.widths[state.column])<.005)return;
+  state.widths[state.column]=nextFirst;
+  state.widths[state.column+1]=state.combined-nextFirst;
+  state.tableEl.querySelectorAll('colgroup col').forEach((col,index)=>{col.style.width=`${state.widths[index]}%`;});
+  state.changed=true;
+}
 lv.addEventListener('pointerdown',event=>{
   const handle=event.target.closest?.('[data-v4-tbl-col-resize]');
   if(!handle||event.button!==0)return;
@@ -7149,23 +7164,17 @@ lv.addEventListener('pointerdown',event=>{
   const table=parseScriptTableData(stage.lines[line]),count=table.rows[0]?.length||0;
   if(column<0||column>=count-1)return;
   event.preventDefault();event.stopPropagation();
-  tableColumnResize={stageId:stage.id,line,column,startX:event.clientX,tableEl,handle,widths:normalizeTableColumnWidths(table.columnWidths,count),changed:false};
+  const widths=normalizeTableColumnWidths(table.columnWidths,count);
+  tableColumnResize={stageId:stage.id,line,column,startX:event.clientX,lastClientX:event.clientX,tableEl,handle,widths,initialFirst:widths[column],combined:widths[column]+widths[column+1],minimum:Math.min(12,Math.max(5,(100/count)*.45)),changed:false,frame:0};
   handle.classList.add('is-resizing');
   document.body.classList.add('v4-table-resizing');
   try{handle.setPointerCapture(event.pointerId)}catch{}
 });
 document.addEventListener('pointermove',event=>{
   const state=tableColumnResize;if(!state)return;
-  const tableWidth=Math.max(1,state.tableEl.getBoundingClientRect().width);
-  const count=state.widths.length,minimum=Math.min(12,Math.max(5,(100/count)*.45));
-  const first=state.widths[state.column],second=state.widths[state.column+1],combined=first+second;
-  const requested=first+((event.clientX-state.startX)/tableWidth)*100;
-  const nextFirst=Math.max(minimum,Math.min(combined-minimum,requested));
-  if(Math.abs(nextFirst-first)<.02)return;
-  state.widths[state.column]=nextFirst;
-  state.widths[state.column+1]=combined-nextFirst;
-  state.tableEl.querySelectorAll('colgroup col').forEach((col,index)=>{col.style.width=`${state.widths[index]}%`;});
-  state.changed=true;
+  state.lastClientX=event.clientX;
+  if(state.frame)return;
+  state.frame=requestAnimationFrame(()=>{state.frame=0;applyTableColumnResize(state,state.lastClientX);});
 });
 document.addEventListener('pointerup',()=>finishTableColumnResize(true));
 document.addEventListener('pointercancel',()=>finishTableColumnResize(false));
@@ -7180,8 +7189,9 @@ renderLayouts=function(){
   if(!editorDraft)return;if(autosaveLayoutId!==editorLayoutId)markAutosaveBaseline();adoptDraftGifts();formatSelections.clear();const d=editorDraft,s=st(),keep=lv.scrollTop;
   const library=['gifts','directions','saved'].includes(tab);
   const tabs=d.stages.map((x,i)=>{const cur=tab==='stage'&&x.id===s.id;return `<button class="step ${x.hidden?'v4-hid':''}" data-v4="stage" data-id="${x.id}" ${cur?'aria-current="step"':''} title="${x.hidden?'Скрыт на сайте':''}"><span class="step-number">${String(i+1).padStart(2,'0')}</span><span class="step-title">${E(x.title)}</span></button>`}).join('');
+  lv.style.setProperty('--script-font-size',`${Math.max(12,Math.min(32,Number(d.settings.fontSize)||18))}px`);
   lv.innerHTML=`<div class="layouts-intro"><div><div class="kicker">${library?'БИБЛИОТЕКА':'КОНСТРУКТОР'}</div><h1>${library?'Библиотека':'Редактор скрипта'}</h1><p class="sub">${library?'Макеты, подарки и направления — всё для подготовки скриптов.':'Выберите вкладку и правьте прямо в том виде, как увидит оператор.'}</p></div><div class="secured"><span>Под паролем</span><button data-action="back-to-script">К скрипту</button><button data-action="lock">Закрыть</button></div></div>
-${library?'':`<div class="v4-top"><div class="v4-name"><input id="editor-layout-name" maxlength="100" aria-label="Название макета" placeholder="Название макета" value="${E(editorLayoutName)}"><span class="draft-state" id="draft-state"></span></div><div class="v4-acts"><button id="editor-undo" data-action="undo" title="Отменить">↶</button><button id="editor-redo" data-action="redo" title="Повторить">↷</button><button class="primary" data-v4="apply" title="Сохраняет макет и сразу обновляет рабочий сайт">Сохранить макет</button></div></div>`}
+${library?'':`<div class="v4-top"><div class="v4-name"><input id="editor-layout-name" maxlength="100" aria-label="Название макета" placeholder="Название макета" value="${E(editorLayoutName)}"><label class="v4-global-font" title="Базовый размер текста всего скрипта"><span>Размер текста</span><select data-v4-global-font-size aria-label="Размер текста всего скрипта">${[12,14,16,18,20,22,24,26,28,30,32].map(size=>`<option value="${size}" ${Number(d.settings.fontSize)===size?'selected':''}>${size}px</option>`).join('')}</select></label><span class="draft-state" id="draft-state"></span></div><div class="v4-acts"><button id="editor-undo" data-action="undo" title="Отменить">↶</button><button id="editor-redo" data-action="redo" title="Повторить">↷</button><button class="primary" data-v4="apply" title="Сохраняет макет и сразу обновляет рабочий сайт">Сохранить макет</button></div></div>`}
 ${(()=>{const items=library?[['saved','📂 Макеты'],['gifts','🎁 База подарков ('+d.gifts.length+')'],['directions','🧭 База направлений ('+directionBase.length+')']]:[['stage','✎ Блоки скрипта'],['settings','⚙ Оформление скрипта']];return `<div class="v4-sections" role="tablist" aria-label="Разделы ${library?'библиотеки':'редактора скрипта'}">${library?'':`<button class="v4-sec" data-v4="back-library">← Библиотека</button>`}${items.map(([k,l])=>`<button class="v4-sec ${tab===k?'on':''}" role="tab" aria-selected="${tab===k}" data-v4="tab" data-id="${k}">${l}</button>`).join('')}</div>`;})()}
 ${tab==='stage'?`<nav class="stepper v4-tabs" aria-label="Этапы скрипта">${tabs}<button class="step v4-add" data-v4="addstage" ${d.stages.length>=40?'disabled':''}><span class="step-title">+ Блок</span></button></nav>`:''}
 ${tab==='gifts'?giftsTab():tab==='directions'?directionsTab():tab==='saved'?savedTab():tab==='settings'?`<section class="v4-card v4-pad" id="editor-inspector">${settingsInspector()}</section>`:stageTab(s)}`;
@@ -7501,6 +7511,11 @@ lv.addEventListener('toggle',e=>{
   lv.querySelectorAll('.v4-color-menu[open]').forEach(other=>{if(other!==menu)other.removeAttribute('open')});
 },true);
 lv.addEventListener('change',async e=>{const f=e.target,s=st();
+  if(f.matches('[data-v4-global-font-size]')){
+    const size=Math.max(12,Math.min(32,Number(f.value)||18));
+    mutateDraft(()=>{editorDraft.settings.fontSize=size;});
+    return;
+  }
   if(f.matches('[data-v4-tbl-custom-color]')){
     const idx=Number(f.dataset.i),prop=f.dataset.v4TblCustomColor,color=f.value;
     rememberUserColor(color);
