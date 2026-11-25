@@ -1665,5 +1665,90 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.deepEqual(added.map(item => item.action), ['activity.clicks', 'activity.stage_view', 'activity.objection_view']);
     assert.equal(added[0].details.clicks, 12);
   });
+
+  await t.test('Objection assignments append only, enforce roles and commit a batch once', async () => {
+    const route = '/api/objection-assignments';
+    const loggedIn = async (login, password) => {
+      const client = createTestClient(baseUrl);
+      assert.equal((await client.request('/api/admin/login', { method: 'POST', body: { login, password } })).status, 200);
+      return client;
+    };
+    const anonymous = createTestClient(baseUrl);
+    const editor = await loggedIn('editor_olga', 'EditorPassword123!');
+    const operator = await loggedIn('petrov_pp', 'PetrovPass123!');
+    const admin = await loggedIn('admin_full', 'AdminPass123');
+    const head = await loggedIn('head_sergey', 'HeadPass123');
+    const trainer = await loggedIn('trainer_dpk', 'TrainerPass123!');
+    for (const [client, status] of [[anonymous, 401], [editor, 403], [operator, 403]]) {
+      assert.equal((await client.request(route)).status, status);
+      assert.equal((await client.request(route, { method: 'POST', body: {} })).status, status);
+    }
+    for (const client of [ownerClient, admin, head, trainer]) assert.equal((await client.request(route)).status, 200);
+
+    const source = { title: 'Проверка назначения', text: 'Первый ответ', nextStageId: 'two', textFormat: { style: { bold: true } } };
+    const base = { stages: [{ id: 'one', title: 'Вступление', lines: ['Добрый день'], objectionIds: [1] },
+      { id: 'two', title: 'Финал', lines: [], objectionIds: [1, 0] }],
+      objections: [source, { title: source.title, text: 'Другой ответ' }], settings: { fontSize: 22 } };
+    async function layout(name, data) {
+      return (await ownerClient.request('/api/layouts', { method: 'POST', body: { name, data } })).data.layout;
+    }
+    const first = await layout('Назначения A', base);
+    const second = await layout('Назначения Б', { ...base, objections: [], stages: [{ ...base.stages[0], objectionIds: [] }] });
+    const unchanged = JSON.stringify(store.getAppData());
+    const result = await ownerClient.request(route);
+    assert.equal(JSON.stringify(store.getAppData()), unchanged);
+    assert.equal(result.data.entries.filter(e => e.title === source.title).length, 2);
+    assert.ok(result.data.entries.some(e => e.groups.length));
+    assert.ok(result.data.layouts.every(l => !l.name.startsWith('Автосохранение')));
+    const targets = [first, second].map(l => ({ layoutId: l.id, index: 0, id: 'one', title: 'Вступление' }));
+    const post = (client, targets) => client.request(route, { method: 'POST', body: { title: source.title, text: source.text, targets } });
+    assert.equal((await post(trainer, [targets[0], { ...targets[1], title: 'Переименован' }])).status, 409);
+    assert.equal(JSON.stringify(store.getAppData()), unchanged);
+    await head.request('/api/department/scripts', { method: 'PUT', body: { scriptIds: [first.id] } });
+    assert.deepEqual((await head.request(route)).data.layouts.map(l => l.id), [first.id]);
+    assert.equal((await post(head, targets)).status, 409);
+    const published = structuredClone(store.getAppData().content);
+    const rest = JSON.stringify(store.getAppData().layouts.filter(l => ![first.id, second.id].includes(l.id)));
+    const writes = await Promise.all([post(trainer, targets), post(admin, targets)]);
+    assert.deepEqual(writes.map(r => r.status), [200, 200]);
+    assert.deepEqual(writes.map(r => r.data.added).sort(), [0, 2]);
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'app-data.json'), 'utf8'));
+    const a = saved.layouts.find(l => l.id === first.id), b = saved.layouts.find(l => l.id === second.id);
+    const expected = structuredClone(first.data);
+    expected.stages[0].objectionIds.push(0);
+    assert.deepEqual(a.data, expected);
+    assert.deepEqual(b.data.stages[0].objectionIds, [0]);
+    assert.equal(b.data.objections[0].text, source.text);
+    assert.deepEqual(b.data.objections[0].textFormat, source.textFormat);
+    assert.deepEqual(saved.content, published);
+    assert.equal(JSON.stringify(saved.layouts.filter(l => ![a.id, b.id].includes(l.id))), rest);
+    const refreshed = (await trainer.request(route)).data;
+    const entry = refreshed.entries.find(e => e.title === source.title && e.text === source.text);
+    assert.ok(refreshed.layouts.find(l => l.id === first.id).stages.every(s => s.entries.includes(entry.id)));
+    assert.deepEqual((await post(head, [targets[0]])).data, { added: 0 });
+  });
+});
+
+test('Assignment catalog skips personal answers and saved versions, and preserves full layouts', () => {
+  const build = require('../objection-assignments');
+  const answer = { title: 'Общий вопрос', text: 'Общий ответ', group: 'Общая база' };
+  const stage = { id: 'intro', title: 'Вступление', objectionIds: [1] };
+  const personal = { title: 'Личный вопрос', text: 'Подсказка', origin: 'trainer' };
+  const answers = Array.from({ length: 200 }, (_, i) => ({ title: 'Вопрос ' + i, text: 'Ответ' }));
+  const layouts = [
+    { id: 'a', name: 'Первый', data: { objections: [answer, personal], stages: [stage] } },
+    { id: 'b', name: 'Полный', data: { objections: answers, stages: [stage] } },
+    { id: 'c', name: 'Версия', autoSaveOf: 'a', data: { objections: [{ title: 'Из черновика', text: '' }], stages: [stage] } }
+  ];
+  const original = structuredClone(layouts);
+  const model = build([answer], layouts, null, { role: 'ADMIN' });
+  assert.equal(model.catalog.entries.length, 201);
+  assert.deepEqual(model.catalog.layouts.map(l => l.id), ['a', 'b']);
+  const targets = ['a', 'b'].map(layoutId => ({ layoutId, index: 0, id: 'intro', title: 'Вступление' }));
+  assert.throws(() => model.assign({ ...answer, targets }), /200 возражений/);
+  assert.deepEqual(layouts, original);
+  const result = model.assign({ ...answers[0], targets: [targets[1]] });
+  assert.equal(result.layouts[1].data.objections.length, 200);
+  assert.deepEqual(result.layouts[1].data.stages[0].objectionIds, [1, 0]);
 });
 

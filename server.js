@@ -4,6 +4,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const createObjectionAssignments = require('./objection-assignments');
 const mammoth = require('mammoth');
 const { Document, Packer, Paragraph, HeadingLevel, ImageRun } = require('docx');
 
@@ -169,6 +170,11 @@ function hashRecoveryCode(code, saltHex) {
   return crypto.scryptSync(norm, Buffer.from(saltHex, 'hex'), 32, { N: 16384, r: 8, p: 1 }).toString('hex');
 }
 
+function embeddedJson(html, id) {
+  const match = html.match(new RegExp(`<script\\s+id=["']${id}["'][^>]*>([\\s\\S]*?)<\\/script>`, 'i'));
+  return match ? JSON.parse(match[1]) : null;
+}
+
 function extractSeedFromIndexHtml(htmlPath = INDEX_PATH) {
   const seed = {
     content: null,
@@ -178,14 +184,9 @@ function extractSeedFromIndexHtml(htmlPath = INDEX_PATH) {
   };
   try {
     const html = fs.readFileSync(htmlPath, 'utf8');
-    const matchTag = (id) => {
-      const re = new RegExp(`<script\\s+id=["']${id}["'][^>]*>([\\s\\S]*?)<\\/script>`, 'i');
-      const m = html.match(re);
-      return m ? JSON.parse(m[1]) : null;
-    };
-    const scriptData = matchTag('script-data');
-    const layoutsData = matchTag('layouts-data');
-    const smsData = matchTag('sms-data');
+    const scriptData = embeddedJson(html, 'script-data');
+    const layoutsData = embeddedJson(html, 'layouts-data');
+    const smsData = embeddedJson(html, 'sms-data');
 
     if (scriptData && typeof scriptData === 'object') {
       seed.content = { data: scriptData, updatedAt: Number(scriptData.updatedAt) || Date.now() };
@@ -240,12 +241,16 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     }
   }
 
-  function writeJsonAtomic(filePath, data) {
+  function writeJsonAtomic(filePath, data, strict = false) {
     const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
     try {
       fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8' });
       fs.renameSync(tmp, filePath);
     } catch (err) {
+      if (strict) {
+        try { fs.unlinkSync(tmp); } catch {}
+        throw err;
+      }
       try {
         fs.writeFileSync(filePath, JSON.stringify(data, null, 2), { encoding: 'utf8' });
       } catch (fallbackErr) {
@@ -501,6 +506,10 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
     getAudit: () => audit,
     logEvent,
     getAppData: () => appData,
+    saveAssignedLayouts(layouts) {
+      writeJsonAtomic(files.appData, { ...appData, layouts }, true);
+      appData.layouts = layouts;
+    },
     saveAppData,
     getSharedThemes: () => sharedThemes,
     addSharedTheme: (t) => { sharedThemes.push(t); saveSharedThemes(); return t; },
@@ -1100,6 +1109,7 @@ function createAppServer(options = {}) {
   const dataDir = options.dataDir || DEFAULT_DATA_DIR;
   const htmlPath = options.htmlPath || INDEX_PATH;
   const store = createStore(dataDir, htmlPath, options.seedDefaultOwner !== false);
+  let objectionBank;
 
   async function sendJson(res, status, payload, extraHeaders = {}) {
     const body = JSON.stringify(payload);
@@ -1168,6 +1178,11 @@ function createAppServer(options = {}) {
             'X-Frame-Options': 'SAMEORIGIN'
           });
           res.end(method === 'HEAD' ? undefined : html);
+          return;
+        }
+        if (pathname === '/objection-assignments.js') {
+          res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+          res.end(method === 'HEAD' ? undefined : fs.readFileSync(path.join(ROOT_DIR, 'objection-assignments.js')));
           return;
         }
         if (pathname === '/bauer-favicon.png') {
@@ -1551,6 +1566,25 @@ function createAppServer(options = {}) {
 
       // 6. Public read endpoints for BAUER operator workspace + authenticated write endpoints
       const appData = store.getAppData();
+
+      if (pathname === '/api/objection-assignments') {
+        if (!auth) return sendJson(res, 401, { error: 'Войдите в аккаунт.' });
+        if (!['OWNER', 'ADMIN', 'HEAD', 'TRAINER'].includes(auth.user.role) || !hasPermission(auth.user, 'layouts.manage')) {
+          return sendJson(res, 403, { error: 'Недостаточно прав для настройки скриптов.' });
+        }
+        if (!['GET', 'POST'].includes(method)) return sendJson(res, 405, { error: 'Метод не поддерживается.' });
+        const body = method === 'POST' ? await readBody(req) : null;
+        objectionBank ??= embeddedJson(fs.readFileSync(htmlPath, 'utf8'), 'objection-data') || [];
+        const model = createObjectionAssignments(objectionBank, appData.layouts || [], appData.content?.data, auth.user);
+        if (method === 'GET') return sendJson(res, 200, model.catalog);
+        const result = model.assign(body);
+        if (result.added) {
+          store.saveAssignedLayouts(result.layouts);
+          store.logEvent({ action: 'objections.assign', actor: auth.user, ip, userAgent, target: body.title,
+            details: { added: result.added, targets: body.targets.map(t => ({ layoutId: t.layoutId, stage: t.title })) } });
+        }
+        return sendJson(res, 200, { added: result.added });
+      }
 
       if (pathname === '/api/content') {
         if (method === 'GET') {
