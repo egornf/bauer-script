@@ -6243,7 +6243,7 @@ $('#whole-script').addEventListener('click',()=>{
   view.hidden=false;
 
   for(const el of document.body.children){
-    if(el!==view&&!el.inert&&!['SCRIPT','STYLE'].includes(el.tagName)){
+    if(el!==view&&el.id!=='scroll-top'&&!el.inert&&!['SCRIPT','STYLE'].includes(el.tagName)){
       el.inert=true;
       el.setAttribute('data-whole-inert','');
     }
