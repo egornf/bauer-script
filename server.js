@@ -15,6 +15,9 @@ const SESSION_COOKIE = 'bauer_sid';
 const CSRF_COOKIE = 'bauer_csrf';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const MAX_BODY_BYTES = 25 * 1024 * 1024; // 25 MB (for base64 gift photos and full system backups)
+const isLegacySnapshotLayout = layout => /^Перед изменением/i.test(String(layout?.name || ''));
+const isAutosaveLayout = layout => Boolean(layout?.autoSaveOf) || /^Автосохранение ·/i.test(String(layout?.name || ''));
+const isHiddenLayoutVersion = layout => isLegacySnapshotLayout(layout) || isAutosaveLayout(layout);
 
 const ALL_PERMISSIONS = [
   'content.edit',
@@ -191,7 +194,7 @@ function extractSeedFromIndexHtml(htmlPath = INDEX_PATH) {
       }
     }
     if (Array.isArray(layoutsData)) {
-      const activeLayouts = layoutsData.filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+      const activeLayouts = layoutsData.filter(l => l && l.name && !isHiddenLayoutVersion(l));
       seed.layouts = activeLayouts;
       for (const l of activeLayouts) {
         if (l && l.data && Array.isArray(l.data.gifts)) {
@@ -279,7 +282,8 @@ function createStore(dataDir = DEFAULT_DATA_DIR, htmlPath = INDEX_PATH, seedDefa
 
   if (appData && Array.isArray(appData.layouts)) {
     const prevCount = appData.layouts.length;
-    appData.layouts = appData.layouts.filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+    // Старые служебные снимки удаляем, а новые автосохранения храним как версии макета.
+    appData.layouts = appData.layouts.filter(l => l && l.name && !isLegacySnapshotLayout(l));
     if (appData.layouts.length !== prevCount) {
       writeJsonAtomic(files.appData, appData);
     }
@@ -1596,7 +1600,7 @@ function createAppServer(options = {}) {
       }
 
       if (pathname === '/api/scripts' && method === 'GET') {
-        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !isHiddenLayoutVersion(l));
         let resultLayouts = allLayouts;
         let visibleAllLayouts = allLayouts;
         let deptScripts = [];
@@ -1736,7 +1740,7 @@ function createAppServer(options = {}) {
       if (pathname === '/api/department/scripts') {
         if (!auth) return sendJson(res, 401, { error: 'Требуется авторизация.' });
         const allUsers = store.getUsers();
-        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !isHiddenLayoutVersion(l));
         const isOwner = auth.user.role === 'OWNER';
         const isHead = auth.user.role === 'HEAD';
         const isAdmin = auth.user.role === 'ADMIN';
@@ -2221,12 +2225,48 @@ function createAppServer(options = {}) {
           if (!hasPermission(auth.user, 'content.edit') && !hasPermission(auth.user, 'layouts.manage')) {
             return sendJson(res, 403, { error: 'Недостаточно прав для просмотра редактора макетов.' });
           }
-          const activeLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
-          return sendJson(res, 200, { layouts: activeLayouts });
+          // Автосохранения нужны редактору для восстановления, но они не
+          // выдаются через /api/scripts и потому не видны операторам как скрипты.
+          const layouts = (appData.layouts || []).filter(l => l && l.name && !isLegacySnapshotLayout(l));
+          return sendJson(res, 200, { layouts });
         }
         if (!hasPermission(auth.user, 'layouts.manage')) {
           store.logEvent({ action: 'layouts.modify.denied', actor: auth.user, ip, userAgent, status: 'denied' });
           return sendJson(res, 403, { error: 'Недостаточно прав для сохранения или удаления макетов.' });
+        }
+        if (pathname === '/api/layouts/autosave' && method === 'POST') {
+          const body = await readBody(req);
+          const sourceId = String(body?.sourceLayoutId || '');
+          const source = (appData.layouts || []).find(item => item.id === sourceId && !isHiddenLayoutVersion(item));
+          if (!source) return sendJson(res, 404, { error: 'Исходный макет для автосохранения не найден.' });
+          const cleanedLayoutData = stripTrainerArtifactsFromData(body?.data || {});
+          const savedAt = Date.now();
+          const autosave = {
+            id: 'a' + savedAt.toString(36) + crypto.randomBytes(3).toString('hex'),
+            name: `Автосохранение · ${source.name}`.slice(0, 120),
+            channel: source.channel || '',
+            variant: source.variant || '',
+            autoSaveOf: source.id,
+            autoSaveReason: String(body?.reason || 'переход').slice(0, 40),
+            data: { ...(cleanedLayoutData || {}), gifts: [] },
+            savedAt
+          };
+          const previousForSource = (appData.layouts || [])
+            .filter(item => isAutosaveLayout(item) && item.autoSaveOf === source.id)
+            .sort((a, b) => Number(b.savedAt || 0) - Number(a.savedAt || 0));
+          // Храним до восьми последних версий на каждый макет.
+          const removeIds = new Set(previousForSource.slice(7).map(item => item.id));
+          appData.layouts = [autosave, ...(appData.layouts || []).filter(item => !removeIds.has(item.id))];
+          store.saveAppData();
+          store.logEvent({
+            action: 'layouts.autosave',
+            actor: auth.user,
+            target: source.name,
+            ip,
+            userAgent,
+            details: { layoutId: source.id, autosaveId: autosave.id, reason: autosave.autoSaveReason }
+          });
+          return sendJson(res, 200, { layout: autosave });
         }
         if (method === 'DELETE') {
           if (!hasPermission(auth.user, 'layouts.delete')) {
@@ -2283,7 +2323,7 @@ function createAppServer(options = {}) {
           if (list.some(l => l.id === layout.id)) {
             list = list.map(l => (l.id === layout.id ? layout : l));
           } else {
-            list = [layout, ...list].slice(0, 50);
+            list = [layout, ...list];
           }
           appData.layouts = list;
           store.saveAppData();
@@ -2462,7 +2502,7 @@ function createAppServer(options = {}) {
             return sendJson(res, 400, { error: 'Поле scriptAccess должно быть массивом ID скриптов или null (все скрипты отдела).' });
           }
           const allUsers = store.getUsers();
-          const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+          const allLayouts = (appData.layouts || []).filter(l => l && l.name && !isHiddenLayoutVersion(l));
           const allLayoutIds = allLayouts.map(l => String(l.id));
           let deptPool = allLayoutIds;
           if (targetUser.managerId) {
@@ -2853,7 +2893,7 @@ function createAppServer(options = {}) {
         }
 
         const allUsers = store.getUsers();
-        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !/^Перед изменением/i.test(l.name));
+        const allLayouts = (appData.layouts || []).filter(l => l && l.name && !isHiddenLayoutVersion(l));
         if (!Array.isArray(appData.trainerBlocks)) appData.trainerBlocks = [];
         const trainerBlocks = appData.trainerBlocks;
         const headUsers = allUsers.filter(u => u.role === 'HEAD' || u.role === 'OWNER');

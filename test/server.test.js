@@ -1621,7 +1621,33 @@ test('BAUER OWNER Account, User Management, Security, Sessions & Audit Log', asy
     assert.equal(exportedBuffer.subarray(0, 2).toString('ascii'), 'PK');
   });
 
-  await t.test('20. Activity events can be recorded in one batch without losing individual actions', async () => {
+  await t.test('20. Draft autosaves stay available as versions and never appear to operators as scripts', async () => {
+    const contentRes = await ownerClient.request('/api/content');
+    assert.equal(contentRes.status, 200);
+    const sourceRes = await ownerClient.request('/api/layouts', {
+      method: 'POST',
+      body: { name: 'Макет для автосохранения', channel: 'Договор', variant: 'с КШ', data: contentRes.data.data }
+    });
+    assert.equal(sourceRes.status, 200);
+
+    const autosaveRes = await ownerClient.request('/api/layouts/autosave', {
+      method: 'POST',
+      body: { sourceLayoutId: sourceRes.data.layout.id, reason: 'переход', data: contentRes.data.data }
+    });
+    assert.equal(autosaveRes.status, 200);
+    assert.equal(autosaveRes.data.layout.autoSaveOf, sourceRes.data.layout.id);
+    assert.match(autosaveRes.data.layout.name, /^Автосохранение · Макет для автосохранения/);
+
+    const layoutsRes = await ownerClient.request('/api/layouts');
+    assert.equal(layoutsRes.status, 200);
+    assert.ok(layoutsRes.data.layouts.some(layout => layout.id === autosaveRes.data.layout.id));
+
+    const scriptsRes = await ownerClient.request('/api/scripts');
+    assert.equal(scriptsRes.status, 200);
+    assert.equal(scriptsRes.data.layouts.some(layout => layout.id === autosaveRes.data.layout.id), false);
+  });
+
+  await t.test('21. Activity events can be recorded in one batch without losing individual actions', async () => {
     const before = store.getAudit().length;
     const tracked = await ownerClient.request('/api/audit/track', {
       method: 'POST',
