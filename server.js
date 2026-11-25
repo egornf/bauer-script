@@ -577,6 +577,7 @@ function sanitizeUser(u) {
     permissions: isOwner ? [...DEFAULT_ROLE_PERMISSIONS.OWNER] : (Array.isArray(u.permissions) ? u.permissions : []),
     theme: u.theme || null,
     customThemes: Array.isArray(u.customThemes) ? u.customThemes : [],
+    customColors: Array.isArray(u.customColors) ? u.customColors.filter(color => /^#[0-9a-fA-F]{6}$/.test(String(color))).slice(0, 8) : [],
     createdAt: u.createdAt || 0,
     updatedAt: u.updatedAt || 0,
     lastLoginAt: u.lastLoginAt || null,
@@ -2440,7 +2441,8 @@ function createAppServer(options = {}) {
         return sendJson(res, 200, {
           ok: true,
           theme: auth.user.theme || null,
-          customThemes: Array.isArray(auth.user.customThemes) ? auth.user.customThemes : []
+          customThemes: Array.isArray(auth.user.customThemes) ? auth.user.customThemes : [],
+          customColors: Array.isArray(auth.user.customColors) ? auth.user.customColors.filter(color => /^#[0-9a-fA-F]{6}$/.test(String(color))).slice(0, 8) : []
         });
       }
 
@@ -2453,12 +2455,16 @@ function createAppServer(options = {}) {
         if (Array.isArray(body.customThemes)) {
           auth.user.customThemes = body.customThemes.slice(0, 50);
         }
+        if (Array.isArray(body.customColors)) {
+          auth.user.customColors = [...new Set(body.customColors.map(color => String(color).toLowerCase()).filter(color => /^#[0-9a-f]{6}$/.test(color)))].slice(0, 8);
+        }
         auth.user.updatedAt = Date.now();
         store.saveUsers();
         return sendJson(res, 200, {
           ok: true,
           theme: auth.user.theme || null,
-          customThemes: Array.isArray(auth.user.customThemes) ? auth.user.customThemes : []
+          customThemes: Array.isArray(auth.user.customThemes) ? auth.user.customThemes : [],
+          customColors: Array.isArray(auth.user.customColors) ? auth.user.customColors.filter(color => /^#[0-9a-fA-F]{6}$/.test(String(color))).slice(0, 8) : []
         });
       }
 
