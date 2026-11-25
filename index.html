@@ -616,6 +616,8 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-global-font select{height:30px;border:0;background:transparent;color:var(--ink);font:inherit;font-weight:800;outline:0;cursor:pointer}
 .script-gift:not(.script-direction){--script-font-size:18px}
 .tip{font-size:var(--script-font-size,12px)}
+.stage-body>.sms-after-objections{margin:0 32px 28px}
+@media screen and (max-width:760px){.stage-body>.sms-after-objections{margin:0 16px 20px}}
 .v4-acts{display:flex;gap:8px;flex-wrap:wrap}.v4-acts button{min-height:42px;padding:0 16px}
 .v4-tabs{display:flex!important;gap:8px;overflow-x:auto;padding:2px 2px 12px}
 .v4-tabs .step{flex:0 0 auto}.v4-tabs .step.v4-hid{opacity:.55;border-style:dashed}
@@ -3912,6 +3914,12 @@ function renderCards(){
   const indices=visibleIndices();if(!indices.includes(current))current=indices[0]??0;
   document.body.classList.toggle('editing',editing);$('#edit').textContent='Редактор';$('#edit').setAttribute('aria-pressed','false');
   $('#track').innerHTML=indices.map((i,n)=>{const stage=data.stages[i];const hasInlineSchedule=Array.isArray(stage.lineKinds)&&stage.lineKinds.includes('schedule');const showFallbackSchedule=!hasInlineSchedule&&!stage.scheduleRemoved&&isTimeStage(stage);return `<section class="stage-card" data-stage-index="${i}" id="stage-${i}" aria-labelledby="stage-title-${i}" ${i!==current?'inert aria-hidden="true"':''}><div class="stage-heading"><div><div class="kicker">ЭТАП РАЗГОВОРА</div><h2 id="stage-title-${i}">${escapeHTML(stage.title)}</h2></div><div class="stage-count"><strong>${String(n+1).padStart(2,'0')}</strong> / ${String(indices.length).padStart(2,'0')}</div></div><div class="stage-body"><div class="script-pane">${unplacedGifts(stage,data.gifts).length?giftMarkup(unplacedGifts(stage,data.gifts)):''}<div class="pane-label">Реплики оператора</div>${renderStageLines(stage)}${showFallbackSchedule?presentationScheduleMarkup(stage):''}${operatorTipMarkup(stage)}${stage.showSms?smsMarkup():''}</div><aside class="objections-pane" aria-label="Возражения для этапа ${escapeHTML(stage.title)}"><h3>Частые возражения</h3><p class="sub">Подборка для этого этапа · нажмите на ответ гостя</p><div class="objection-list">${stageOptions(i)||'<p class="empty">В этом блоке пока нет возражений.</p>'}</div><p class="rail-foot">Отработка откроется рядом.<br>Вы вернётесь на тот же этап.</p></aside></div></section>`;}).join('');
+  document.querySelectorAll('#track .stage-card').forEach(card=>{
+    const stage=data.stages[Number(card.dataset.stageIndex)];
+    if(!stage?.showSms)return;
+    const sms=card.querySelector('.sms-helper'),objections=card.querySelector('.objections-pane');
+    if(sms&&objections){sms.classList.add('sms-after-objections');objections.insertAdjacentElement('afterend',sms);}
+  });
   applySiteSettings();updatePosition(false);renderStepper();
   document.querySelectorAll('#track .stage-card').forEach(card=>{
     const saved=savedScrolls.get(card.dataset.stageIndex);
