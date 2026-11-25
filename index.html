@@ -614,6 +614,8 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .v4-global-font{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface);font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
 .v4-global-font span{font-size:12px;color:var(--teal)}
 .v4-global-font select{height:30px;border:0;background:transparent;color:var(--ink);font:inherit;font-weight:800;outline:0;cursor:pointer}
+.script-gift:not(.script-direction){--script-font-size:18px}
+.tip{font-size:var(--script-font-size,12px)}
 .v4-acts{display:flex;gap:8px;flex-wrap:wrap}.v4-acts button{min-height:42px;padding:0 16px}
 .v4-tabs{display:flex!important;gap:8px;overflow-x:auto;padding:2px 2px 12px}
 .v4-tabs .step{flex:0 0 auto}.v4-tabs .step.v4-hid{opacity:.55;border-style:dashed}
@@ -2174,7 +2176,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
 .script-inline-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--script-font-size, 14px);
+  font-size: 14px;
   background: var(--surface);
   border-radius: 8px;
   overflow: hidden;
@@ -2230,7 +2232,7 @@ dialog{border-radius:22px;border:1px solid var(--line)}
   background: var(--surface);
   color: var(--ink);
   font: inherit;
-  font-size: var(--script-font-size, 13px);
+  font-size: 13px;
   box-sizing: border-box;
   display: block;
   min-height: 34px;
@@ -3786,7 +3788,7 @@ function getScriptTableStyles(tbl){
   const ts={fontSize:14,borderWidth:'3',borderStyle:'solid',borderColor:'#000000',outerBorder:true,cellAlign:tbl.tableStyle?.cellAlign||'left'};
   const cellBorderCss='border:3px solid #000000;';
   const tableBorderCss='border:3px solid #000000;';
-  const tableCss=`width:100%;table-layout:fixed;font-size:var(--script-font-size,14px);${tableBorderCss}`;
+  const tableCss=`width:100%;table-layout:fixed;font-size:14px;${tableBorderCss}`;
   const getCellCss=(rIdx,cIdx,isHeader=false)=>{
     const cs=(tbl.cellStyles&&tbl.cellStyles[`${rIdx},${cIdx}`])||{};
     let css=cellBorderCss;
@@ -6698,6 +6700,26 @@ window.addEventListener('pagehide',()=>{void autosaveDraft('перезапуск
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')void autosaveDraft('переключение вкладки',{keepalive:true,silent:true});});
 const DIR_PRESETS=['Посуда','Сок','Массаж','ВТ'];
 const KINDS={speech:'Речь',gift:'🎁 Подарок',direction:'🧭 Направление',schedule:'📅 График времени',table:'📊 Таблица',image:'🖼 Картинка'};
+const GLOBAL_FONT_SIZE_EXCEPTIONS=new Set(['table','gift','gift-plus-one','gift-plus-two']);
+function removeCustomTextSize(format,text){
+  const next=LayoutModel.cleanFormat(format,String(text??'').length);
+  const withoutSize=style=>{const clean={...style};delete clean.size;return clean;};
+  next.style=withoutSize(next.style);
+  next.ranges=next.ranges.map(range=>({...range,style:withoutSize(range.style)})).filter(range=>Object.keys(range.style).length);
+  return next;
+}
+function setGlobalScriptFontSize(size){
+  editorDraft.settings.fontSize=size;
+  editorDraft.stages.forEach(stage=>{
+    stage.lineFormats??=stage.lines.map(line=>LayoutModel.cleanFormat(null,String(line??'').length));
+    stage.lines.forEach((line,index)=>{
+      if(GLOBAL_FONT_SIZE_EXCEPTIONS.has(stage.lineKinds?.[index]||'speech'))return;
+      stage.lineFormats[index]=removeCustomTextSize(stage.lineFormats[index],line);
+    });
+    stage.tipFormat=removeCustomTextSize(stage.tipFormat,stage.tip||'');
+  });
+  editorDraft.objections.forEach(objection=>{objection.textFormat=removeCustomTextSize(objection.textFormat,objection.text||'');});
+}
 const TXT=['#000000','#ffffff','#334155','#64748b','#0b7a6e','#16a34a','#c0392b','#ea580c','#d68910','#1f5fbf','#7d3c98'],BG=['#fff3b0','#d5f5e3','#fadbd8','#d6eaf8','#e8daef','none'];
 const BLOCK_BG=[['#e2f3ef','Мятный'],['#daf5e4','Зелёный'],['#fff6de','Жёлтый'],['#fdeee8','Персиковый'],['#e6f0fa','Голубой'],['#f1edff','Лавандовый'],['#ffffff','Белый'],['none','Стандартный']];
 const USER_COLOR_LIMIT=8;
@@ -7513,7 +7535,7 @@ lv.addEventListener('toggle',e=>{
 lv.addEventListener('change',async e=>{const f=e.target,s=st();
   if(f.matches('[data-v4-global-font-size]')){
     const size=Math.max(12,Math.min(32,Number(f.value)||18));
-    mutateDraft(()=>{editorDraft.settings.fontSize=size;});
+    mutateDraft(()=>{setGlobalScriptFontSize(size);});
     return;
   }
   if(f.matches('[data-v4-tbl-custom-color]')){
